@@ -1,0 +1,32 @@
+/* 自定义样式：鸿蒙字体 */
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('/fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('/fonts/HarmonyOS_Sans_SC_Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 正文使用鸿蒙字体（代码块仍保留等宽字体） */
+body,
+html {
+  font-family: 'HarmonyOS Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif !important;
+}
+
+/* 代码字体：JetBrains Mono，中文回退到鸿蒙字体 */
+code,
+pre,
+kbd,
+samp,
+.hljs,
+.code,
+.gutter pre {
+  font-family: 'JetBrains Mono', 'HarmonyOS Sans SC', monospace !important;
+}
