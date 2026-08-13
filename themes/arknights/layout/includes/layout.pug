@@ -1,5 +1,5 @@
 -
-  let pageTitle = page.title || config.subtitle || ''
+  let pageTitle = page.title || ''
   if (is_post()) pageTitle = page.title
   if (is_archive()) pageTitle = __('menu.archive.plural')
   if (is_tag()) pageTitle = __('menu.tag.plural') + ': ' + page.tag
