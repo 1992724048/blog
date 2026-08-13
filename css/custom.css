@@ -40,6 +40,33 @@ samp,
   box-shadow: 0 0 12px color-mix(in srgb, var(--theme-highlight) 45%, transparent);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
+
+/* 首次加载遮罩（等待字体加载完成） */
+#font-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: var(--theme-background, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s ease;
+}
+#font-splash.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+.splash-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid color-mix(in srgb, var(--theme-highlight) 25%, transparent);
+  border-top-color: var(--theme-highlight);
+  border-radius: 50%;
+  animation: splash-spin 0.8s linear infinite;
+}
+@keyframes splash-spin {
+  to { transform: rotate(360deg); }
+}
 #logo img:hover {
   transform: scale(1.06);
   box-shadow: 0 0 18px color-mix(in srgb, var(--theme-highlight) 65%, transparent);
