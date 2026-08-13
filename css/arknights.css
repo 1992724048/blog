@@ -2750,6 +2750,15 @@ article .recent-excerpt p {
   text-align: left;
   float: right;
 }
+.recent-post .post-meta {
+  color: var(--theme-unimportant);
+  display: inline-block;
+  text-align: left;
+  float: right;
+}
+.recent-post .post-meta time {
+  float: none;
+}
 .recent-post hr {
   color: var(--theme-unimportant);
   border-color: var(--theme-unimportant);
@@ -2769,7 +2778,8 @@ article .recent-excerpt p {
     background-color: var(--theme-highlight);
   }
   .recent-post:hover time,
-  .recent-post:hover .categories {
+  .recent-post:hover .categories,
+  .recent-post:hover .post-meta {
     color: var(--theme-text-hover);
   }
   .recent-post:hover a,
