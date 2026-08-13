@@ -158,9 +158,9 @@ utterances:
 giscus:
   enable: true
   repo: 1992724048/blog # Github 仓库所有者和名称，例如: octocat/Hello-World
-  repo_id: # TODO: 仓库 ID，可在 giscus 页面获取
+  repo_id: R_kgDOT3k4xg # 仓库 ID，可在 giscus 页面获取
   category: Announcements # discussion 分类名称
-  category_id: # TODO: 分类 ID，可在 giscus 页面获取
+  category_id: DIC_kwDOT3k4xs4DDTrR # 分类 ID，可在 giscus 页面获取
   mapping: pathname # 页面 ↔️ discussion 映射关系，可选值: pathname | url | title | og:title | specific | number
   term: # 当 mapping 为 specific 时使用，指定的字符串
   discussion_number: # 当 mapping 为 number 时使用，指定的 discussion 号码
