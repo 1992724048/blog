@@ -119,13 +119,17 @@ table
   th
     color var(--theme-text-rev)
     background-color var(--theme-bg-light)
-    border var(--theme-border-light) solid 1px
-    padding 0 10px
+    padding 8px 10px
+    & + th
+      border-left var(--theme-border-light) dashed 1px
   td
-    padding 0 8px
-    border var(--theme-td-border) solid 1px
+    padding 8px 8px
+    & + td
+      border-left var(--theme-td-border) dashed 1px
     &:hover
       background-color var(--theme-td-hover)
+  tbody tr:nth-child(2n)
+    background-color var(--theme-bg-soft)
 
 figure:not(.highlight), figcaption
   text-align center
