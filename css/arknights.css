@@ -3288,7 +3288,8 @@ table .code {
   left: -1px;
 }
 #post-info {
-  text-align: right;
+  margin-top: 10px;
+  text-align: left;
 }
 #post-info time {
   color: var(--theme-highlight);
@@ -3297,6 +3298,10 @@ table .code {
   text-align: left;
   display: inline-block;
   width: 90px;
+}
+#post-info > span + span::before {
+  content: '·';
+  margin: 0 15px;
 }
 #post-source span {
   color: var(--theme-subcolor);
