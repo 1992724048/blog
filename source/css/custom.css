@@ -30,3 +30,16 @@ samp,
 .gutter pre {
   font-family: 'JetBrains Mono', 'HarmonyOS Sans SC', monospace !important;
 }
+
+/* 头像框点缀 */
+#logo img {
+  border: 3px solid var(--theme-highlight);
+  padding: 3px;
+  background: var(--theme-background);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme-highlight) 45%, transparent);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+#logo img:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--theme-highlight) 65%, transparent);
+}
