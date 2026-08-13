@@ -31,12 +31,9 @@ samp,
   font-family: 'JetBrains Mono', 'HarmonyOS Sans SC', monospace !important;
 }
 
-/* 头像点缀 */
+/* 头像：顶部留白 */
 #logo img {
-  padding: 3px;
   margin-top: 10px !important; /* 顶部留白 10px（内联 style 优先级高，需 !important） */
-  background: var(--theme-background);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--theme-highlight) 45%, transparent);
 }
 
 /* 首次加载遮罩（等待字体加载完成） */
