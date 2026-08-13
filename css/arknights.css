@@ -2695,7 +2695,7 @@ main:not(.up) .search #search-header input {
   display: inline-block;
   flex-shrink: 0;
 }
-.control-archive + a {
+.article-item > a {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
