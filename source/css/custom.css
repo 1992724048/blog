@@ -35,6 +35,7 @@ samp,
 #logo img {
   border: 3px solid var(--theme-highlight);
   padding: 3px;
+  margin-top: 10px !important; /* 顶部留白 10px（内联 style 优先级高，需 !important） */
   background: var(--theme-background);
   box-shadow: 0 0 12px color-mix(in srgb, var(--theme-highlight) 45%, transparent);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
