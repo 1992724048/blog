@@ -1,0 +1,122 @@
+<!DOCTYPE html><html lang="zh-cn" theme-mode="auto"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>我对vibe coding的看法和观点 | 遂沫'Blog</title><meta name="keywords" content="AI,随笔,观点"><meta name="description" content="从 ChatGPT 到”许愿机”：我三年的 AI 编程亲历2023：初识与落差AI 及相关工具的出现，实实在在改变了我的开发流程和体验。2023 年初我第一次接触 ChatGPT，很快就用它参与了项目开发——然后很快发现一个问题：AI 并没有我预期的那样智能（吐槽：现在也是）。 它写的代码，绝大部分不符合我对质量的要求。所以很长一段时间里，我把它当成辅助工具而不是写代码的主力。 2023-2024">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我对vibe coding的看法和观点">
+<meta property="og:url" content="https://issuimo.com/2026/08/13/ai-programming-journey/index.html">
+<meta property="og:site_name" content="遂沫&#39;Blog">
+<meta property="og:description" content="从 ChatGPT 到”许愿机”：我三年的 AI 编程亲历2023：初识与落差AI 及相关工具的出现，实实在在改变了我的开发流程和体验。2023 年初我第一次接触 ChatGPT，很快就用它参与了项目开发——然后很快发现一个问题：AI 并没有我预期的那样智能（吐槽：现在也是）。 它写的代码，绝大部分不符合我对质量的要求。所以很长一段时间里，我把它当成辅助工具而不是写代码的主力。 2023-2024">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-08-13T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-08-13T20:19:18.958Z">
+<meta property="article:author" content="遂沫">
+<meta property="article:tag" content="AI">
+<meta property="article:tag" content="观点">
+<meta property="article:tag" content="随笔">
+<meta name="twitter:card" content="summary"><link rel="canonical" href="https://issuimo.com/2026/08/13/ai-programming-journey/"><link rel="icon" type="image/x-icon" href="/favicon.ico"><link rel="preload" as="font" crossorigin="anonymous" href="/font/Bender.ttf"><link rel="preload" as="font" crossorigin="anonymous" href="/font/BenderLight.woff2"><link rel="preload" as="font" crossorigin="anonymous" href="/font/JetBrainsMono-Regular.woff2"><link rel="stylesheet" href="/css/arknights.css"><style>@font-face {
+  font-family: Bender;
+  src: local('Bender'), url("/font/Bender.ttf"), url("/font/Bender.otf");
+}
+@font-face {
+  font-family: BenderLight;
+  src: local('BenderLight'), url("/font/BenderLight.woff2") format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: local('JetBrains Mono'), url('/font/JetBrainsMono-Regular.woff2') format('woff2');
+}
+</style><meta name="page-config" content="{&quot;code_fold&quot;:null}"><script class="pjax-js">var config = {"root":"/","code_fold":15,"search":{"preload":false,"activeHolder":"键入以继续","blurHolder":"数据检索","noResult":"无 $0 相关数据"},"code":{"codeInfo":"$0 - $1 行","copy":"复制"}};
+var page_config = {
+  code_fold: null
+};
+function updatePageConfig() {
+  var newPageConfig = document.querySelector('meta[name="page-config"]');
+  if (newPageConfig) {
+    page_config = JSON.parse(newPageConfig.content);
+  }
+}
+document.addEventListener('pjax:complete', function() { updatePageConfig(); });
+updatePageConfig();</script><link type="text/css" rel="stylesheet" href="/lib/encrypt/hbe.style.css"><script src="//unpkg.com/mermaid@11.12.2/dist/mermaid.min.js"></script><link type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lightgallery.css"><link type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lg-zoom.css"><link type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lg-thumbnail.css"><link type="text/css" rel="stylesheet" href="/lib/fontawesome/css/all.min.css"><style defer src="/css/custom.css"></style><link rel="stylesheet" href="/css/custom.css"><script>if (window.localStorage.getItem('theme-mode') === 'light' || window.matchMedia('(prefers-color-scheme:light)').matches)
+ document.documentElement.setAttribute('theme-mode', 'light')
+if (window.localStorage.getItem('theme-mode') === 'dark' || window.matchMedia('(prefers-color-scheme:dark)').matches)
+ document.documentElement.setAttribute('theme-mode', 'dark')</script><style>@font-face {
+ font-family: BenderLight;
+ src: local('Bender'), url("/font/BenderLight.woff2") format('woff2');
+}
+@font-face {
+ font-family: 'JetBrains Mono';
+ src: local('JetBrains Mono'), url('/font/JetBrainsMono-Regular.woff2') format('woff2');
+}</style><style>:root {
+ --dark-background: url('https://ak.hypergryph.com/assets/index/images/ak/pc/bk.jpg');
+ --light-background: url('/img/bk.jpg');
+ --theme-encrypt-confirm: '确认'
+}</style><script defer src="/js/arknights.js"></script><script defer src="/js/search.js"></script><script defer src="https://vercount.one/js"></script><script defer type="module">import mermaid from '//unpkg.com/mermaid@11.12.2/dist/mermaid.esm.min.mjs';
+window.mermaid = mermaid;
+code.paintMermaid();
+</script><script async src="//unpkg.com/lightgallery@2.7.1/lightgallery.min.js"></script><script async src="//unpkg.com/lightgallery@2.7.1/plugins/zoom/lg-zoom.min.js"></script><script async src="//unpkg.com/lightgallery@2.7.1/plugins/thumbnail/lg-thumbnail.min.js"></script><script async src="/lib/encrypt/hbe.js"></script><script async src="/js/pjax.js"></script><script class="pjax-js">reset= () => {document.querySelector('.lg-container')?.remove()
+lightGallery(document.getElementById('post-bg'), {
+  plugins: [lgZoom,lgThumbnail],
+  selector: '.item-img'})}</script><script>window.addEventListener("load",() => {pjax = new Pjax({
+ cacheBust: false,
+ selectors: ['title','article','#aside-block','.pjax-js','data-pjax','.vercount','meta[name=page-config]'],
+ switches: {'article': Pjax.switches.sideBySide},
+ switchesOptions: {
+   'article': {
+     classNames: {
+       remove: "pjax-out",
+       add: "pjax-in"
+     }
+   }
+ }
+});
+document.addEventListener("pjax:complete", reset);document.addEventListener('pjax:success', _ => {
+ const script = document.createElement('script');
+ script.src = 'https://vercount.one/js';
+ document.head.appendChild(script);
+});reset()})</script><script class="pjax-js">reset= () => {window.giscusSettings = {
+ repo: '1992724048/blog',
+ repoId: 'R_kgDOT3k4xg',
+ category: 'Announcements',
+ categoryId: 'DIC_kwDOT3k4xs4DDTrR',
+ mapping: 'pathname',
+ strict: '0',
+ reactionsEnabled: '1',
+ emitMetadata: '0',
+ inputPosition: 'bottom',
+ lang: 'zh-CN',
+ crossorigin: 'anonymous' , loading: 'lazy'};window.giscusThemeConfig = { light: 'light', dark: 'dark' };document.querySelector('.lg-container')?.remove()
+const postBg = document.querySelector('#post-bg');
+if (postBg) lightGallery(postBg, {
+  plugins: [lgZoom,lgThumbnail],
+  selector: '.item-img'})}</script><script>window.addEventListener("load",() => {pjax = new Pjax({
+ cacheBust: false,
+ selectors: ['title','article','#aside-block','.pjax-js','data-pjax','.vercount','meta[name=page-config]'],
+ switches: {'article': Pjax.switches.sideBySide},
+ switchesOptions: {
+   'article': {
+     classNames: {
+       remove: "pjax-out",
+       add: "pjax-in"
+     }
+   }
+ }
+});
+document.addEventListener("pjax:complete", reset);document.addEventListener('pjax:success', _ => {
+ const script = document.createElement('script');
+ script.src = 'https://vercount.one/js';
+ document.head.appendChild(script);
+});reset()})</script><meta name="generator" content="Hexo 8.1.2"></head><body><div class="loading" style="opacity: 0;"><div class="loadingBar left"></div><div class="loadingBar right"></div></div><main><header class="closed"><div class="navBtn"><i class="navBtnIcon"><span class="navBtnIconBar"></span><span class="navBtnIconBar"></span><span class="navBtnIconBar"></span></i></div><nav><div class="navItem" id="search-header"><span class="navItemTitle"><input autocomplete="off" autocorrect="off" autocapitalize="none" placeholder="数据检索" spellcheck="false" maxlength="50" type="text" id="search-input"></span></div><div class="navItem" id="search-holder"></div><div class="search-popup" tabindex="0"><div id="search-result"></div></div><ol class="navContent"><li class="navItem"><a class="navBlock" href="/"><span class="navItemTitle">首页</span></a></li><li class="navItem" matchdata="categories,tags"><a class="navBlock" href="/archives/"><span class="navItemTitle">归档</span></a></li></ol></nav></header><article><div id="post-bg"><div id="post-title"><h1>我对vibe coding的看法和观点</h1><div id="post-info"><span>文章发布时间: <div class="control"><time datetime="2026-08-13T16:00:00.000Z" id="date"> 2026-08-14</time></div></span><br><span>最后更新时间: <div class="control"><time datetime="2026-08-13T20:19:18.958Z" id="updated"> 2026-08-14</time></div></span><br><span id="vercount_container_page_pv">页面浏览: <span class="control" id="vercount_value_page_pv">加载中...</span></span></div></div><hr><div id="post-content"><h1 id="从-ChatGPT-到”许愿机”：我三年的-AI-编程亲历"><a href="#从-ChatGPT-到”许愿机”：我三年的-AI-编程亲历" class="headerlink" title="从 ChatGPT 到”许愿机”：我三年的 AI 编程亲历"></a>从 ChatGPT 到”许愿机”：我三年的 AI 编程亲历</h1><h2 id="2023：初识与落差"><a href="#2023：初识与落差" class="headerlink" title="2023：初识与落差"></a>2023：初识与落差</h2><p>AI 及相关工具的出现，实实在在改变了我的开发流程和体验。2023 年初我第一次接触 ChatGPT，很快就用它参与了项目开发——然后很快发现一个问题：<strong>AI 并没有我预期的那样智能</strong>（吐槽：现在也是）。</p>
+<p>它写的代码，绝大部分不符合我对质量的要求。所以很长一段时间里，我把它当成辅助工具而不是写代码的主力。</p>
+<h2 id="2023-2024：辅助工具时代"><a href="#2023-2024：辅助工具时代" class="headerlink" title="2023-2024：辅助工具时代"></a>2023-2024：辅助工具时代</h2><p>从 2023 年 4 月到 2024 年 12 月，我基本维持一种模式：<strong>代码编写、测试等核心工作自己做</strong>；AI 生成的部分代码，我几乎都要手动重构一遍才能达到我的质量规范。</p>
+<p>这个阶段 AI 对我最大的价值是查资料——吐槽归吐槽，<strong>AI 有时真的能找到我自己找不到的资料</strong>。那两年我用 Kimi 比较多。现在回头想，那阵子 Agent 工具还没火起来（可能只有概念），网上也还没有现在这一堆”自制 XXX””我做了一个 XXX”的软件开发视频。</p>
+<h2 id="2025：R1-的震撼与”半古法编程”"><a href="#2025：R1-的震撼与”半古法编程”" class="headerlink" title="2025：R1 的震撼与”半古法编程”"></a>2025：R1 的震撼与”半古法编程”</h2><p>时间来到转折点：2025 年 1 月 20 日，DeepSeek 发布了 deepseek-r1。第一次体验确实有点震撼——但只是暂时的，深入使用之后发现，<strong>以前的痛点并没有被解决</strong>，我依然保持着”半古法编程”的模式。</p>
+<p>不过这一年开始，视频网站上的”自制 XXX””我做了一个 XXX”明显比前两年多了不少——大概是这一年 Agent 及相关工具的雏形出现并快速发展。</p>
+<h2 id="2026-上半年：”许愿机”时刻"><a href="#2026-上半年：”许愿机”时刻" class="headerlink" title="2026 上半年：”许愿机”时刻"></a>2026 上半年：”许愿机”时刻</h2><p>2026 年上半年，deepseek v4 预览版发布。这时候我看到不少人都在用 Claude Code 编程，于是也开始尝试。第一次使用的时候，真的如同瘫坐在椅子上、仿佛看到原子弹爆炸——这个梗来自 OpenAI Sam Altman 首次体验 GPT-5 时的说法。</p>
+<p><strong>AI Agent 变成了许愿机</strong>：任何事情只需要对着对话框输入、回车。结果不一定完美，但带来的方便省事是实打实的。</p>
+<h2 id="抵制期：vibe-coding-的软件，说实话有点差了"><a href="#抵制期：vibe-coding-的软件，说实话有点差了" class="headerlink" title="抵制期：vibe coding 的软件，说实话有点差了"></a>抵制期：vibe coding 的软件，说实话有点差了</h2><p>但也正是从这时候开始，我开始抵制一些 vibe coding。原因很直接：<strong>当时 vibe coding 出来的软件，设计丑陋、bug 很多</strong>；同时也让更多非相关专业的人涌入这个行业——吐槽：大部分都是未成年小屁孩。</p>
+<p>说实话，我不认为一个没有接受过专业知识的人能做出什么优秀软件，现在也是。毕竟姜还是老的辣，打铁还需自身硬。</p>
+<h2 id="转变：模型进步快得超出预期"><a href="#转变：模型进步快得超出预期" class="headerlink" title="转变：模型进步快得超出预期"></a>转变：模型进步快得超出预期</h2><p>但到了 opus 4.8、fable 5、deepseek v4 flash 正式版上线的时候，我的看法又变了。这上半年 AI 发展速度真的很快、进步很快：<strong>只要加上合适的提示词和 skill，AI 已经能像模像样地做到和人工差不多的水平</strong>——入门水平，但大多数事都能完成了。</p>
+<p>像我现在，大部分编写工作都已经交给 AI，接近解放双手。</p>
+<h2 id="现在：从码农到工程师"><a href="#现在：从码农到工程师" class="headerlink" title="现在：从码农到工程师"></a>现在：从码农到工程师</h2><p>我从”码农”变成了”工程师”：大部分耗时的工作丢给 AI，由我来指挥方向、和 AI 探讨技术选型。</p>
+<p>不过即便如此，<strong>我依然保留对代码 review 的习惯</strong>——毕竟质量这关不能丢。</p>
+<h2 id="结尾"><a href="#结尾" class="headerlink" title="结尾"></a>结尾</h2><p>回头看这三年：从 2023 年觉得 AI 不过如此，到 2026 年把大部分工作交给它，变化的不是 AI 一家之事，而是整个工具链的成熟——模型在进步，Agent 在成熟，提示词和 skill 的玩法在沉淀。</p>
+<p>但有一件事一直没变：<strong>工具越强，掌舵的人越不能松手</strong>。AI 负责干活，我负责把质量关——姜还是老的辣，打铁还需自身硬。这句话三年前成立，现在依然成立。</p>
+<div id="paginator"></div></div><div id="post-footer"><div id="pages" style="justify-content: flex-end"><div class="footer-link" style="width: 50%;right:1px;border-left:1px #fe2 solid"><a href="/2026/08/13/xorstr-string-encryption/">编译期 XOR 字符串加密：stdpp::xorstr 设计与实现 上一篇 →</a></div></div></div><div id="comments"><div id="giscus"></div></div></div><div class="bottom-btn"><div><a class="i-top" id="to-top" onClick="scrolls.scrolltop();" title="回到顶部" style="opacity: 0; display: none;">∧ </a><a class="i-index" id="to-index" onClick="tocControl.change()" title="文章目录"><span class="tocBtnIconBar"></span><span class="tocBtnIconBar"></span><span class="tocBtnIconBar"></span></a><a class="i-color" id="color-mode" onClick="colorMode.change()" title="切换主题"></a></div></div></article><aside><div id="about"><a href="/" id="logo"><img src="https://github.com/1992724048.png" alt="遂沫'Blog" style="margin:0;border-radius:0;"></a><h1 id="Dr"><a href="/">遂沫</a></h1><div id="description"><p>嗯~ o(*￣▽￣*)o</p></div><div id="social-links"><a class="social" target="_blank" rel="noopener" href="https://github.com/1992724048"><i class="fab fa-github" alt="GitHub"></i></a><a class="social" target="_blank" rel="noopener" href="https://space.bilibili.com/319091647"><i class="fa-brands fa-bilibili" alt="BiliBili"></i></a><a class="social" href="mailto:1992724048@qq.com"><i class="fa fa-envelope" alt="E-Mail"></i></a></div></div><div id="aside-block"><div id="toc-div"><h1>目录</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%BB%8E-ChatGPT-%E5%88%B0%E2%80%9D%E8%AE%B8%E6%84%BF%E6%9C%BA%E2%80%9D%EF%BC%9A%E6%88%91%E4%B8%89%E5%B9%B4%E7%9A%84-AI-%E7%BC%96%E7%A8%8B%E4%BA%B2%E5%8E%86"><span class="toc-number">1.</span> <span class="toc-text">从 ChatGPT 到”许愿机”：我三年的 AI 编程亲历</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#2023%EF%BC%9A%E5%88%9D%E8%AF%86%E4%B8%8E%E8%90%BD%E5%B7%AE"><span class="toc-number">1.1.</span> <span class="toc-text">2023：初识与落差</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2023-2024%EF%BC%9A%E8%BE%85%E5%8A%A9%E5%B7%A5%E5%85%B7%E6%97%B6%E4%BB%A3"><span class="toc-number">1.2.</span> <span class="toc-text">2023-2024：辅助工具时代</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2025%EF%BC%9AR1-%E7%9A%84%E9%9C%87%E6%92%BC%E4%B8%8E%E2%80%9D%E5%8D%8A%E5%8F%A4%E6%B3%95%E7%BC%96%E7%A8%8B%E2%80%9D"><span class="toc-number">1.3.</span> <span class="toc-text">2025：R1 的震撼与”半古法编程”</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2026-%E4%B8%8A%E5%8D%8A%E5%B9%B4%EF%BC%9A%E2%80%9D%E8%AE%B8%E6%84%BF%E6%9C%BA%E2%80%9D%E6%97%B6%E5%88%BB"><span class="toc-number">1.4.</span> <span class="toc-text">2026 上半年：”许愿机”时刻</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8A%B5%E5%88%B6%E6%9C%9F%EF%BC%9Avibe-coding-%E7%9A%84%E8%BD%AF%E4%BB%B6%EF%BC%8C%E8%AF%B4%E5%AE%9E%E8%AF%9D%E6%9C%89%E7%82%B9%E5%B7%AE%E4%BA%86"><span class="toc-number">1.5.</span> <span class="toc-text">抵制期：vibe coding 的软件，说实话有点差了</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%BD%AC%E5%8F%98%EF%BC%9A%E6%A8%A1%E5%9E%8B%E8%BF%9B%E6%AD%A5%E5%BF%AB%E5%BE%97%E8%B6%85%E5%87%BA%E9%A2%84%E6%9C%9F"><span class="toc-number">1.6.</span> <span class="toc-text">转变：模型进步快得超出预期</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%8E%B0%E5%9C%A8%EF%BC%9A%E4%BB%8E%E7%A0%81%E5%86%9C%E5%88%B0%E5%B7%A5%E7%A8%8B%E5%B8%88"><span class="toc-number">1.7.</span> <span class="toc-text">现在：从码农到工程师</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E5%B0%BE"><span class="toc-number">1.8.</span> <span class="toc-text">结尾</span></a></li></ol></li></ol></div></div><footer><nobr><span class="icp-title"><i class="fa-regular fa-copyright"></i> 2026 遂沫</span><a class="icp-content" target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh">CC BY-SA 4.0</a></nobr><br><nobr>构建自 <a target="_blank" rel="noopener" href="http://hexo.io">Hexo</a></nobr><wbr><nobr> 使用主题 <a target="_blank" rel="noopener" href="https://github.com/Yue-plus/hexo-theme-arknights">Arknights</a></nobr><wbr><nobr> 主题作者 <a target="_blank" rel="noopener" href="https://github.com/Yue-plus">Yue_plus</a></nobr></footer></aside></main><canvas id="canvas-dust"></canvas></body></html>
