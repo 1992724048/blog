@@ -54,7 +54,9 @@ aside
     if theme.aside.copyright !== null
       each content, title in theme.aside.copyright
         nobr
-          span.icp-title= title
+          span.icp-title
+            i.fa-regular.fa-copyright
+            = ' ' + title
           if typeof content === 'string'
             span.icp-content= content
           else
