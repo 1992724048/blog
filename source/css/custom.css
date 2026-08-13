@@ -33,7 +33,7 @@ samp,
 
 /* 头像：顶部留白 */
 #logo img {
-  margin-top: 10px !important; /* 顶部留白 10px（内联 style 优先级高，需 !important） */
+  margin-top: 5px !important; /* 顶部留白 5px（内联 style 优先级高，需 !important） */
 }
 
 /* 首次加载遮罩（等待字体加载完成） */
