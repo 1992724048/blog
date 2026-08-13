@@ -102,15 +102,26 @@ class Code {
         }
         return str.toUpperCase();
     };
+    formatSize = (bytes) => {
+        if (bytes >= 1048576) {
+            return (bytes / 1048576).toFixed(1) + 'MB';
+        }
+        if (bytes >= 1024) {
+            return (bytes / 1024).toFixed(1) + 'KB';
+        }
+        return bytes + 'B';
+    };
     doAsCode = (item) => {
         const code_fold = page_config.code_fold || config.code_fold || -1;
         const codeType = this.resetName(item.classList[1]), lineCount = getElement('.gutter', item).children[0].childElementCount >> 1;
+        const codeElement = getElement('code', item);
         item.classList.add(lineCount <= code_fold || code_fold === -1 ? 'open' : 'fold');
         item.classList.add('expand-box');
         item.innerHTML =
             `<div class="ex-header" tabindex='0'>
         <i class="i-status"></i>
-        <span class="ex-title">${format(config.code.codeInfo, codeType, lineCount)}</span>
+        <span class="ex-title">${codeType}</span>
+        <span class="ex-size">${lineCount} Col · ${this.formatSize(new TextEncoder().encode(codeElement.innerText).length)}</span>
       </div>
       <div class="ex-content">${item.innerHTML}
         <button class="code-copy" title="${config.code.copy}"></button>
