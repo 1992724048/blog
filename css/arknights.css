@@ -2691,9 +2691,11 @@ main:not(.up) .search #search-header input {
   text-align: center;
 }
 .control-archive {
-  width: 55px;
-  display: inline-block;
   flex-shrink: 0;
+  align-self: center;
+  white-space: nowrap;
+  font-size: small;
+  color: var(--theme-text-light);
 }
 .article-item > a {
   flex: 1 1 auto;
@@ -2835,6 +2837,12 @@ article .recent-excerpt p {
   background-color: var(--theme-highlight);
   position: relative;
   bottom: -6px;
+}
+.recent-title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
 }
 .recent-excerpt {
   margin: 12px 0 28px 0;
