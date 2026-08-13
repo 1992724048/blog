@@ -3113,7 +3113,7 @@ article .recent-excerpt p {
 }
 .highlight {
   line-height: 20px;
-  margin: 1em;
+  margin: 1em 0;
   overflow-x: hidden;
   border: unset;
 }
