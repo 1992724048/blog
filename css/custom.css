@@ -35,3 +35,41 @@ samp,
 #logo img {
   margin-top: 5px !important; /* 顶部留白 5px（内联 style 优先级高，需 !important） */
 }
+
+/* 文章结尾互动彩蛋：黑色幕布，鼠标移上揭开 */
+.egg-wrap {
+  position: relative;
+  margin: 2rem auto;
+  max-width: 480px;
+  border: 1px dashed color-mix(in srgb, var(--theme-highlight) 40%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 130px;
+}
+.egg-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #141414;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.6s ease;
+}
+.egg-wrap:hover .egg-cover {
+  transform: translateY(-100%);
+}
+.egg-content {
+  padding: 1.2rem 1.5rem;
+  text-align: center;
+  color: var(--theme-text);
+}
+.egg-content p {
+  margin: 0.5rem 0;
+}
