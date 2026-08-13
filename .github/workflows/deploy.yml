@@ -27,6 +27,8 @@ jobs:
 
       - name: Build site
         run: npx hexo generate
+        env:
+          TZ: Asia/Shanghai
 
       - name: Deploy to pages branch
         uses: JamesIves/github-pages-deploy-action@v4
