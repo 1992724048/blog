@@ -99,7 +99,7 @@ bgm:
 # Vercount
 # 详见 https://vercount.one/
 vercount:
-  enable: false
+  enable: true
   sitePV: true # 站点总访问量
   siteUV: true # 站点访客数
   pagePV: true # 页面访问量
