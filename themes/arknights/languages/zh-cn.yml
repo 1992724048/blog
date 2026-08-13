@@ -11,11 +11,11 @@ vercount:
   loading: "加载中..."
   siteView: "总访问量："
   siteVisitor: "访客数："
-  pageView: "页面浏览: "
+  pageView: "浏览量: "
 
 post:
-  posted: "文章发布时间: "
-  edited: "最后更新时间: "
+  posted: "发布于: "
+  edited: "更新于: "
   countTotal: "文章总字数: "
   timeTotal: "预计阅读时间: "
   timeUnit: 分钟
