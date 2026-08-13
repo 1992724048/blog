@@ -31,14 +31,12 @@ samp,
   font-family: 'JetBrains Mono', 'HarmonyOS Sans SC', monospace !important;
 }
 
-/* 头像框点缀 */
+/* 头像点缀 */
 #logo img {
-  border: 3px solid var(--theme-highlight);
   padding: 3px;
   margin-top: 10px !important; /* 顶部留白 10px（内联 style 优先级高，需 !important） */
   background: var(--theme-background);
   box-shadow: 0 0 12px color-mix(in srgb, var(--theme-highlight) 45%, transparent);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* 首次加载遮罩（等待字体加载完成） */
@@ -66,8 +64,4 @@ samp,
 }
 @keyframes splash-spin {
   to { transform: rotate(360deg); }
-}
-#logo img:hover {
-  transform: scale(1.06);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--theme-highlight) 65%, transparent);
 }
