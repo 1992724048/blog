@@ -49,13 +49,17 @@
       top -3px
       left -1px
 #post-info
-  text-align right
+  margin-top 10px
+  text-align left
   time
     color var(--theme-highlight)
   .control
     text-align left
     display inline-block
     width 90px
+  > span + span::before
+    content '·'
+    margin 0 15px
 #post-source span
   color var(--theme-subcolor)
   background-color var(--theme-unimportant-2)

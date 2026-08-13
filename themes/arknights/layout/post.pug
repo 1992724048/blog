@@ -17,41 +17,27 @@ block content
   #post-bg
     #post-title
       h1= page.title
-      if (dateConf || updatedConf || countWord || countTime || vercount) && page.title && page['post-info'] !== false
-        #post-info
-          - var first = true
-          if dateConf
-            span #{__('post.posted')}
-              div.control
-                time(datetime=page.date.toJSON())#date
-                  = ' ' + date(page.date, date_format)
-            - first = false
-          if updatedConf
-            if !first
-              br
-            span #{__('post.edited')}
-              div.control
-                time(datetime=page.updated.toJSON())#updated
-                  = ' ' + date(page.updated, date_format)
-            - first = false
-          if countWord
-            if !first
-              br
-            span #{__('post.countTotal')}
-              div.control #{countWord}
-            - first = false
-          if countTime
-            if !first
-              br
-            span #{__('post.timeTotal')}
-              div.control #{countTime} #{__('post.timeUnit')}
-            - first = false
-          if vercount
-            if !first
-              br
-            span#vercount_container_page_pv #{__('vercount.pageView')}
-              span#vercount_value_page_pv(class='control') #{__('vercount.loading')}
-            - first = false
+    if (dateConf || updatedConf || countWord || countTime || vercount) && page.title && page['post-info'] !== false
+      #post-info
+        if dateConf
+          span #{__('post.posted')}
+            div.control
+              time(datetime=page.date.toJSON())#date
+                = ' ' + date(page.date, date_format)
+        if updatedConf
+          span #{__('post.edited')}
+            div.control
+              time(datetime=page.updated.toJSON())#updated
+                = ' ' + date(page.updated, date_format)
+        if countWord
+          span #{__('post.countTotal')}
+            div.control #{countWord}
+        if countTime
+          span #{__('post.timeTotal')}
+            div.control #{countTime} #{__('post.timeUnit')}
+        if vercount
+          span#vercount_container_page_pv #{__('vercount.pageView')}
+            span#vercount_value_page_pv(class='control') #{__('vercount.loading')}
     hr
     #post-content
       if excerptConf || encrypted
