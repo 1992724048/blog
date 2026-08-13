@@ -2838,12 +2838,6 @@ article .recent-excerpt p {
   position: relative;
   bottom: -6px;
 }
-.recent-title-line {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  column-gap: 8px;
-}
 .recent-excerpt {
   margin: 12px 0 28px 0;
 }
