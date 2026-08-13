@@ -2761,6 +2761,7 @@ article .recent-excerpt p {
   color: var(--theme-unimportant);
   display: inline-block;
   text-align: left;
+  float: right;
 }
 .recent-post hr {
   color: var(--theme-unimportant);
@@ -2842,12 +2843,6 @@ article .recent-excerpt p {
   align-items: baseline;
   flex-wrap: wrap;
   column-gap: 8px;
-}
-.recent-title-line h1.recent-title {
-  flex: 1;
-}
-.recent-title-line time {
-  white-space: nowrap;
 }
 .recent-excerpt {
   margin: 12px 0 28px 0;
