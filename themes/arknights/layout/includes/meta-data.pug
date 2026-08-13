@@ -1,17 +1,6 @@
 meta(charset='UTF-8')
 meta(name='viewport' content='width=device-width, initial-scale=1.0')
 title= pageTitle
-script.
-  (function(){
-    var s=document.createElement('div');
-    s.id='font-splash';
-    s.innerHTML='<div class="splash-spinner"></div>';
-    document.documentElement.appendChild(s);
-    var hide=function(){s.classList.add('hide');setTimeout(function(){s.remove();},500);};
-    if(document.fonts&&document.fonts.ready){document.fonts.ready.then(hide).catch(hide);}
-    else{hide();}
-    setTimeout(hide,8000);
-  })();
 - var keywords = page.keywords || page.tags && page.tags.map(function(t){return t.name}).join(',') || config.keywords || ''
 - var canonical = (typeof url !== 'undefined' && url) || (typeof full_url_for === 'function' ? full_url_for(page.path || '/') : '')
 - canonical = canonical ? canonical.replace(/index\.html$/, '') : canonical
