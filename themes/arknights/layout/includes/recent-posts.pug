@@ -19,7 +19,7 @@ if page.posts.length > 0
               span #{__('page.noTag')}
           if post.date
             span.post-meta
-              = `字数：${wordcountRaw(post.content)} · 阅读时间：${min2read(post.content)} 分钟 · `
+              = `${wordcountRaw(post.content)}c/${min2read(post.content)}min · `
               time(datetime=post.date.toJSON())= date(post.date, date_format)
         h1.recent-title
           if post.sticky > 0
