@@ -41,6 +41,13 @@ article
     display inline-block
     text-align left
     float right
+  .post-meta
+    color var(--theme-unimportant)
+    display inline-block
+    text-align left
+    float right
+    time
+      float none
   hr
     color var(--theme-unimportant)
     border-color var(--theme-unimportant)
@@ -55,7 +62,7 @@ article
     &:hover
       color var(--theme-text-hover)
       background-color var(--theme-highlight)
-      time, .categories
+      time, .categories, .post-meta
         color var(--theme-text-hover)
       a, a:active
         color var(--theme-text-rev)
