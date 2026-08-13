@@ -16,9 +16,10 @@ vercount:
 post:
   posted: "发布于: "
   edited: "更新于: "
-  countTotal: "文章总字数: "
-  timeTotal: "预计阅读时间: "
+  countTotal: "文章字数: "
+  timeTotal: "阅读时间: "
   timeUnit: 分钟
+  wordUnit: 字
   index: 目录
   reward: 打赏
   noTitle: 无标题

@@ -11,8 +11,8 @@ block content
     const encrypted = page.encrypt || page.password
     const content = encrypted === undefined ? page.content : page.origin
     const tocContent = toc(content, theme.toc)
-    const countWord = page['post-count'] !== false && theme.post.count === true && wordcount !== undefined ? wordcount(content) : null
-    const countTime = page['post-count'] !== false && theme.post.time === true && min2read !== undefined ? min2read(content) : null
+    const countWord = page['post-count'] !== false ? wordcountRaw(content) : null
+    const countTime = page['post-count'] !== false ? min2read(content) : null
     const vercount = page.vercount !== false && theme.vercount.enable
   #post-bg
     #post-title
@@ -31,7 +31,7 @@ block content
                 = ' ' + date(page.updated, date_format)
         if countWord
           span #{__('post.countTotal')}
-            div.control #{countWord}
+            div.control #{countWord} #{__('post.wordUnit')}
         if countTime
           span #{__('post.timeTotal')}
             div.control #{countTime} #{__('post.timeUnit')}
