@@ -63,5 +63,5 @@ terms:
 
 - `after_post_render` 与主题其它过滤器（footnotes/pandoc/lightgallery）的处理顺序：terms 只替换纯文本片段，顺序影响可忽略
 - 加密文章 content 在 post render 阶段的形态需实测确认；实现时以 `encrypt/password` 字段直接跳过，规避风险
-- 英文术语大小写敏感，按词表原文精确匹配（如 `ESP32` 不匹配 `esp32`），如需要可后续加大小写不敏感选项
+- 英文术语匹配大小写不敏感（`esp32` 命中词条 `ESP32`，保留原文大小写）；词条仅大小写不同时先出现者胜
 - hover 色实际为 `var(--theme-text-hover)`（主题全局惯例 #000），与「hover 变浅」措辞有偏差，保持主题一致为有意取舍
