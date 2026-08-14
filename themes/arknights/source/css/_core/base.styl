@@ -192,11 +192,24 @@ input
 
 .terms-ref
   color var(--theme-unimportant)
+  font-size smaller
   margin 0
   padding-left 2em
+  list-style none
+  counter-reset terms
   li
     margin .2em 0
     scroll-margin-top 60px
+    counter-increment terms
+    &::before
+      content '[' counter(terms) '] '
     a
       color var(--theme-highlight)
+      &:hover
+        color var(--theme-text-hover)
+
+html
+  scroll-behavior smooth
+  @media (prefers-reduced-motion: reduce)
+    scroll-behavior auto
     

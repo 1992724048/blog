@@ -156,6 +156,7 @@ class Scroll {
    */
   private setListener = () => {
     getElement('#post-content').addEventListener('click', this.supScroll)
+    getElement('#post-content').addEventListener('click', this.termLinkScroll)
     getElement('#footnotes').addEventListener('click', this.footNoteScroll)
   }
 
@@ -176,6 +177,18 @@ class Scroll {
     if (target.tagName === 'A') {
       event.preventDefault()
       const hash = target.href.split('/').pop()?.slice(1) || ''
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
+
+  /**
+   * term-link 锚点（#term-*）平滑滚动到底部术语列表
+   */
+  private termLinkScroll = (event: Event) => {
+    const target = event.target as HTMLAnchorElement
+    if (target.tagName === 'A' && target.classList.contains('term-link')) {
+      event.preventDefault()
+      const hash = target.hash.slice(1)
       document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth' })
     }
   }
