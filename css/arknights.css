@@ -207,7 +207,6 @@ input {
 }
 .term-link {
   color: var(--theme-highlight);
-  text-decoration: underline;
 }
 .term-link:hover {
   color: var(--theme-text-hover);
