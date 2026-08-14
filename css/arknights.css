@@ -211,6 +211,37 @@ input {
 .term-link:hover {
   color: var(--theme-text-hover);
 }
+.terms-sep {
+  color: var(--theme-unimportant-2);
+  position: relative;
+}
+.terms-sep:before {
+  content: '';
+  width: 13%;
+  height: 3px;
+  display: block;
+  position: absolute;
+  background-color: var(--theme-text-light);
+  top: -3px;
+  left: -1px;
+}
+.terms-title {
+  color: var(--theme-text-light);
+  font-weight: bold;
+  margin: 0.5em 0 0.3em 0;
+}
+.terms-ref {
+  color: var(--theme-unimportant);
+  margin: 0;
+  padding-left: 2em;
+}
+.terms-ref li {
+  margin: 0.2em 0;
+  scroll-margin-top: 60px;
+}
+.terms-ref li a {
+  color: var(--theme-highlight);
+}
 #cursor-outer {
   z-index: 65538;
   position: fixed;
