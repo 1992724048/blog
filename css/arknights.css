@@ -205,6 +205,13 @@ input {
   text-align: center;
   color: var(--theme-text-light);
 }
+.term-link {
+  color: var(--theme-highlight);
+  text-decoration: underline;
+}
+.term-link:hover {
+  color: var(--theme-text-hover);
+}
 #cursor-outer {
   z-index: 65538;
   position: fixed;
