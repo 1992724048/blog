@@ -212,3 +212,10 @@ stylesheets:
 # 在 `<body>` 尾部引入 JavaScript 脚本
 # 支持直接引入短片段，用 "{ }" 包裹（包括引号），例： - "{var test='test'}"
 scripts:
+
+terms:
+  list:
+    - term: "ESP32"
+      url: "https://docs.espressif.com/projects/esp-idf/zh_CN/latest/"
+    - term: "XOR"
+      url: "https://en.wikipedia.org/wiki/XOR_gate"

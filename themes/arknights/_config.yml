@@ -212,3 +212,7 @@ stylesheets:
 # 在 `<body>` 尾部引入 JavaScript 脚本
 # 支持直接引入短片段，用 "{ }" 包裹（包括引号），例： - "{var test='test'}"
 scripts:
+
+# 专业术语链接：正文中的术语自动替换为外部链接；词条在站点 _config.arknights.yml 的 terms.list 中维护
+terms:
+  list: []
