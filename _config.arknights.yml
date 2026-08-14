@@ -13,7 +13,7 @@ canvas_dust: true
 # auto 跟随系统
 color: auto
 
-build_time: false # 是否开启构建时间显示，开启后会在生成的站点配置中添加 build_time 字段，值为 UTC 时间字符串
+build_time: true # 是否开启构建时间显示，开启后会在生成的站点配置中添加 build_time 字段，值为 UTC 时间字符串
 
 # <body> 背景图片链接
 background_image:
@@ -60,8 +60,8 @@ post:
     # 支付宝 | Alipay: img/Alipay.png
     # 微信 | Wechat: img/WeChat.png
   # 以下两项依赖 hexo-wordcount，请参阅 README 开启
-  count: false # 是否显示字数统计
-  time: false # 是否显示预计阅读时长
+  count: true # 是否显示字数统计
+  time: true # 是否显示预计阅读时长
   code_fold: 15 # 当代码小于等此行数时默认展开，设为 -1 则全部展开
 
 # 文章内目录
@@ -79,7 +79,7 @@ archives:
 search:
   enable: true
   content: true # 若为 false，仅可搜索标题及 metadata
-  preload: false # 自动加载搜索数据
+  preload: true # 自动加载搜索数据
   # 设为 post 时，仅可搜索 post 页面
   # 设为 page 时，仅可搜索非 post 页面
   # 设为 all 时，可搜索全部页面
@@ -200,14 +200,14 @@ pjax:
 
 # 公式前端渲染
 mathjax:
-  enable: false
+  enable: true
   version: "2.6.1"
 
 # 在 `<head>` 标签内引入 CSS 样式表
 # 支持直接引入短片段，用 "{ }" 包裹（包括引号），例： - "{a {color: #2bf}}"
 # 版本号参数：修改 custom.css 后同步递增，避免 Cloudflare/浏览器缓存旧版
 stylesheets:
-  - /css/custom.css?v=20260814
+  - /css/custom.css
 
 # 在 `<body>` 尾部引入 JavaScript 脚本
 # 支持直接引入短片段，用 "{ }" 包裹（包括引号），例： - "{var test='test'}"
