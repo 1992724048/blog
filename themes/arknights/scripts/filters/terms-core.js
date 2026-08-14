@@ -24,8 +24,9 @@ const buildPattern = (terms) => {
   return new RegExp(parts.join('|'), 'gi')
 }
 
-// 将 HTML 中的术语替换为站内锚点链接（href=#term-{index}）；<pre>/<code>/<a> 包裹内容原样保留
-const replaceTerms = (html, termList) => {
+// 将 HTML 中的术语替换为站内锚点链接（href=#term-{index}）；<pre>/<code>/<a> 包裹内容原样保留；
+// 传入 matched（Set）时收集实际命中的词条（小写），供底部列表过滤
+const replaceTerms = (html, termList, matched = null) => {
   if (!Array.isArray(termList) || termList.length === 0) return html
   const terms = dedupeTerms(termList)
   const pattern = buildPattern(terms)
@@ -36,23 +37,26 @@ const replaceTerms = (html, termList) => {
     .map((segment, index) => {
       if (index % 2 === 1) return segment
       return segment.replace(pattern, (match) => {
+        if (matched) matched.add(match.toLowerCase())
         return `<a class="term-link" href="#term-${indexMap.get(match.toLowerCase())}">${match}</a>`
       })
     })
     .join('')
 }
 
-// 生成底部引用式术语列表（分隔线 + 非 h 标题 + 编号列表）；空词表返回空串
-const buildTermsList = (termList) => {
+// 生成底部引用式术语列表（分隔线 + 非 h 标题 + 编号列表）；matched 为实际命中词条（小写 Set）：
+// 仅输出命中词条且 id 保持全词条去重序的原始 index（正文锚点与之对应）；编号 [n] 由 CSS counter 呈现
+const buildTermsList = (termList, matched = null) => {
   const terms = dedupeTerms(termList)
   if (terms.length === 0) return ''
-  const items = terms
-    .map(({ term, url }, index) => {
-      const safeUrl = url.replace(/"/g, '&quot;')
-      return `    <li id="term-${index}">${term} — <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">链接</a></li>`
-    })
-    .join('\n')
-  return `<hr class="terms-sep">\n<div class="terms-title">术语表</div>\n<ol class="terms-ref">\n${items}\n</ol>`
+  const items = []
+  terms.forEach(({ term, url }, index) => {
+    if (matched && !matched.has(term.toLowerCase())) return
+    const safeUrl = url.replace(/"/g, '&quot;')
+    items.push(`    <li id="term-${index}"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${term}</a></li>`)
+  })
+  if (items.length === 0) return ''
+  return `<hr class="terms-sep">\n<div class="terms-title">术语表</div>\n<ol class="terms-ref">\n${items.join('\n')}\n</ol>`
 }
 
 module.exports = { replaceTerms, buildTermsList }
