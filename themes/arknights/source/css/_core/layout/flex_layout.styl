@@ -84,7 +84,8 @@
     display flex
     justify-content space-between
   article
-    width calc(95% - 212px)
+    margin-left 20px
+    width calc(100% - 170px - 20px)
   #total-archives .total-number
     font-size 34px
   #to-index
@@ -106,7 +107,8 @@
 
 @media ( min-width 1024px )
   article
-    width calc(100% - 412px)
+    margin-left 25px
+    width calc(100% - 190px - 25px)
   aside
     width 190px
     h1
@@ -118,7 +120,8 @@
 
 @media ( min-width 1440px )
   article
-    width calc(100% - 520px)
+    margin-left 25px
+    width calc(100% - 230px - 25px)
   aside
     width 230px
     h1
@@ -136,8 +139,10 @@
     display block
     position relative
 @media ( min-width 1912px )
+  // 与 aside 的 2.5% 边距对称：左侧留出同宽空间（header 悬浮后不再占用布局）
   article
-    width calc(95% - 630px)
+    margin-left 2.5%
+    width calc(100% - 270px - 7.5%)
   aside
     width 270px
     h1

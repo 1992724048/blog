@@ -25,14 +25,29 @@ nav
 .navBlock
   transition unset
   position relative
-  height 40px
-  line-height 40px
+  height 32px
+  line-height 32px
   display inline-block
   width 100%
+  padding unset
+  margin 6px 0
   &:hover
     background-color unset
   &:active
     background unset
+  &::after
+    content ''
+    display block
+    position absolute
+    top 0
+    bottom 0
+    left 0
+    width 0
+    transition width .3s
+    background-color var(--theme-highlight)
+    z-index -1
+  &:hover::after
+    width 100%
 .navContent
   overflow visible
   margin unset
@@ -53,13 +68,77 @@ nav
     white-space normal
     position relative
     display block
+    text-shadow unset
 .active > .navBlock > .navItemTitle
   color var(--theme-highlight)
-  &::before
+.navBlock:hover > .navItemTitle
+  color var(--theme-text-rev)
+
+@media ( min-width 769px )
+  // 选择器带 main 前缀：特异性高于主题 header/layout 的 `header { left: 0/238px/unset }`，保证收起态生效
+  main header
+    position fixed
+    left -100%
+    top 0
+    transition left .3s
+    background-color var(--theme-bg-trans0)
+    &.expanded
+      left 0
+  main header.expanded .navExpand
+    opacity 0
+    pointer-events none
+  .navBtn
+    display none
+  main header nav
+    transform none
+  .navExpand
+    position fixed
+    left 0
+    top 50%
+    transform translateY(-50%)
+    z-index 16
+    border unset
+    border-radius 0
+    height 40px
+    padding 0 10px
+    font-size 15px
+    line-height 1
+    color var(--theme-text-rev)
+    background-color var(--theme-bg-light)
+    pointer-events auto
+    transition opacity .3s
+    cursor pointer
+    &::after
+      content ''
+      display block
+      position absolute
+      top 0
+      left 0
+      width 0
+      height 100%
+      transition width .3s
+      background-color var(--theme-highlight)
+      z-index -1
+    &:hover::after
+      width 100%
+  // 导航项左侧竖条（参考搜索框）：未选中灰、选中蓝；覆盖主题原版 :only-child 右竖条与 hover 文字左移
+  main .navContent .navBlock > .navItemTitle::before
     content ''
     display block
-    color var(--theme-highlight)
-    border-color var(--theme-highlight)
-    width 100%
     position absolute
+    top 0
     left 0
+    height 100%
+    box-sizing border-box
+    border-right unset
+    border-left 4px solid var(--theme-border-light)
+  main .active > .navBlock > .navItemTitle::before
+    border-left-color var(--theme-highlight)
+  main .navContent .navBlock:hover > .navItemTitle
+    margin-left unset
+  // 桌面端搜索时保持菜单项可见：覆盖 _modules/search/left.styl 的 `.search .navItem:not(#search-header)` 滑出效果
+  // 悬浮面板下菜单被清空会呈现"导航栏直接关闭"；搜索弹窗在右侧展开（width 32%），与左侧面板不冲突
+  @media ( min-width 1024px )
+    main header nav.search .navItem:not(#search-header)
+      transform none
+      pointer-events auto

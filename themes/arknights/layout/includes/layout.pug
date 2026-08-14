@@ -63,3 +63,21 @@ html(lang=config.language theme-mode=htmlThemeMode)
             script!=url
           else
             script(defer src=url)
+    script.
+      (function () {
+        document.addEventListener('click', function (event) {
+          var header = document.querySelector('header')
+          if (!header) return
+          if (event.target.closest && event.target.closest('.navExpand')) {
+            header.classList.toggle('expanded')
+            return
+          }
+          if (header.classList.contains('expanded')) {
+            if (!header.contains(event.target)) {
+              header.classList.remove('expanded')
+            } else if (event.target.closest && event.target.closest('a')) {
+              header.classList.remove('expanded')
+            }
+          }
+        })
+      })()

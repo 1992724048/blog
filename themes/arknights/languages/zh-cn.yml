@@ -6,6 +6,7 @@ page:
   noTag: 无标签
   noCategory: 无分类
   sticky: 置顶
+  expandNav: 展开导航
 
 vercount:
   loading: "加载中..."
