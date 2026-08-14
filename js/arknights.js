@@ -919,7 +919,8 @@ class Header {
         }
     };
     inHeader = (mouse) => {
-        if (!isParent(this.header, mouse.target) && !isParent(this.button, mouse.target)) {
+        const popup = document.querySelector('.search-popup');
+        if (!isParent(this.header, mouse.target) && !isParent(this.button, mouse.target) && !(popup !== null && isParent(popup, mouse.target))) {
             this.close();
         }
     };
