@@ -2,12 +2,14 @@
 
 const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-// 词表按 term 长度降序合成正则，长词优先匹配；字母数字边界防止部分命中（ESP32 不命中 ESP32-S3）
+// 词表按 term 长度降序合成正则，长词优先匹配；字母数字边界防止部分命中（ESP32 不命中 ESP32-S3）；过滤空 term 防止生成零宽模式
 const buildPattern = (termList) => {
   const parts = termList
     .slice()
+    .filter(({ term }) => term)
     .sort((a, b) => b.term.length - a.term.length)
     .map(({ term }) => `(?<![A-Za-z0-9_-])${escapeRegExp(term)}(?![A-Za-z0-9_-])`)
+  if (parts.length === 0) return null
   return new RegExp(parts.join('|'), 'g')
 }
 
@@ -15,6 +17,7 @@ const buildPattern = (termList) => {
 const replaceTerms = (html, termList) => {
   if (!Array.isArray(termList) || termList.length === 0) return html
   const pattern = buildPattern(termList)
+  if (!pattern) return html
   const urlMap = new Map(termList.map(({ term, url }) => [term, url]))
   return html
     .split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>)/g)
