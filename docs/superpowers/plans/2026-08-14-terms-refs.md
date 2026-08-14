@@ -31,7 +31,7 @@
 - Create: `.temp/test-terms-v2.js`（临时测试，gitignored）
 
 **Interfaces:**
-- Produces: `replaceTerms(html, termList)` 行为变更（链接为锚点）；新增 `buildTermsList(termList): string`（生成分隔线+标题+ol 列表 HTML）；`dedupeTerms(termList)` 保持导出内部使用
+- Produces: `replaceTerms(html, termList)` 行为变更（链接为锚点）；新增 `buildTermsList(termList): string`（生成分隔线+标题+ol 列表 HTML）；`dedupeTerms(termList)` 仅供模块内部使用（不导出）
 
 - [ ] **Step 1: 写失败测试** `.temp/test-terms-v2.js`
 
