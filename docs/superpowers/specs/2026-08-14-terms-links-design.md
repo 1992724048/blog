@@ -65,3 +65,42 @@ terms:
 - 加密文章 content 在 post render 阶段的形态需实测确认；实现时以 `encrypt/password` 字段直接跳过，规避风险
 - 英文术语匹配大小写不敏感（`esp32` 命中词条 `ESP32`，保留原文大小写）；词条仅大小写不同时先出现者胜
 - hover 色实际为 `var(--theme-text-hover)`（主题全局惯例 #000），与「hover 变浅」措辞有偏差，保持主题一致为有意取舍
+
+---
+
+## 迭代 v2：底部术语列表（论文引用式）
+
+日期：2026-08-14（设计已确认）
+状态：已确认
+
+### 需求变化
+
+- 正文术语链接不再直接打开外部链接，改为点击跳转到底部「术语列表」锚点
+- 术语列表追加在文章末尾，样式类似论文参考文献：编号 + 词条 + 外部链接
+- 列表用分隔线（复用主题 hr 的 13% 宽装饰条）与正文隔离
+- 列表标题不计入文章目录（toc 只扫描 h1-h6，标题用非标题元素实现）
+- 配置结构不变（`terms.list`：词条 + URL）
+
+### 实现
+
+1. **正文替换**（terms-core.js）：术语替换为 `<a class="term-link" href="#term-{index}">词</a>`，`index` 为去重后词条在列表中的序号（同一词条全部指向同一锚点）；不再生成外部链接
+2. **列表生成**（terms-core.js 新增 `buildTermsList(terms)`）：
+
+```html
+<hr class="terms-sep">
+<div class="terms-title">术语表</div>
+<ol class="terms-ref">
+  <li id="term-0">ESP32 — <a href="{url}" target="_blank" rel="noopener noreferrer">链接</a></li>
+  ...
+</ol>
+```
+
+3. **过滤器**（terms.js）：`data.content` 与 `data.more` 末尾都追加列表（core excerpt 过滤器先于 terms 运行，`more` 是独立子串；两条正文渲染路径——excerpt 开/关——都需要显示列表；同页只渲染其一，不重复）。加密文章跳过（已有）
+4. **样式**（base.styl）：`.term-link` 保持蓝色无下划线；新增 `.terms-sep`（复用 hr 装饰条）、`.terms-title`、`.terms-ref`（编号列表）；`#term-*` 锚点目标加 `scroll-margin-top` 防头部遮挡
+
+### 边界
+
+- 首页摘要不含列表（列表只追加到 content/more，excerpt 不动）
+- toc 不计入：标题为 `div.terms-title` 而非 h 元素
+- 搜索索引（search generator 基于 content）会包含列表文本，可接受
+- 锚点为站内跳转，无 JS 依赖
