@@ -24,23 +24,35 @@ const buildPattern = (terms) => {
   return new RegExp(parts.join('|'), 'gi')
 }
 
-// 将 HTML 中的术语替换为外部链接；<pre>/<code>/<a> 包裹内容原样保留
+// 将 HTML 中的术语替换为站内锚点链接（href=#term-{index}）；<pre>/<code>/<a> 包裹内容原样保留
 const replaceTerms = (html, termList) => {
   if (!Array.isArray(termList) || termList.length === 0) return html
   const terms = dedupeTerms(termList)
   const pattern = buildPattern(terms)
   if (!pattern) return html
-  const urlMap = new Map(terms.map(({ term, url }) => [term.toLowerCase(), url]))
+  const indexMap = new Map(terms.map(({ term }, index) => [term.toLowerCase(), index]))
   return html
     .split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>)/g)
     .map((segment, index) => {
       if (index % 2 === 1) return segment
       return segment.replace(pattern, (match) => {
-        const url = urlMap.get(match.toLowerCase()).replace(/"/g, '&quot;')
-        return `<a class="term-link" href="${url}" target="_blank" rel="noopener noreferrer">${match}</a>`
+        return `<a class="term-link" href="#term-${indexMap.get(match.toLowerCase())}">${match}</a>`
       })
     })
     .join('')
 }
 
-module.exports = { replaceTerms }
+// 生成底部引用式术语列表（分隔线 + 非 h 标题 + 编号列表）；空词表返回空串
+const buildTermsList = (termList) => {
+  const terms = dedupeTerms(termList)
+  if (terms.length === 0) return ''
+  const items = terms
+    .map(({ term, url }, index) => {
+      const safeUrl = url.replace(/"/g, '&quot;')
+      return `    <li id="term-${index}">${term} — <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">链接</a></li>`
+    })
+    .join('\n')
+  return `<hr class="terms-sep">\n<div class="terms-title">术语表</div>\n<ol class="terms-ref">\n${items}\n</ol>`
+}
+
+module.exports = { replaceTerms, buildTermsList }
