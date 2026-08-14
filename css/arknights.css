@@ -232,15 +232,33 @@ input {
 }
 .terms-ref {
   color: var(--theme-unimportant);
+  font-size: smaller;
   margin: 0;
   padding-left: 2em;
+  list-style: none;
+  counter-reset: terms;
 }
 .terms-ref li {
   margin: 0.2em 0;
   scroll-margin-top: 60px;
+  counter-increment: terms;
+}
+.terms-ref li::before {
+  content: '[' counter(terms) '] ';
 }
 .terms-ref li a {
   color: var(--theme-highlight);
+}
+.terms-ref li a:hover {
+  color: var(--theme-text-hover);
+}
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 #cursor-outer {
   z-index: 65538;
