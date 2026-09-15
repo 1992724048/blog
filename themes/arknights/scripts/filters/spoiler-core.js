@@ -3,8 +3,8 @@
 // 保护段：<pre>/<code>/<a> 整元素（含内容）与任意 HTML 标签（属性区）；仅对普通文本做遮盖替换
 const PROTECTED_SEGMENT = /(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<[^>]*>)/g
 
-// ?内容? → <span class="spoiler">内容</span>；内容限单行、不含 ?、<、>，trim 后 1–120 字符
-const SPOILER_PATTERN = /\?([^?<>\n]+?)\?/g
+// ??内容?? → <span class="spoiler">内容</span>；内容限单行、不含 ?、<、>，trim 后 1–120 字符
+const SPOILER_PATTERN = /\?\?([^?<>\n]+?)\?\?/g
 const MAX_SPOILER_LENGTH = 120
 
 const replaceSpoilers = (html) => {
