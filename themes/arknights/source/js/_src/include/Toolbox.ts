@@ -72,6 +72,14 @@ class Toolbox {
     return document.querySelector('#annotate-toolbar .at-copy')
   }
 
+  private get toolbarAnnotateButton(): HTMLButtonElement | null {
+    return document.querySelector('#annotate-toolbar .at-annotate') as HTMLButtonElement | null
+  }
+
+  private get toolbarClearButton(): HTMLButtonElement | null {
+    return document.querySelector('#annotate-toolbar .at-clear') as HTMLButtonElement | null
+  }
+
   private read = (key: string): string | null => {
     try {
       return window.localStorage.getItem(key)
@@ -162,6 +170,7 @@ class Toolbox {
     this.placeToolbar(range)
     toolbar.classList.add('open')
     toolbar.setAttribute('aria-hidden', 'false')
+    this.updateToolbarButtons(range)
   }
 
   private hideToolbar = (): void => {
@@ -252,6 +261,64 @@ class Toolbox {
     } else if (button.classList.contains('at-color')) {
       this.toggleColors()
     }
+  }
+
+  // 选区覆盖判定：选区被高亮全覆盖 → 无从新增（annotate 禁用）；不含高亮 → 无从清除（clear 禁用）
+  private updateToolbarButtons = (range: Range): void => {
+    const article = this.article
+    const annotate = this.toolbarAnnotateButton
+    const clear = this.toolbarClearButton
+    if (article === null || annotate === null || clear === null) {
+      return
+    }
+    const layout = this.textLayout(article)
+    const start = this.boundaryOffset(range.startContainer, range.startOffset, layout)
+    const end = this.boundaryOffset(range.endContainer, range.endOffset, layout)
+    if (start === null || end === null || start >= end) {
+      annotate.disabled = true
+      clear.disabled = true
+      return
+    }
+    const state = this.selectionGaps(article, layout, start, end)
+    annotate.disabled = state.gaps.length === 0
+    clear.disabled = !state.hasHighlight
+  }
+
+  private refreshToolbarButtons = (): void => {
+    const toolbar = this.annotateToolbar
+    if (toolbar === null || !toolbar.classList.contains('open') || !this.isAnnotating()) {
+      return
+    }
+    const range = this.selectionRange()
+    if (range === null) {
+      this.hideToolbar()
+      return
+    }
+    this.updateToolbarButtons(range)
+  }
+
+  // 选区 [start,end) 内「未被既有高亮覆盖」的补齐段落；hasHighlight = 选区含既有高亮
+  private selectionGaps = (article: HTMLElement, layout: TextLayout, start: number, end: number): { gaps: { start: number; end: number }[]; hasHighlight: boolean } => {
+    const covered: { start: number; end: number }[] = []
+    article.querySelectorAll('.hl-mark').forEach((mark) => {
+      const offsets = this.markOffsets(mark, layout)
+      if (offsets !== null && offsets.start < end && start < offsets.end) {
+        covered.push({ start: Math.max(offsets.start, start), end: Math.min(offsets.end, end) })
+      }
+    })
+    covered.sort((left, right) => left.start - right.start)
+    const gaps: { start: number; end: number }[] = []
+    let cursor = start
+    covered.forEach((item) => {
+      if (item.start > cursor) {
+        gaps.push({ start: cursor, end: item.start })
+      }
+      cursor = Math.max(cursor, item.end)
+    })
+    if (cursor < end) {
+      gaps.push({ start: cursor, end: end })
+    }
+    return { gaps: gaps, hasHighlight: covered.length !== 0 }
   }
 
   private isAnnotatable = (node: Node): boolean => {
@@ -455,6 +522,7 @@ class Toolbox {
     this.applyState(false)
   }
 
+  // 只补选区中未标注的部分（按当前色新增）；既有高亮保持原样（不重着色、不删除、不合并）
   private highlightRange = (range: Range): void => {
     const article = this.article
     if (article === null) {
@@ -466,16 +534,15 @@ class Toolbox {
     if (start === null || end === null || start >= end) {
       return
     }
-    const intersecting: Element[] = []
-    article.querySelectorAll('.hl-mark').forEach((mark) => {
-      const offsets = this.markOffsets(mark, layout)
-      if (offsets !== null && offsets.start < end && start < offsets.end) {
-        intersecting.push(mark)
+    const gaps = this.selectionGaps(article, layout, start, end).gaps
+    let wrapped = false
+    gaps.forEach((gap) => {
+      const gapRange = this.rangeFromOffsets(this.textLayout(article), gap.start, gap.end)
+      if (gapRange !== null && this.wrapRange(gapRange, this.currentAnnotateColor())) {
+        wrapped = true
       }
     })
-    intersecting.forEach((mark) => this.unwrapMark(mark))
-    const refreshed = this.rangeFromOffsets(this.textLayout(article), start, end)
-    if (refreshed !== null && this.wrapRange(refreshed, this.currentAnnotateColor())) {
+    if (wrapped) {
       this.persistHighlights()
     }
   }
@@ -509,18 +576,21 @@ class Toolbox {
     if (range !== null) {
       this.highlightRange(range)
     }
+    this.refreshToolbarButtons()
   }
 
   private clearSelectionHighlights = (): void => {
     const range = this.resolveRange()
     const article = this.article
     if (range === null || article === null) {
+      this.refreshToolbarButtons()
       return
     }
     const layout = this.textLayout(article)
     const start = this.boundaryOffset(range.startContainer, range.startOffset, layout)
     const end = this.boundaryOffset(range.endContainer, range.endOffset, layout)
     if (start === null || end === null || start >= end) {
+      this.refreshToolbarButtons()
       return
     }
     const affected: { start: number; end: number; color: string }[] = []
@@ -550,6 +620,7 @@ class Toolbox {
     if (affected.length !== 0) {
       this.persistHighlights()
     }
+    this.refreshToolbarButtons()
   }
 
   private copySelection = (): void => {
