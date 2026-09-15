@@ -22,5 +22,8 @@
     "hexo-renderer-pug": "^2.0.0",
     "hexo-renderer-stylus": "^2.1.0",
     "hexo-server": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

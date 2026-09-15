@@ -11,7 +11,7 @@ function getElement(string: string, item: Element = document.documentElement): H
 }
 
 function isParent(parent: Element, child: any): boolean {
-  for (; child !== null; child = child.offsetParent) {
+  for (; child !== null && child !== undefined; child = child.offsetParent) {
     if (child === parent) {
       return true
     }

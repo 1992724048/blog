@@ -3,7 +3,8 @@
   let datas
   const path = config.root + 'search.json'
   const input = getElement('#search-input')
-  const nav = getElement('nav')
+  const topbar = getElement('header')
+  const searchBtn = document.querySelector('.searchBtn')
   const activeHolder = config.search.activeHolder
   const blurHolder = config.search.blurHolder
   const noResult = config.search.noResult
@@ -92,9 +93,6 @@
     getElement('#search-result').innerHTML = '<div id="loading"><div><p>Loading...</p></div></div>'
   }
   function onPopupClose() {
-    if (document.querySelector('.up') && document.querySelector('.closed')) {
-      getElement('.navBtn').classList.remove('expanded')
-    }
     getElement('#search-result').querySelectorAll('a').
       forEach((item) => item.setAttribute('tabindex', -1))
     document.body.classList.remove('blur')
@@ -102,9 +100,6 @@
   }
   function proceedSearch() {
     document.body.classList.add('blur')
-    if (document.querySelector('.up') && document.querySelector('.closed')) {
-      getElement('.navBtn').classList.add('expanded')
-    }
     getElement('#search-result').removeAttribute('tabindex')
     popup.classList.add('open')
     if (fetched === true) {
@@ -246,16 +241,15 @@
       inputEventFunction()
     }
   })
-  let lastEvent = 0
+  function openSearch() {
+    // 移动端搜索行默认 visibility:hidden，须先展开再聚焦；打开搜索前关菜单（两面板互斥）
+    header.close()
+    topbar.classList.add('search-open')
+    input.focus()
+  }
   function StartSearch() {
-    nav.classList.add('search')
-    nav.classList.add('search-moving')
-    clearTimeout(lastEvent)
-    lastEvent = setTimeout(() => nav.classList.remove('search-moving'), 600)
-    header.closeAll()
-    if (document.querySelector('.up')) {
-      getElement('main').style.pointerEvents = 'none'
-    }
+    topbar.classList.add('search-open')
+    header.close()
     input.placeholder = activeHolder
     if (!fetched) {
       if (!fetching) {
@@ -265,23 +259,17 @@
     }
   }
   function EscapeSearch() {
-    if (!nav.classList.contains('search')) {
+    if (!topbar.classList.contains('search-open')) {
       return
     }
-    nav.classList.remove('search')
-    nav.classList.add('search-moving')
-    clearTimeout(lastEvent)
-    lastEvent = setTimeout(() => nav.classList.remove('search-moving'), 600)
+    topbar.classList.remove('search-open')
     onPopupClose()
     input.value = ''
     input.placeholder = blurHolder
-    document.removeEventListener('mouseup', EscapeSearch)
     waiting = false
-    getElement('main').style.pointerEvents = ''
     input.blur()
   }
   input.addEventListener('keyup', () => {
-    nav.classList.add('search')
     inputEventFunction()
   })
   input.addEventListener('focus', () => {
@@ -300,17 +288,20 @@
       EscapeSearch()
     }
   })
+  if (searchBtn !== null) {
+    searchBtn.addEventListener('click', () => {
+      openSearch()
+    })
+  }
+  document.addEventListener('pjax:send', () => {
+    EscapeSearch()
+  })
   document.addEventListener('keyup', event => {
     if (event.key === 'Escape') {
       EscapeSearch()
     } else if (event.key === 'f' && 
       !['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
-      if (!document.querySelector('.up')) {
-        getElement('.navBtn').classList.remove('hide')
-        header.open()
-      }
-      StartSearch()
-      input.focus()
+      openSearch()
     }
   })
   document.addEventListener('click', event => {

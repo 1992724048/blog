@@ -21,7 +21,7 @@ function getElement(string, item = document.documentElement) {
     return tmp;
 }
 function isParent(parent, child) {
-    for (; child !== null; child = child.offsetParent) {
+    for (; child !== null && child !== undefined; child = child.offsetParent) {
         if (child === parent) {
             return true;
         }
@@ -879,8 +879,7 @@ class Cursor {
 new Cursor();
 class Header {
     header = getElement('header');
-    button = getElement('.navBtnIcon');
-    closeSearch = false;
+    button = getElement('.navBtn');
     readyRev = true;
     relabel = () => {
         let navs = this.header.querySelectorAll('.navItem'), mayLen = 0, may = navs.item(0);
@@ -918,43 +917,59 @@ class Header {
             } while (!(may = getParent(may)).classList.contains('navContent'));
         }
     };
+    markMoving = () => {
+        this.header.classList.add('nav-moving');
+        setTimeout(() => this.header.classList.remove('nav-moving'), 300);
+    };
+    closeByEscape = (event) => {
+        if (event.key === 'Escape') {
+            this.close();
+        }
+    };
     inHeader = (mouse) => {
+        const target = mouse.target;
         const popup = document.querySelector('.search-popup');
-        if (!isParent(this.header, mouse.target) && !isParent(this.button, mouse.target) && !(popup !== null && isParent(popup, mouse.target))) {
+        if (!isParent(this.header, target) && !(popup !== null && isParent(popup, target))) {
+            this.close();
+            return;
+        }
+        if (target.closest && target.closest('a') !== null) {
             this.close();
         }
     };
     open = (item = this.header) => {
-        item.classList.add('expanded');
-        item.classList.remove('closed');
-        scrolls.slideDown();
-        if (item === this.header) {
-            item.classList.add('moving');
-            setTimeout(() => item.classList.remove('moving'), 300);
+        if (item !== this.header) {
+            item.classList.add('expanded');
+            return;
         }
+        this.header.classList.add('nav-open');
+        this.button.setAttribute('aria-expanded', 'true');
+        this.markMoving();
         document.addEventListener('click', this.inHeader);
     };
     close = (item = this.header) => {
-        document.removeEventListener('click', this.inHeader);
-        item.classList.add('closed');
-        item.classList.remove('expanded');
-        if (item === this.header) {
-            item.classList.add('moving');
-            setTimeout(() => item.classList.remove('moving'), 300);
-            this.closeAll();
-            getElement('nav', item).classList.remove('moved');
-        }
-    };
-    reverse = (item = this.header) => {
-        if (this.closeSearch) {
-            this.closeSearch = false;
+        if (item !== this.header) {
+            item.classList.remove('expanded');
             return;
         }
+        this.closeAll();
+        if (!this.header.classList.contains('nav-open')) {
+            return;
+        }
+        document.removeEventListener('click', this.inHeader);
+        this.header.classList.remove('nav-open');
+        this.button.setAttribute('aria-expanded', 'false');
+        this.markMoving();
+    };
+    reverse = (item = this.header) => {
         if (!this.readyRev) {
             return;
         }
         this.readyRev = false;
-        if (item.classList.contains('expanded')) {
+        const opened = item === this.header
+            ? this.header.classList.contains('nav-open')
+            : item.classList.contains('expanded');
+        if (opened) {
             this.close(item);
         }
         else {
@@ -969,11 +984,7 @@ class Header {
         this.relabel();
         document.addEventListener('pjax:success', this.relabel);
         document.addEventListener('pjax:send', () => this.close());
-        this.button.addEventListener('mousedown', () => {
-            if (document.querySelector('.search')) {
-                this.closeSearch = true;
-            }
-        });
+        document.addEventListener('keyup', this.closeByEscape);
         this.button.onclick = () => this.reverse(this.header);
         document.querySelectorAll('.navItemList').forEach((item) => {
             item = getParent(item);
@@ -1171,13 +1182,7 @@ let monaco_editor = new MonacoEditor();
 class Scroll {
     scrolling = 0;
     getingtop = false;
-    height = 0;
     visible = false;
-    touchX = 0;
-    touchY = 0x7fffffff;
-    notMoveY = false;
-    reallyUp = false;
-    intop = false;
     totop;
     scrolltop = () => {
         getElement('main').scroll({ top: 0, left: 0, behavior: 'smooth' });
@@ -1205,113 +1210,31 @@ class Scroll {
             }, 300);
         }
     };
-    slideDown = () => {
-        if (!this.intop) {
-            return;
+    onScroll = () => {
+        try {
+            const nowheight = getElement('article').getBoundingClientRect().top;
+            if (nowheight > 0) {
+                return;
+            }
+            ++this.scrolling;
+            setTimeout(() => {
+                if (!--this.scrolling) {
+                    this.getingtop = false;
+                }
+            }, 100);
+            if (!this.getingtop) {
+                this.totopChange(nowheight);
+            }
         }
-        const main = getElement('main').classList;
-        if (!document.querySelector('.expanded')) {
-            getElement('.navBtn').classList.add('hide-btn');
-        }
-        main.remove('up');
-        main.add('down');
-        main.add('down');
-        main.add('moving');
-        setTimeout(() => {
-            main.remove('down');
-            main.remove('moving');
-        }, 300);
-        this.intop = false;
-    };
-    slideUp = () => {
-        if (this.intop || document.querySelector('.moving')) {
-            return;
-        }
-        if (!document.querySelector('#search-header')) {
-            getElement('.navBtn').classList.remove('hide-btn');
-            return;
-        }
-        const main = getElement('main').classList;
-        getElement('.navBtn').classList.remove('hide-btn');
-        main.remove('down');
-        main.add('up');
-        main.add('moving');
-        this.intop = true;
-        setTimeout(() => getElement('main').classList.remove('moving'), 300);
+        catch (e) { }
     };
     setHTML = () => {
         try {
-            let navBtn = getElement('.navBtn');
-            let onScroll = () => {
-                try {
-                    let nowheight = getElement('article').getBoundingClientRect().top;
-                    if (nowheight > 0) {
-                        return;
-                    }
-                    if (!document.querySelector('.expanded')) {
-                        if (this.height - nowheight > 100) {
-                            navBtn.classList.add('hide-btn');
-                            this.height = nowheight;
-                        }
-                        else if (nowheight > this.height) {
-                            if (nowheight - this.height > 20) {
-                                navBtn.classList.remove('hide-btn');
-                            }
-                            this.height = nowheight;
-                        }
-                    }
-                    ++this.scrolling;
-                    setTimeout(() => {
-                        if (!--this.scrolling) {
-                            this.getingtop = false;
-                        }
-                    }, 100);
-                    if (!this.getingtop) {
-                        this.totopChange(nowheight);
-                    }
-                }
-                catch (e) { }
-            };
-            getElement('main').addEventListener('scroll', onScroll);
-            this.height = 0;
             this.visible = false;
             this.totop = getElement('#to-top');
             this.setListener();
         }
         catch (e) { }
-    };
-    checkTouchMove = (event) => {
-        if (Math.abs(event.changedTouches[0].screenX - this.touchX) > 50 &&
-            !this.reallyUp) {
-            this.notMoveY = true;
-        }
-        if (document.querySelector('.expanded') ||
-            window.innerWidth > 1024 ||
-            this.notMoveY ||
-            event.changedTouches[0].screenY === this.touchY ||
-            document.querySelector('.moving')) {
-            return;
-        }
-        if (this.intop || getElement('article').getBoundingClientRect().top >= 0) {
-            this.reallyUp = true;
-            if (event.changedTouches[0].screenY > this.touchY) {
-                this.slideUp();
-            }
-            else {
-                this.slideDown();
-            }
-            this.touchY = event.changedTouches[0].screenY;
-        }
-    };
-    startTouch = (event) => {
-        this.touchX = event.changedTouches[0].screenX;
-        this.touchY = event.changedTouches[0].screenY;
-        this.notMoveY = false;
-    };
-    checkPos = () => {
-        if (getElement('article').getBoundingClientRect().top < 0 && this.intop) {
-            this.slideDown();
-        }
     };
     /**
      * used for `supScroll` and `footNoteScroll` functions
@@ -1352,22 +1275,7 @@ class Scroll {
     };
     constructor() {
         document.addEventListener('pjax:success', this.setHTML);
-        document.addEventListener('touchstart', this.startTouch);
-        document.addEventListener('touchmove', this.checkTouchMove);
-        document.addEventListener('touchend', this.checkPos);
-        document.addEventListener('wheel', (event) => {
-            if (document.querySelector('.expanded') || window.innerWidth > 1024) {
-                return;
-            }
-            if (getElement('article').getBoundingClientRect().top >= 0) {
-                if (event.deltaY < 0) {
-                    this.slideUp();
-                }
-                else {
-                    this.slideDown();
-                }
-            }
-        });
+        getElement('main').addEventListener('scroll', this.onScroll);
         this.setHTML();
         this.totop = document.querySelector('#to-top');
     }
@@ -1438,9 +1346,6 @@ class pjaxSupport {
     };
     constructor() {
         document.addEventListener('pjax:send', () => {
-            if (getElement('main').classList.contains('up')) {
-                scrolls.slideDown();
-            }
             this.loading.classList.add('reset');
             this.loading.classList.remove('fail');
             this.start(0);

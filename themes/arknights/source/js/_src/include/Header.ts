@@ -4,8 +4,7 @@
 
 class Header {
   private readonly header: HTMLElement = getElement('header')
-  private readonly button: HTMLElement = getElement('.navBtnIcon')
-  private closeSearch: boolean = false
+  private readonly button: HTMLElement = getElement('.navBtn')
   private readyRev: boolean = true
 
   private relabel = () => {
@@ -46,47 +45,64 @@ class Header {
     }
   }
 
+  private markMoving = () => {
+    this.header.classList.add('nav-moving')
+    setTimeout(() => this.header.classList.remove('nav-moving'), 300)
+  }
+
+  private closeByEscape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      this.close()
+    }
+  }
+
   public inHeader = (mouse: MouseEvent) => {
+    const target = mouse.target as Element
     const popup = document.querySelector('.search-popup')
-    if (!isParent(this.header, mouse.target) && !isParent(this.button, mouse.target) &&
-        !(popup !== null && isParent(popup, mouse.target))) {
+    if (!isParent(this.header, target) && !(popup !== null && isParent(popup, target))) {
+      this.close()
+      return
+    }
+    if (target.closest && target.closest('a') !== null) {
       this.close()
     }
   }
 
   public open = (item: Element = this.header) => {
-    item.classList.add('expanded')
-    item.classList.remove('closed')
-    scrolls.slideDown()
-    if (item === this.header) {
-      item.classList.add('moving')
-      setTimeout(() => item.classList.remove('moving'), 300)
+    if (item !== this.header) {
+      item.classList.add('expanded')
+      return
     }
+    this.header.classList.add('nav-open')
+    this.button.setAttribute('aria-expanded', 'true')
+    this.markMoving()
     document.addEventListener('click', this.inHeader)
   }
 
   public close = (item: Element = this.header) => {
-    document.removeEventListener('click', this.inHeader)
-    item.classList.add('closed')
-    item.classList.remove('expanded')
-    if (item === this.header) {
-      item.classList.add('moving')
-      setTimeout(() => item.classList.remove('moving'), 300)
-      this.closeAll()
-      getElement('nav', item).classList.remove('moved');
+    if (item !== this.header) {
+      item.classList.remove('expanded')
+      return
     }
+    this.closeAll()
+    if (!this.header.classList.contains('nav-open')) {
+      return
+    }
+    document.removeEventListener('click', this.inHeader)
+    this.header.classList.remove('nav-open')
+    this.button.setAttribute('aria-expanded', 'false')
+    this.markMoving()
   }
 
   public reverse = (item: Element = this.header) => {
-    if (this.closeSearch) {
-      this.closeSearch = false
-      return
-    }
     if (!this.readyRev) {
       return
     }
     this.readyRev = false
-    if (item.classList.contains('expanded')) {
+    const opened = item === this.header
+      ? this.header.classList.contains('nav-open')
+      : item.classList.contains('expanded')
+    if (opened) {
       this.close(item)
     } else {
       this.open(item)
@@ -103,11 +119,7 @@ class Header {
     this.relabel()
     document.addEventListener('pjax:success', this.relabel)
     document.addEventListener('pjax:send', () => this.close())
-    this.button.addEventListener('mousedown', () => {
-      if (document.querySelector('.search')) {
-        this.closeSearch = true
-      }
-    })
+    document.addEventListener('keyup', this.closeByEscape)
     this.button.onclick = () => this.reverse(this.header)
     document.querySelectorAll('.navItemList').forEach((item) => {
       item = getParent(item)

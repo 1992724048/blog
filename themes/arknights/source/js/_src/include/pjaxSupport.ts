@@ -42,9 +42,6 @@ class pjaxSupport {
 
   constructor() {
     document.addEventListener('pjax:send', () => {
-      if (getElement('main').classList.contains('up')) {
-        scrolls.slideDown()
-      }
       this.loading.classList.add('reset')
       this.loading.classList.remove('fail')
       this.start(0)
