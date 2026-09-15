@@ -66,22 +66,42 @@ ol.navContent
   overflow-wrap break-word
   transition color .3s
 
-// hover / 当前页：蓝块 + 白字（深浅色主题统一；覆盖 change.styl 的标题文字阴影）
+// hover（非当前页）：蓝块 + 白字（深浅色主题统一；覆盖 change.styl 的标题文字阴影）
 // 按下（:active）时 :hover 仍命中本规则（特异性高于全局 a:active 黄底），白字始终压蓝块
 .navBlock:hover,
-.navSecond:hover,
-.navItem.active > .navBlock,
-.navItem.active > .navSecond
+.navSecond:hover
   background-color var(--theme-highlight)
   & > .navItemTitle
     color #fff
     text-shadow none
+
+// 当前页（.active 由 Header.ts 挂载）：沿用归档 / 分类列表项的选中语言——左缘 5px 主题蓝条（--theme-highlight）+ 中度对比底色（--theme-bg-soft-hover）；
+// 特异性 (0,3,0) 高于上方 hover 的 (0,2,0)：选中项悬停时保持选中样式，不闪蓝块 / 白字
+// 注：Stylus 的 & 嵌套在 :is() 选择器下会错插进首个参数，标题规则须平铺书写
+.navItem.active > :is(.navBlock, .navSecond)
+  background-color var(--theme-bg-soft-hover)
+  border-left 5px solid var(--theme-highlight)
+
+.navItem.active > :is(.navBlock, .navSecond) > .navItemTitle
+  color var(--theme-text-light)
+  text-shadow none
 
 // 图标态菜单项（menu_icons 配置生效）：图标随标题继承色 / 悬停反色，尺寸随菜单字号
 // 图标渲染在 .navItemTitle 内（避免触发子菜单展开箭头选择器的「非仅子」判定）
 .navBlockIcon > .navItemTitle
   display flex
   align-items center
+
+// 图标：当前页时收拢淡出，与名称展开同节奏（.3s），避免状态跳变；max-width 上限 1.5em（FontAwesome 实宽 ≤1.25em，留余量）
+// .navItemTitle 为 flex 容器，图标作为弹性项可直接过渡 max-width；overflow hidden 兼作裁切与解除弹性项自动最小尺寸
+.navBlockIcon > .navItemTitle > i
+  max-width 1.5em
+  overflow hidden
+  transition max-width .3s, opacity .3s
+
+.navItem.active > .navBlockIcon > .navItemTitle > i
+  max-width 0
+  opacity 0
 
 // 名称（active 项显示）：默认收起（0 宽 + 透明），随 active 平滑展开；类名避开 Header.ts 识别集合
 .navItemLabel
@@ -97,6 +117,20 @@ ol.navContent
   margin-left 6px
   opacity 1
 
+// 左蓝条占位补偿：选中项左内边距按断点各语境 −5px（对应 flex_layout / navSecond 的原左距），
+// 条目宽度与内容起点同未选中态一致，路由切换不产生 ±5px 横向位移
+@media ( max-width 1023px )
+  .navContent > .navItem.active > :is(.navBlock, .navSecond)
+    padding-left 15px
+
+@media ( min-width 1024px )
+  .navContent > .navItem.active > .navBlock
+    padding-left 15px
+  .navContent > .navItem.active > .navBlock.navBlockIcon
+    padding-left 7px
+  .navItemList > .navItem.active > :is(.navBlock, .navSecond)
+    padding-left 11px
+
 // 移动端下拉行标题默认两端对齐（navSecond.styl）：图标态改为左对齐（图标 + 名称成组）
 .navContent .navBlockIcon > .navItemTitle
   justify-content flex-start
@@ -107,7 +141,7 @@ ol.navContent
   outline-offset -2px
 
 @media (prefers-reduced-motion: reduce)
-  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar, .navItemLabel
+  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar, .navItemLabel, .navBlockIcon > .navItemTitle > i
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl
