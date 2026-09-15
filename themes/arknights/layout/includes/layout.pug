@@ -16,7 +16,7 @@
     root: config.root,
     code_fold: config.theme_config.post.code_fold,
     search: {
-      preload: searchConfig.preload,
+      preload: searchConfig ? searchConfig.preload : false,
       activeHolder: __('search.activeHolder'),
       blurHolder: __('search.blurHolder'),
       noResult: __('search.noResult')

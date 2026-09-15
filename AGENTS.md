@@ -28,7 +28,7 @@
 | 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify 等 |
 | JS 源码（TS） | `themes/arknights/source/js/_src/` | 主入口 `tsconfig.json` → `arknights.js`；`search/search.ts`（独立 tsconfig）→ `search.js` |
 | 中文字体 | `themes/arknights/layout/includes/meta-data.pug` | HarmonyOS Sans SC，jsDelivr 分包 CDN（`@1.1.0` 版本锁死） |
-| 缓存版本号（三处） | `meta-data.pug` `cssVersion` / `js-data.pug` `jsVersion` / `_config.arknights.yml` `stylesheets`（备用） | 对应产物变更后同步递增，避免 Cloudflare / 浏览器缓存旧版 |
+| 缓存版本号 | 生效机制：`meta-data.pug` `cssVersion` / `js-data.pug` `jsVersion`；备用机制：`_config.arknights.yml` `stylesheets` 版本参数（当前未使用） | 对应产物变更后同步递增，避免 Cloudflare / 浏览器缓存旧版 |
 
 ## Source Tree
 
