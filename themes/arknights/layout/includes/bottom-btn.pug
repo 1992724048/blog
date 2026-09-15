@@ -49,3 +49,30 @@
       button.toolbox-item.toolbox-favorite(type="button" onclick="toolbox.favorite()" title=__('btn.favorite') aria-label=__('btn.favorite') aria-pressed="false" data-label-default=__('btn.favorite') data-label-saved=__('btn.favorited'))
         svg.i-icon.i-star(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
           polygon(points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2")
+  //- 选中文字工具栏（Word 式浮动条）：仅标注模式（body.annotating）下选中文字时由 JS 定位显示（类 .open）
+  //- 定位口径与样式契约见 bottom_btn.styl「选中文字工具栏」段；默认隐藏（visibility hidden，不可 Tab 聚焦）
+  #annotate-toolbar(role="toolbar" aria-hidden="true")
+    button.at-btn.at-annotate(type="button" title=__('btn.annotate') aria-label=__('btn.annotate'))
+      svg.at-icon(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        path(d="m9 11-6 6v3h9l3-3")
+        path(d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4")
+    button.at-btn.at-clear(type="button" title=__('btn.clear') aria-label=__('btn.clear'))
+      svg.at-icon(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        path(d="M3 6h18")
+        path(d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2")
+        path(d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6")
+    button.at-btn.at-copy(type="button" title=__('btn.copy') aria-label=__('btn.copy'))
+      svg.at-icon.i-copy(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        rect(x="9" y="9" width="12" height="12" rx="2")
+        path(d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1")
+      svg.at-icon.i-check(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        path(d="M20 6L9 17l-5-5")
+    button.at-btn.at-search(type="button" title=__('btn.search') aria-label=__('btn.search'))
+      svg.at-icon(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        circle(cx="11" cy="11" r="8")
+        path(d="M21 21l-4.35-4.35")
+    button.at-btn.at-color(type="button" data-color="yellow" title=__('btn.color') aria-label=__('btn.color'))
+      span.at-color-fill
+    .at-colors
+      each colorName in ['yellow', 'green', 'blue', 'pink', 'orange']
+        button.at-color-opt(type="button" data-color=colorName class= colorName === 'yellow' ? 'active' : null title=colorName aria-label=colorName)

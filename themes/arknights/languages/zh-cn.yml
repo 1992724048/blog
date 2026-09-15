@@ -44,6 +44,10 @@ btn:
   share: 分享本文
   favorite: 收藏本文
   favorited: 已收藏，点击取消
+  clear: 清除
+  copy: 复制
+  search: 搜索
+  color: 标注颜色
 
 menu:
   archive:

@@ -44,6 +44,10 @@ btn:
   share: Share This Post
   favorite: Favorite This Post
   favorited: Favorited, Click to Unfavorite
+  clear: Clear
+  copy: Copy
+  search: Search
+  color: Highlight color
 
 menu:
   archive:

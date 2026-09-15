@@ -177,6 +177,148 @@
     box-shadow 0 4px 10px rgba(0, 0, 0, .35)
     transform translate(calc(var(--fan-x) + var(--pull-x)), calc(var(--fan-y) + var(--pull-y))) scale(1.08)
 
+// ===== 标注模式与选中文字工具栏（Word 式浮动条）
+// 标注模式（常驻开关，JS 挂类）：body.annotating 开启后文本区显示文本光标（提示可划选）；工具箱【标注】项同步点亮 .active
+body.annotating
+  cursor text
+.bottom-btn .toolbox-annotate.active
+  background-color var(--theme-subcolor)
+  color var(--theme-text-hover)
+
+// 工具栏容器：仅标注模式下选中文字时显示（.open 由 JS 切换）；默认隐藏且不可 Tab 聚焦（visibility hidden）
+// 定位口径（由 JS 计算，容器不参与定位计算、无 transform / margin 干扰）：
+//   以 position: fixed 的视口坐标设置 left / top；
+//   水平：left = 选区中心 x − 工具栏宽度 / 2（居中于选区，建议夹取到视口安全边距内）；
+//   垂直：默认置顶于选区上方（top = 选区顶 − 工具栏高度 − 6px），上方空间不足时翻转到选区下方（top = 选区底 + 6px）
+// z-index 65536：与 .bottom-btn 同层，低于 lightgallery（65537）与自定义光标（65538）——全屏查看器与光标始终覆盖工具栏
+#annotate-toolbar
+  position fixed
+  z-index 65536
+  display flex
+  align-items stretch
+  gap 1px
+  padding 1px
+  box-sizing border-box
+  background-color var(--theme-text-rev)
+  box-shadow 0 2px 8px rgba(0, 0, 0, .25)
+  visibility hidden
+  opacity 0
+  transition opacity .15s, visibility 0s .15s
+  &.open
+    visibility visible
+    opacity 1
+    transition opacity .15s
+
+// 按钮（缩小版主题按钮语言：--theme-bg-light 底 + --theme-text-rev 图标、直角；hover / active 主题黄底）
+#annotate-toolbar .at-btn,
+#annotate-toolbar .at-color-opt
+  position relative
+  display flex
+  align-items center
+  justify-content center
+  box-sizing border-box
+  width 22px
+  height 22px
+  padding 0
+  margin 0
+  border 0
+  border-radius 0
+  font-family inherit
+  font-size 12px
+  line-height 1
+  user-select none
+  -webkit-tap-highlight-color transparent
+  -webkit-appearance none
+  appearance none
+  transition background-color .2s, color .2s
+
+#annotate-toolbar .at-btn
+  background-color var(--theme-bg-light)
+  color var(--theme-text-rev)
+  @media ( min-width 769px )
+    &:hover
+      background-color var(--theme-subcolor)
+      color var(--theme-text-hover)
+  &:active
+    background-color var(--theme-subcolor)
+    color var(--theme-text-hover)
+
+// 图标 12px（22px 按钮内的协调尺寸，"比文字大一点"）；颜色随按钮 color，描边走 svg currentColor
+#annotate-toolbar .at-icon
+  display block
+  width 12px
+  height 12px
+
+// 颜色按钮：1px 边框 + 内部填充当前色（默认黄；JS 更新按钮 data-color 即切换填充，映射见下）
+#annotate-toolbar .at-color-fill
+  box-sizing border-box
+  width 14px
+  height 14px
+  border 1px solid var(--theme-text-rev)
+  background-color var(--hl-yellow)
+#annotate-toolbar .at-color[data-color=yellow] .at-color-fill
+  background-color var(--hl-yellow)
+#annotate-toolbar .at-color[data-color=green] .at-color-fill
+  background-color var(--hl-green)
+#annotate-toolbar .at-color[data-color=blue] .at-color-fill
+  background-color var(--hl-blue)
+#annotate-toolbar .at-color[data-color=pink] .at-color-fill
+  background-color var(--hl-pink)
+#annotate-toolbar .at-color[data-color=orange] .at-color-fill
+  background-color var(--hl-orange)
+
+// 颜色面板：默认隐藏，.open 由 JS 切换；右对齐于颜色按钮（工具栏右缘）下方 1px
+#annotate-toolbar .at-colors
+  position absolute
+  top calc(100% + 1px)
+  right 0
+  display flex
+  gap 1px
+  padding 1px
+  box-sizing border-box
+  background-color var(--theme-text-rev)
+  box-shadow 0 2px 8px rgba(0, 0, 0, .25)
+  visibility hidden
+  opacity 0
+  transition opacity .15s, visibility 0s .15s
+  &.open
+    visibility visible
+    opacity 1
+    transition opacity .15s
+
+// 色板选项：底色即对应标注色（--hl-* 与 .hl-mark[data-color] 同源）；当前色项以黑勾标记（#000 在 5 色上对比 ≥10:1）
+#annotate-toolbar .at-color-opt[data-color=yellow]
+  background-color var(--hl-yellow)
+#annotate-toolbar .at-color-opt[data-color=green]
+  background-color var(--hl-green)
+#annotate-toolbar .at-color-opt[data-color=blue]
+  background-color var(--hl-blue)
+#annotate-toolbar .at-color-opt[data-color=pink]
+  background-color var(--hl-pink)
+#annotate-toolbar .at-color-opt[data-color=orange]
+  background-color var(--hl-orange)
+#annotate-toolbar .at-color-opt.active::after
+  content ''
+  position absolute
+  left 50%
+  top 50%
+  width 6px
+  height 10px
+  border-right 2px solid #000
+  border-bottom 2px solid #000
+  transform translate(-50%, -55%) rotate(45deg)
+
+// 复制反馈：.copied（约 1.2s 后由 JS 移除）→ 黄底 + 勾图标（参照工具箱 .copied 模式）
+#annotate-toolbar .at-copy .i-check
+  display none
+#annotate-toolbar .at-copy.copied
+  background-color var(--theme-subcolor)
+  color var(--theme-text-hover)
+  .i-check
+    display block
+  .i-copy
+    display none
+
 // 工具视觉态：分享成功 .copied（对勾，约 1.2s 后由 JS 移除）；收藏已存 .saved（星标实心 + 主题黄底板）
 .bottom-btn .toolbox-share .i-check
   display none
@@ -193,14 +335,31 @@
 .bottom-btn .toolbox-favorite.saved .i-star
   fill currentColor
 
-// 正文标注高亮（JS 侧为选中文字包裹 .hl-mark）：与 ::selection 同源配色（主题黄 #fe2 底 + 黑字），深浅主题通用
+// 正文标注高亮（JS 侧为选中文字包裹 .hl-mark）：与 ::selection 同源配色（默认主题黄 #fe2 底 + 黑字），深浅主题通用
+// 5 色色板 --hl-* 同时供 .hl-mark[data-color] 与工具栏色板 / 当前色填充使用；黑字 #000 在全部色上对比 ≥10:1
+:root
+  --hl-yellow #fe2
+  --hl-green #7ee787
+  --hl-blue #79c0ff
+  --hl-pink #ffb3d1
+  --hl-orange #ffb757
 .hl-mark
   background-color var(--theme-subcolor)
   color #000
   border-radius 2px
   padding 0 1px
+.hl-mark[data-color=yellow]
+  background-color var(--hl-yellow)
+.hl-mark[data-color=green]
+  background-color var(--hl-green)
+.hl-mark[data-color=blue]
+  background-color var(--hl-blue)
+.hl-mark[data-color=pink]
+  background-color var(--hl-pink)
+.hl-mark[data-color=orange]
+  background-color var(--hl-orange)
 
-// 减少动效偏好：关闭本组全部过渡 / 动画（扇形展开、悬停抽出、图标旋转、目录条变形）
+// 减少动效偏好：关闭本组全部过渡 / 动画（扇形展开、悬停抽出、图标旋转、目录条变形、工具栏淡入）
 @media (prefers-reduced-motion: reduce)
-  .bottom-btn a, .bottom-btn button, .bottom-btn .toolbox-item, .bottom-btn .i-icon, .bottom-btn .tocBtnIconBar
+  .bottom-btn a, .bottom-btn button, .bottom-btn .toolbox-item, .bottom-btn .i-icon, .bottom-btn .tocBtnIconBar, #annotate-toolbar, #annotate-toolbar .at-colors
     transition none
