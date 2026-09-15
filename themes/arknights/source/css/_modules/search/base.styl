@@ -51,7 +51,9 @@
     display block
     width 100%
   #search-header input
-    height 40px
+    // 行总高 37px（36 + 1px 上边框）→ 内容区 36px：输入框缩为 34px，上下各留 1px
+    display block
+    height calc(var(--search-row-h) - 3px)
   // 白底输入框上深色主题的白色焦点环不可见，改用固定深色环（几何沿用 header.styl）
   #search-input:focus-visible
     outline-color #000
@@ -62,17 +64,25 @@
     display flex
     align-items center
     width 220px
-    height 36px
+    // 全高贴合顶栏：36px（同 --topbar-h）；flex-end + 负外边距使底边恰好落在顶栏 1px 底线上（整数对齐，无 0.5px 错位 / 上下溢出）
+    height var(--topbar-h)
+    align-self flex-end
+    margin-bottom -1px
     box-sizing border-box
     // 白底搜索框：默认 / 悬停 / 焦点环均按白底取色，深浅色主题一致
     border 1px solid rgba(0, 0, 0, .1)
+    // 底边透明 + 背景裁到 padding-box：顶栏底线从搜索框下缘连续穿过（底线即框底边，无双线 / 无断线）
+    border-bottom-color transparent
     background-color #fff
+    background-clip padding-box
     transition border-color .3s
     &:hover
       border-color #767676
+      border-bottom-color transparent
     // 焦点环画在整框上（含放大镜图标），键盘 / 点击聚焦均清晰可见
     &:focus-within
       border-color var(--theme-highlight)
+      border-bottom-color transparent
       outline 2px solid #000
       outline-offset -2px
   // 无社交图标（.topbar-social 缺失）时搜索框自身贴右；有社交图标时由 .topbar-social 接管自动边距
@@ -84,14 +94,17 @@
   #search-header input
     height 100%
     padding 0 10px 0 0
-  // 框内放大镜图标：纯装饰，不拦截输入交互
+  // 框内放大镜图标区：蓝底 + 白图标（--theme-highlight #2bf 两主题同色；白图标对此蓝底对比约 2.2:1，属已知取舍）
+  // 34×34 与框内容区等高（36 总高 − 上下 1px 边框）；padding 沿用原 margin 数值，图标位置与视觉尺寸不变
   #search-header .searchFieldIcon
     display block
     flex none
-    width 16px
-    height 16px
-    margin 0 8px 0 10px
-    color #5c5c5c
+    box-sizing border-box
+    width 34px
+    height 34px
+    padding 9px 8px 9px 10px
+    color #fff
+    background-color var(--theme-highlight)
     pointer-events none
   // 桌面端焦点环由整框承担（见上），输入框自身不再重复描环；≤1023px 仍保留输入框内缩环
   #search-input:focus-visible

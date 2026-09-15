@@ -1,6 +1,6 @@
 :root
-  // 顶栏高度：全断点统一 46px；--search-row-h 为移动端栏下整行搜索框高度（1px 上边框 + 栏高内容）
-  --topbar-h 46px
+  // 顶栏高度：全断点统一 36px（border-box，含 1px 底边，内容区 35px）；--search-row-h 为移动端栏下整行搜索框高度（1px 上边框 + 栏高内容）
+  --topbar-h 36px
   --search-row-h calc(var(--topbar-h) + 1px)
 
 header
@@ -15,8 +15,8 @@ header
   padding 0 12px
   font-family Bender
   background-color var(--theme-bg-trans0)
-  // 顶栏底边：深色主题纯白 / 浅色主题深色（--theme-border-light 两主题分别为 #fff / #000）
-  border-bottom 1px solid var(--theme-border-light)
+  // 顶栏底边：与首页文章列表条目边框同色（--theme-unimportant 两主题 #767676 / #898989），随主题自动适配
+  border-bottom 1px solid var(--theme-unimportant)
 
 nav
   flex 1
