@@ -3,17 +3,18 @@
   box-sizing border-box
   width 100%
   padding 0
-  // 搜索框固定白底黑字（深浅色主题一致；桌面为 #search-header 白框内输入，≤1023 为栏下搜索行内输入）
-  color #000
+  // 搜索框配色随主题（--theme-search-*，见 _core/color）：浅色主题黑底白字 / 深色主题白底黑字
+  // 桌面为 #search-header 盒内输入，≤1023 为栏下搜索行内输入；插入符默认 auto 随文字色，选区不覆盖走浏览器默认高亮
+  color var(--theme-search-text)
   // 覆盖 _core/base.styl 全局 input 的等宽字体，与 _custom/custom.styl 正文栈一致
   font-family 'HarmonyOS Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif
   font-size 15px
-  background-color #fff
+  background-color var(--theme-search-bg)
   border unset
 
-// 白底上的可读灰（对 #fff 对比度约 6.7:1），深浅色主题统一
+// 占位符：各主题底色上的可读灰（浅色 #b0b0b0 对 #000 约 9.7:1；深色 #5c5c5c 对 #fff 约 6.7:1）
 #search-input::placeholder
-  color #5c5c5c
+  color var(--theme-search-placeholder)
 
 // 搜索框内放大镜图标（内联 SVG，见 header.pug）：桌面常驻搜索框专用，移动端栏下搜索行不显示
 #search-header .searchFieldIcon
@@ -54,9 +55,9 @@
     // 行总高 37px（36 + 1px 上边框）→ 内容区 36px：输入框缩为 34px，上下各留 1px
     display block
     height calc(var(--search-row-h) - 3px)
-  // 白底输入框上深色主题的白色焦点环不可见，改用固定深色环（几何沿用 header.styl）
+  // 焦点环取输入文字色（浅色主题黑底白环 / 深色主题白底黑环；几何沿用 header.styl）
   #search-input:focus-visible
-    outline-color #000
+    outline-color var(--theme-search-text)
 
 // 桌面端：右侧常驻搜索框
 @media ( min-width 1024px )
@@ -69,9 +70,9 @@
     height calc(var(--topbar-h) - 1px)
     align-self flex-end
     box-sizing border-box
-    // 无任何边框 / 轮廓（含焦点态）：白底直接铺满内容区，消除透明边框条造成的上 / 侧白缝
+    // 无任何边框 / 轮廓（含焦点态）：盒体底色与输入框同值（--theme-search-bg）直接铺满内容区，消除透明边框条造成的上 / 侧缝隙
     border none
-    background-color #fff
+    background-color var(--theme-search-bg)
   // 无社交图标（.topbar-social 缺失）时搜索框自身贴右；有社交图标时由 .topbar-social 接管自动边距
   .navContent + #search-header
     margin-left auto

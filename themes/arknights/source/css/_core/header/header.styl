@@ -51,14 +51,15 @@ ol.navContent
   overflow-wrap break-word
   transition color .3s
 
-// hover / 当前页：蓝块 + 黑字（覆盖 change.styl 的标题文字阴影）
+// hover / 当前页：蓝块 + 白字（深浅色主题统一；覆盖 change.styl 的标题文字阴影）
+// 按下（:active）时 :hover 仍命中本规则（特异性高于全局 a:active 黄底），白字始终压蓝块
 .navBlock:hover,
 .navSecond:hover,
 .navItem.active > .navBlock,
 .navItem.active > .navSecond
   background-color var(--theme-highlight)
   & > .navItemTitle
-    color var(--theme-text-hover)
+    color #fff
     text-shadow none
 
 // 图标态菜单项（menu_icons 配置生效）：图标随标题继承色 / 悬停反色，尺寸随菜单字号
