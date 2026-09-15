@@ -24,7 +24,7 @@ const buildPattern = (terms) => {
   return new RegExp(parts.join('|'), 'gi')
 }
 
-// 将 HTML 中的术语替换为站内锚点链接（href=#term-{index}）；<pre>/<code>/<a> 包裹内容原样保留；
+// 将 HTML 中的术语替换为站内锚点链接（href=#term-{index}）；<pre>/<code>/<a> 与 span.spoiler 包裹内容原样保留；
 // 传入 matched（Set）时收集实际命中的词条（小写），供底部列表过滤
 const replaceTerms = (html, termList, matched = null) => {
   if (!Array.isArray(termList) || termList.length === 0) return html
@@ -33,7 +33,7 @@ const replaceTerms = (html, termList, matched = null) => {
   if (!pattern) return html
   const indexMap = new Map(terms.map(({ term }, index) => [term.toLowerCase(), index]))
   return html
-    .split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>)/g)
+    .split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<span\b[^>]*class="[^"]*\bspoiler\b[^"]*"[^>]*>[\s\S]*?<\/span>)/g)
     .map((segment, index) => {
       if (index % 2 === 1) return segment
       return segment.replace(pattern, (match) => {

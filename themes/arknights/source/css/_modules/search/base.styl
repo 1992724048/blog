@@ -4,7 +4,7 @@
   width 100%
   padding 0
   // 搜索框配色随主题（--theme-search-*，见 _core/color）：浅色主题黑底白字 / 深色主题白底黑字
-  // 桌面为 #search-header 盒内输入，≤1023 为栏下搜索行内输入；插入符默认 auto 随文字色，选区不覆盖走浏览器默认高亮
+  // 桌面为 #search-header 盒内输入，≤1023 为栏下搜索行内输入；插入符默认 auto 随文字色，选区高亮由全局 ::selection 生效（_custom/custom.styl 主题黄底黑字）
   color var(--theme-search-text)
   // 覆盖 _core/base.styl 全局 input 的等宽字体，与 _custom/custom.styl 正文栈一致
   font-family 'HarmonyOS Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif
