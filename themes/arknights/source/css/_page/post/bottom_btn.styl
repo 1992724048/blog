@@ -235,6 +235,7 @@ body.annotating
 #annotate-toolbar .at-btn
   background-color var(--theme-bg-light)
   color var(--theme-text-rev)
+  transition background-color .2s, color .2s, opacity .2s
   @media ( min-width 769px )
     &:hover
       background-color var(--theme-subcolor)
@@ -242,6 +243,16 @@ body.annotating
   &:active
     background-color var(--theme-subcolor)
     color var(--theme-text-hover)
+
+// 禁用态（JS 按选区状态设置原生 disabled：选中内容已标注 → 禁用【标注】；选区不含标注 → 禁用【清除】）
+// 降低存在感 = 整体 40% 不透明度（深浅主题对称、无布局变化）；显式并列 :hover / :active 覆盖既有黄底强调
+#annotate-toolbar .at-btn:disabled,
+#annotate-toolbar .at-btn:disabled:hover,
+#annotate-toolbar .at-btn:disabled:active
+  background-color var(--theme-bg-light)
+  color var(--theme-text-rev)
+  opacity .4
+  cursor default
 
 // 图标 12px（22px 按钮内的协调尺寸，"比文字大一点"）；颜色随按钮 color，描边走 svg currentColor
 #annotate-toolbar .at-icon
