@@ -91,9 +91,11 @@
   // 顶栏独占首行，article / aside 排布在下方
   main header
     flex 0 0 100%
+  // aside 为 content-box：列的实占宽度 = width + 40px 水平内边距；
+  // article 的宽度预留包含该 40px 与列间距，否则 flex-wrap 会把 aside 折到下一行
   article
     margin-left 20px
-    width calc(100% - 170px - 20px)
+    width calc(100% - 210px - 20px)
   #total-archives .total-number
     font-size 34px
   #to-index
@@ -117,7 +119,7 @@
 @media ( min-width 1024px )
   article
     margin-left 25px
-    width calc(100% - 190px - 25px)
+    width calc(100% - 230px - 25px)
   aside
     width 190px
     h1
@@ -130,7 +132,7 @@
 @media ( min-width 1440px )
   article
     margin-left 25px
-    width calc(100% - 230px - 25px)
+    width calc(100% - 280px - 25px)
   aside
     width 230px
     h1
@@ -151,7 +153,7 @@
   // 与 aside 的 2.5% 边距对称：左侧留出同宽空间
   article
     margin-left 2.5%
-    width calc(100% - 270px - 7.5%)
+    width calc(100% - 310px - 7.5%)
   aside
     width 270px
     h1
