@@ -203,11 +203,9 @@ mathjax:
   enable: true
   version: "2.6.1"
 
-# 在 `<head>` 标签内引入 CSS 样式表
+# 在 `<head>` 标签内引入 CSS 样式表（当前未使用，保留供将来引入外链；主题样式见 arknights.styl）
 # 支持直接引入短片段，用 "{ }" 包裹（包括引号），例： - "{a {color: #2bf}}"
-# 版本号参数：修改 custom.css 后同步递增，避免 Cloudflare/浏览器缓存旧版
 stylesheets:
-  - /css/custom.css?v=20260915
 
 # 在 `<body>` 尾部引入 JavaScript 脚本
 # 支持直接引入短片段，用 "{ }" 包裹（包括引号），例： - "{var test='test'}"
