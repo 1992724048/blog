@@ -4,7 +4,9 @@
   width 100%
   padding 0
   color var(--theme-text-light)
-  font-size 14px
+  // 覆盖 _core/base.styl 全局 input 的等宽字体，与 _custom/custom.styl 正文栈一致
+  font-family 'HarmonyOS Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif
+  font-size 15px
   background-color unset
   border unset
 
@@ -59,7 +61,6 @@
   #search-header
     display flex
     align-items center
-    margin-left auto
     width 220px
     height 36px
     box-sizing border-box
@@ -74,6 +75,9 @@
       background-color var(--theme-bg-soft-hover)
       outline 2px solid var(--theme-text-light)
       outline-offset -2px
+  // 无社交图标（.topbar-social 缺失）时搜索框自身贴右；有社交图标时由 .topbar-social 接管自动边距
+  .navContent + #search-header
+    margin-left auto
   #search-header .navItemTitle
     flex 1
     min-width 0

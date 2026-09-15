@@ -1,16 +1,27 @@
-#social-links
-  margin-top .5em
+// 顶栏社交图标（源 theme.social，模板见 layout/includes/header.pug）
+// 右簇 = [.topbar-social][#search-header]：容器接管 margin-left auto，与搜索框保持固定小间距
+.topbar-social
   display flex
-  justify-content center
-  flex-wrap wrap
+  align-items center
+  margin-left auto
+  margin-right 8px
 
-.social
-  padding 0 3px
-  display inline-block
-  height 1.2em
-  font-size 1.2em
+  a
+    display flex
+    align-items center
+    justify-content center
+    box-sizing border-box
+    width 36px
+    height 36px
+    color var(--theme-text-light)
+    font-size 17px
+    text-shadow none
+    transition background-color .3s, color .3s
 
-.social.img
-  padding 0
-  img
-    height 1.2em
+    &:hover,
+    &:active
+      background-color var(--theme-highlight)
+      color var(--theme-text-hover)
+
+    img
+      height 1em

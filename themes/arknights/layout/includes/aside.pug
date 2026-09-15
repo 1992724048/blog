@@ -9,19 +9,6 @@ aside
       a(href= theme.aside.dr)= config.author
     #description
       p!= config.description
-    if theme.social
-      #social-links
-        each value, name in theme.social
-          - let icon = value.split('||')[1].trim(), src = value.split('||')[0].trim()
-          - const hasUriScheme = /^[a-z][a-z0-9+.-]*:/i.test(src)
-          - const isEmailAddress = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(src)
-          - if (!hasUriScheme && isEmailAddress) src = `mailto:${src}`
-          if icon.substring(0,2) === 'fa'
-            a.social(href= src)
-              i(alt= name,class= icon)
-          else
-            a.social.img(href= src)
-              img(alt= name,src= icon)
   #aside-block
     block aside-block
     if page.title === undefined

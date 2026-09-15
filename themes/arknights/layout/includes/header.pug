@@ -40,6 +40,19 @@ header.topbar
           else
             a.navBlock(href= url_for(item.url))
               span.navItemTitle= item.label
+    if theme.social
+      .topbar-social
+        each value, name in theme.social
+          - let icon = value.split('||')[1].trim(), src = value.split('||')[0].trim()
+          - const hasUriScheme = /^[a-z][a-z0-9+.-]*:/i.test(src)
+          - const isEmailAddress = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(src)
+          - if (!hasUriScheme && isEmailAddress) src = `mailto:${src}`
+          if icon.substring(0,2) === 'fa'
+            a(href= src aria-label= name)
+              i(class= icon)
+          else
+            a(href= src aria-label= name)
+              img(src= icon alt= '')
     if searchConfig !== null
       .navItem#search-header
         svg.searchFieldIcon(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")

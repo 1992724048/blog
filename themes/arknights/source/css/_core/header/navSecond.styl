@@ -8,8 +8,8 @@
 :is(.navBlock, .navSecond).expanded > .navItemList
   display block
 
-// 带子菜单的标题右端展开箭头（.navItemTitle 有兄弟节点时）
-.navItemTitle:not(:only-child)::after
+// 带子菜单的标题右端展开箭头（.navItemTitle 有兄弟节点时；限定 .navBlock / .navSecond 作用域，避免误中 #search-header 标题）
+:is(.navBlock, .navSecond) > .navItemTitle:not(:only-child)::after
   content ''
   display inline-block
   box-sizing border-box
