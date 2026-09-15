@@ -14,7 +14,7 @@
 
 // 深色底上 #5c5c5c 对比度不足 4.5:1，改用 --theme-unimportant
 :root[theme-mode=dark] #search-input::placeholder
-  color #898989
+  color var(--theme-unimportant)
 
 // 移动端：顶栏下整行输入（点击搜索图标展开，自动聚焦）
 @media ( max-width 1023px )
