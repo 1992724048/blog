@@ -11,3 +11,46 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
 // 头像：顶部留白（内联 style 优先级高，需 !important）
 #logo img
   margin-top 5px !important
+
+// 文本选中：主题黄底黑字（全局生效：正文 / 代码块 / 顶栏等；两主题 --theme-subcolor 均为 #fe2）
+::selection
+  color #000
+  background-color var(--theme-subcolor)
+
+// 「?内容?」遮盖（filters/spoiler.js 产出 span.spoiler）：默认色块完全遮住文字，悬停显示
+// --theme-bg-light 浅色主题 #000 / 深色主题 #fff（两主题均为高对比实心块）；触摸 / 键盘无 hover 属已知限制
+.spoiler
+  color transparent
+  background-color var(--theme-bg-light)
+  transition color .2s, background-color .2s
+  &:hover
+    color inherit
+    background-color transparent
+
+// 头像悬停角标：左上 / 右下两枚取景框式短角线（≥769px；≤768px 时 logo 图片被固定到视口外）
+// 覆盖层钉在 top 5px（对齐上方 img 的 margin-top）且 width 100% + aspect-ratio 1，与 1:1 图片逐像素重合；
+// 角线以 4 段 linear-gradient 绘制（左上级 + 右下级各 2 段），不依赖盒底边（#logo 盒高仅 5px、图片溢出盒体）
+@media ( min-width 769px )
+  #logo
+    position relative
+    &::after
+      content ''
+      position absolute
+      top 5px
+      left 0
+      width 100%
+      aspect-ratio 1
+      pointer-events none
+      opacity 0
+      transition opacity .3s
+      background-image linear-gradient(var(--theme-highlight), var(--theme-highlight)), linear-gradient(var(--theme-highlight), var(--theme-highlight)), linear-gradient(var(--theme-highlight), var(--theme-highlight)), linear-gradient(var(--theme-highlight), var(--theme-highlight))
+      background-position left top, left top, right bottom, right bottom
+      background-size 14px 2px, 2px 14px, 14px 2px, 2px 14px
+      background-repeat no-repeat
+  #logo:hover::after, #logo:focus-visible::after
+    opacity 1
+
+// 减少动效偏好：关闭本次新增的过渡（沿用主题既有 reduced-motion 做法）
+@media (prefers-reduced-motion: reduce)
+  #logo::after, .spoiler
+    transition none

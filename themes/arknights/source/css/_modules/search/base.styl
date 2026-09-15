@@ -68,7 +68,8 @@
     // 按压顶栏内容区（36px 栏 − 1px 底边线 = 35px）满高布局：上缘贴顶、下缘与底边线相接；
     // 盒子不再覆盖底线（无需透明边框 / background-clip 机制），底线全段单线连续
     height calc(var(--topbar-h) - 1px)
-    align-self flex-end
+    // 顶缘钉死（flex-start）：盒高 = 容器内容高时与 flex-end / 居中视觉等价，杜绝亚像素上缝
+    align-self flex-start
     box-sizing border-box
     // 无任何边框 / 轮廓（含焦点态）：盒体底色与输入框同值（--theme-search-bg）直接铺满内容区，消除透明边框条造成的上 / 侧缝隙
     border none
