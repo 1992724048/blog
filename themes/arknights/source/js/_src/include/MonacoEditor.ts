@@ -81,6 +81,10 @@ class MonacoEditor {
   }
 
   private loadMonaco = () => {
+    // 惰性加载：仅当页面存在代码编辑器容器时才引入 CDN loader
+    if (document.querySelector('.monaco-editor-code') === null) {
+      return
+    }
     if (typeof (window as any).hexo_monaco === 'undefined') {
       const loader = document.createElement('script');
       loader.src = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js';
@@ -108,4 +112,4 @@ class MonacoEditor {
   }
 };
 
-let monaco_editor = new MonacoEditor();
+new MonacoEditor();

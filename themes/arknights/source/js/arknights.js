@@ -1072,7 +1072,7 @@ class Index {
         }, { passive: true });
     }
 }
-let indexs = new Index();
+new Index();
 class MonacoEditor {
     // keep references to editors to avoid garbage collection
     editors = new Map();
@@ -1145,6 +1145,10 @@ class MonacoEditor {
         this.updateEditorLayout();
     };
     loadMonaco = () => {
+        // 惰性加载：仅当页面存在代码编辑器容器时才引入 CDN loader
+        if (document.querySelector('.monaco-editor-code') === null) {
+            return;
+        }
         if (typeof window.hexo_monaco === 'undefined') {
             const loader = document.createElement('script');
             loader.src = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js';
@@ -1172,7 +1176,7 @@ class MonacoEditor {
     }
 }
 ;
-let monaco_editor = new MonacoEditor();
+new MonacoEditor();
 class Scroll {
     scrolling = 0;
     getingtop = false;
@@ -1231,7 +1235,7 @@ class Scroll {
         catch (e) { }
     };
     /**
-     * used for `supScroll` and `footNoteScroll` functions
+     * used for `supScroll`, `footNoteScroll` and `termLinkScroll` functions
      */
     setListener = () => {
         getElement('#post-content').addEventListener('click', this.supScroll);

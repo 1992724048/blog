@@ -89,4 +89,4 @@ class Index {
   }
 }
 
-let indexs = new Index()
+new Index()

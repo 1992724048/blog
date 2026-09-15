@@ -62,7 +62,7 @@ class Scroll {
   }
 
   /**
-   * used for `supScroll` and `footNoteScroll` functions
+   * used for `supScroll`, `footNoteScroll` and `termLinkScroll` functions
    */
   private setListener = () => {
     getElement('#post-content').addEventListener('click', this.supScroll)
