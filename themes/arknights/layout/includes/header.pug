@@ -38,6 +38,7 @@ header.topbar
               span.navItemTitle
                 if menuIcon
                   i(class= menuIcon aria-hidden='true')
+                  span.navItemLabel= item.label
                 else
                   = item.label
               ol.navItemList
@@ -51,6 +52,7 @@ header.topbar
               span.navItemTitle
                 if menuIcon
                   i(class= menuIcon aria-hidden='true')
+                  span.navItemLabel= item.label
                 else
                   = item.label
     if theme.social

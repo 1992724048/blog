@@ -61,11 +61,29 @@ ol.navContent
     color var(--theme-text-hover)
     text-shadow none
 
-// 图标态菜单项（menu_icons 配置生效）：标题仅含图标，图标随标题继承色 / 悬停反色，尺寸随菜单字号
+// 图标态菜单项（menu_icons 配置生效）：图标随标题继承色 / 悬停反色，尺寸随菜单字号
 // 图标渲染在 .navItemTitle 内（避免触发子菜单展开箭头选择器的「非仅子」判定）
 .navBlockIcon > .navItemTitle
   display flex
   align-items center
+
+// 名称（active 项显示）：默认收起（0 宽 + 透明），随 active 平滑展开；类名避开 Header.ts 识别集合
+.navItemLabel
+  display inline-block
+  max-width 0
+  margin-left 0
+  opacity 0
+  overflow hidden
+  white-space nowrap
+  transition max-width .3s, margin-left .3s, opacity .3s
+.navItem.active > .navBlock .navItemLabel
+  max-width 5em
+  margin-left 6px
+  opacity 1
+
+// 移动端下拉行标题默认两端对齐（navSecond.styl）：图标态改为左对齐（图标 + 名称成组）
+.navContent .navBlockIcon > .navItemTitle
+  justify-content flex-start
 
 // 焦点环：内缩的主题反差色，避免主题蓝在浅色底上对比不足（WCAG 2.4.7 / 1.4.11）
 :is(.navBtn, .searchBtn, .navBlock, .navSecond, #search-input, .topbar-social a):focus-visible
@@ -73,7 +91,7 @@ ol.navContent
   outline-offset -2px
 
 @media (prefers-reduced-motion: reduce)
-  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar
+  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar, .navItemLabel
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl
