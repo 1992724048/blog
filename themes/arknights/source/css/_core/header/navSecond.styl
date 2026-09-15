@@ -4,8 +4,7 @@
   padding 0
   list-style none
 
-// 展开态（点击切换；.expanded 兼容挂在 .navItem / .navBlock / .navSecond）
-.navItem.expanded > :is(.navBlock, .navSecond) > .navItemList,
+// 展开态（点击切换；.expanded 由 Header.ts 挂在 .navBlock / .navSecond）
 :is(.navBlock, .navSecond).expanded > .navItemList
   display block
 
@@ -22,7 +21,6 @@
   transform translateY(-2px) rotate(45deg)
   transition transform .3s
 
-.navItem.expanded > :is(.navBlock, .navSecond) > .navItemTitle::after,
 :is(.navBlock, .navSecond).expanded > .navItemTitle::after
   transform translateY(1px) rotate(-135deg)
 

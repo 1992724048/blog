@@ -41,9 +41,7 @@ btn:
 
 menu:
   archive:
-    name: 文章
     plural: 文章
-  navigation: 导航
   tag:
     name: 标签
     plural: 标签

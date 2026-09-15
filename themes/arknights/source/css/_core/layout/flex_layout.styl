@@ -46,8 +46,6 @@
     margin 20px 0 0 0
     a, span
       margin 5px 5px 0 0
-  #post-index
-    margin 0
   #logo
     height 0
     margin 0
@@ -66,8 +64,6 @@
     width auto
     .total-title
       display inline-block
-  #post-index
-    margin 16px 10px 0 10px
   #archive-flex
     flex-direction column
   #archive-aside
@@ -92,7 +88,8 @@
   main header
     flex 0 0 100%
   // aside 为 content-box：列的实占宽度 = width + 40px 水平内边距；
-  // article 的宽度预留包含该 40px 与列间距，否则 flex-wrap 会把 aside 折到下一行
+  // article 的宽度预留包含该 40px 与列间距（≥1440 另含 aside margin-left 10px、≥1912 另含 2.5% 边距），
+  // 否则 flex-wrap 会把 aside 折到下一行
   article
     margin-left 20px
     width calc(100% - 210px - 20px)
@@ -162,7 +159,5 @@
     font-size 37px
   #total-tags, #total-categories
     font-size 28px
-  .search-pop-overlay .popup
-    left 65%
   .recent-post img
     width 80%

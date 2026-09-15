@@ -20,6 +20,7 @@ post:
   countTotal: "Word Count: "
   timeTotal: "Read Time: "
   timeUnit: min
+  wordUnit: words
   index: Catalog
   reward: reward
   noTitle: No Title
@@ -40,9 +41,7 @@ btn:
 
 menu:
   archive:
-    name: Archive
     plural: Archives
-  navigation: NAVIGATION
   tag:
     name: Tag
     plural: Tags

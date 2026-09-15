@@ -20,6 +20,10 @@
 #search-header .searchFieldIcon
   display none
 
+// 整行 / 整框可点击聚焦输入框（含放大镜区域），以文本光标提示可输入
+#search-header
+  cursor text
+
 // 移动端：顶栏下整行输入（点击搜索图标展开，自动聚焦）
 @media ( max-width 1023px )
   #search-header
@@ -63,7 +67,7 @@
     background-color var(--theme-bg-soft)
     transition border-color .3s, background-color .3s
     &:hover
-      border-color var(--theme-unimportant-trans)
+      border-color var(--theme-unimportant)
     // 焦点环画在整框上（含放大镜图标），键盘 / 点击聚焦均清晰可见
     &:focus-within
       border-color var(--theme-highlight)
