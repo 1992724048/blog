@@ -3,20 +3,17 @@
   box-sizing border-box
   width 100%
   padding 0
-  color var(--theme-text-light)
+  // 搜索框固定白底黑字（深浅色主题一致；桌面为 #search-header 白框内输入，≤1023 为栏下搜索行内输入）
+  color #000
   // 覆盖 _core/base.styl 全局 input 的等宽字体，与 _custom/custom.styl 正文栈一致
   font-family 'HarmonyOS Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif
   font-size 15px
-  background-color unset
+  background-color #fff
   border unset
 
+// 白底上的可读灰（对 #fff 对比度约 6.7:1），深浅色主题统一
 #search-input::placeholder
   color #5c5c5c
-  transition color .3s
-
-// 深色底上 #5c5c5c 对比度不足 4.5:1，改用 --theme-unimportant
-:root[theme-mode=dark] #search-input::placeholder
-  color var(--theme-unimportant)
 
 // 搜索框内放大镜图标（内联 SVG，见 header.pug）：桌面常驻搜索框专用，移动端栏下搜索行不显示
 #search-header .searchFieldIcon
@@ -55,6 +52,9 @@
     width 100%
   #search-header input
     height 40px
+  // 白底输入框上深色主题的白色焦点环不可见，改用固定深色环（几何沿用 header.styl）
+  #search-input:focus-visible
+    outline-color #000
 
 // 桌面端：右侧常驻搜索框
 @media ( min-width 1024px )
@@ -64,16 +64,16 @@
     width 220px
     height 36px
     box-sizing border-box
-    border 1px solid var(--theme-border-soft)
-    background-color var(--theme-bg-soft)
-    transition border-color .3s, background-color .3s
+    // 白底搜索框：默认 / 悬停 / 焦点环均按白底取色，深浅色主题一致
+    border 1px solid rgba(0, 0, 0, .1)
+    background-color #fff
+    transition border-color .3s
     &:hover
-      border-color var(--theme-unimportant)
+      border-color #767676
     // 焦点环画在整框上（含放大镜图标），键盘 / 点击聚焦均清晰可见
     &:focus-within
       border-color var(--theme-highlight)
-      background-color var(--theme-bg-soft-hover)
-      outline 2px solid var(--theme-text-light)
+      outline 2px solid #000
       outline-offset -2px
   // 无社交图标（.topbar-social 缺失）时搜索框自身贴右；有社交图标时由 .topbar-social 接管自动边距
   .navContent + #search-header
@@ -91,7 +91,7 @@
     width 16px
     height 16px
     margin 0 8px 0 10px
-    color var(--theme-unimportant)
+    color #5c5c5c
     pointer-events none
   // 桌面端焦点环由整框承担（见上），输入框自身不再重复描环；≤1023px 仍保留输入框内缩环
   #search-input:focus-visible
