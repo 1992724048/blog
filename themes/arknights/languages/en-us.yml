@@ -38,6 +38,12 @@ btn:
   index: To Catalog
   totop: To Top
   colorMode: Change Theme
+  back: Back to Previous Page
+  toolbox: Toolbox
+  annotate: "Annotate: Select Text Then Click"
+  share: Share This Post
+  favorite: Favorite This Post
+  favorited: Favorited, Click to Unfavorite
 
 menu:
   archive:

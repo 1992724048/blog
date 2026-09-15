@@ -38,6 +38,12 @@ btn:
   totop: 回到顶部
   index: 文章目录
   colorMode: 切换主题
+  back: 返回上一页
+  toolbox: 工具箱
+  annotate: 标注：选中文字后点击
+  share: 分享本文
+  favorite: 收藏本文
+  favorited: 已收藏，点击取消
 
 menu:
   archive:

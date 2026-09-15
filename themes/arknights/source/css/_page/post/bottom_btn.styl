@@ -1,3 +1,4 @@
+// 底部按钮组：单列 flex 栈（DOM 顺序即视觉顺序、数量可扩展）；锚点右下角 8px
 .bottom-btn
   position sticky
   bottom 0
@@ -9,36 +10,48 @@
     position fixed
     left 0
     width 100vw
-  div
+  .bottom-btn-stack
     position absolute
     right 8px
     bottom 8px
-  a
-    position absolute
+    display flex
+    flex-direction column
+    align-items flex-end
+  a, button
+    position relative
     overflow hidden
-    display block
-    right 0
+    display flex
+    align-items center
+    justify-content center
     width 40px
     height 40px
+    padding 0
+    margin 0
+    border 0
+    border-radius 0
+    background-color transparent
     color var(--theme-text-light)
-    line-height 40px
-    text-align center
+    font-family inherit
     font-size 40px
     font-weight 900
-    padding 0
+    line-height 40px
+    text-align center
     user-select none
-    &:nth-last-child(1)
-      bottom 0
-    &:nth-last-child(2)
-      bottom 40px
-    &:nth-last-child(3)
-      bottom 80px
+    -webkit-tap-highlight-color transparent
+    -webkit-appearance none
+    appearance none
+    transition background-color .2s, color .2s
     @media ( min-width 769px )
       &:hover
         background-color var(--theme-subcolor)
         color var(--theme-text-hover)
-.bottom-btn .i-top
-  display flex
+    &:active
+      background-color var(--theme-subcolor)
+      color var(--theme-text-hover)
+    &:focus-visible
+      outline 2px solid var(--theme-text-light)
+      outline-offset 2px
+.bottom-btn .i-top, .bottom-btn .i-back, .bottom-btn .i-color, .bottom-btn .toolbox-toggle, .bottom-btn .toolbox-item
   background-color var(--theme-bg-light)
   color var(--theme-text-rev)
 .i-icon
@@ -48,9 +61,6 @@
   display block
   transition transform .3s
 .bottom-btn .i-color
-  display flex
-  background-color var(--theme-bg-light)
-  color var(--theme-text-rev)
   @media ( min-width 769px )
     &:hover .i-icon
       transform rotate(90deg)
@@ -80,3 +90,96 @@
       transform translate(0, -50%) translateX(-300%)
     &:nth-child(3)
       transform translate(0, -50%) rotate(-45deg) scaleX(1.2)
+
+// 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 切换由 JS 侧 toolbox.toggle() 负责）
+// 扇形几何：以工具箱按钮为原点，半径 58px、角度 180° / 157.5° / 135° 向左上张开（与右侧列左缘净空 ≥1px；≤768 移动端不出视口）
+// 层叠规则：扇形容量 3 个；第 4 个起沿原点层叠成堆（不展开），随工具数量可扩展
+.bottom-btn .toolbox
+  position relative
+  display flex
+  flex-direction column
+  align-items flex-end
+.bottom-btn .toolbox-toggle
+  z-index 3
+.bottom-btn .toolbox-open .toolbox-toggle
+  background-color var(--theme-subcolor)
+  color var(--theme-text-hover)
+.bottom-btn .toolbox-items
+  position absolute
+  top 0
+  right 0
+  z-index 2
+.bottom-btn .toolbox-item
+  --fan-x 0px
+  --fan-y 0px
+  --pull-x 0px
+  --pull-y 0px
+  position absolute
+  top 0
+  right 0
+  z-index 1
+  opacity 0
+  visibility hidden
+  pointer-events none
+  transform translate(0, 0)
+  transition transform .24s cubic-bezier(.2, .8, .3, 1.1), opacity .18s ease-out, visibility 0s linear .24s, background-color .2s, color .2s
+.bottom-btn .toolbox-item:nth-child(1)
+  --fan-x -58px
+  --fan-y 0px
+  --pull-x -10px
+  --pull-y 0px
+.bottom-btn .toolbox-item:nth-child(2)
+  --fan-x -54px
+  --fan-y -22px
+  --pull-x -9px
+  --pull-y -4px
+.bottom-btn .toolbox-item:nth-child(3)
+  --fan-x -41px
+  --fan-y -41px
+  --pull-x -7px
+  --pull-y -7px
+.bottom-btn .toolbox-item:nth-child(4)
+  --fan-x -4px
+  --fan-y -4px
+.bottom-btn .toolbox-item:nth-child(n+5)
+  --fan-x -8px
+  --fan-y -8px
+.bottom-btn .toolbox-open .toolbox-item
+  opacity 1
+  visibility visible
+  pointer-events auto
+  transition-delay 0s
+  transform translate(var(--fan-x), var(--fan-y))
+@media ( min-width 769px )
+  .bottom-btn .toolbox-open .toolbox-item:hover
+    z-index 5
+    box-shadow 0 4px 10px rgba(0, 0, 0, .35)
+    transform translate(calc(var(--fan-x) + var(--pull-x)), calc(var(--fan-y) + var(--pull-y))) scale(1.08)
+
+// 工具视觉态：分享成功 .copied（对勾，约 1.2s 后由 JS 移除）；收藏已存 .saved（星标实心 + 主题黄底板）
+.bottom-btn .toolbox-share .i-check
+  display none
+.bottom-btn .toolbox-share.copied
+  background-color var(--theme-subcolor)
+  color var(--theme-text-hover)
+.bottom-btn .toolbox-share.copied .i-share
+  display none
+.bottom-btn .toolbox-share.copied .i-check
+  display block
+.bottom-btn .toolbox-favorite.saved
+  background-color var(--theme-subcolor)
+  color var(--theme-text-hover)
+.bottom-btn .toolbox-favorite.saved .i-star
+  fill currentColor
+
+// 正文标注高亮（JS 侧为选中文字包裹 .hl-mark）：与 ::selection 同源配色（主题黄 #fe2 底 + 黑字），深浅主题通用
+.hl-mark
+  background-color var(--theme-subcolor)
+  color #000
+  border-radius 2px
+  padding 0 1px
+
+// 减少动效偏好：关闭本组全部过渡 / 动画（扇形展开、悬停抽出、图标旋转、目录条变形）
+@media (prefers-reduced-motion: reduce)
+  .bottom-btn a, .bottom-btn button, .bottom-btn .toolbox-item, .bottom-btn .i-icon, .bottom-btn .tocBtnIconBar
+    transition none
