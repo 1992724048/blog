@@ -5,6 +5,7 @@
 interface HighlightRange {
   start: number
   length: number
+  color?: string
 }
 
 interface TextLayout {
@@ -22,10 +23,12 @@ interface FavoriteItem {
 // 标注序列化：以正文文本节点的累计字符偏移（start + length）记录——<mark> 包裹不改变文本总量，
 // 增删标注后同一偏移仍指向同一段文字；文章文本变化导致偏移漂移时按边界校验静默丢弃
 class Toolbox {
-  private static readonly EXCLUDED_SELECTOR = '.bottom-btn, #post-footer, #post-info, #reward, #comments, #paginator, script, style'
+  private static readonly EXCLUDED_SELECTOR = '.bottom-btn, #annotate-toolbar, #post-footer, #post-info, #reward, #comments, #paginator, script, style'
   private static readonly HIGHLIGHT_KEY_PREFIX = 'arknights:highlights:'
   private static readonly FAVORITES_KEY = 'arknights:favorites'
-  private static readonly SHARE_COPIED_DELAY = 1200
+  private static readonly ANNOTATE_COLOR_KEY = 'arknights:annotate-color'
+  private static readonly ANNOTATE_COLORS = ['yellow', 'green', 'blue', 'pink', 'orange']
+  private static readonly COPIED_DELAY = 1200
 
   private pendingRange: Range | null = null
 
@@ -47,6 +50,26 @@ class Toolbox {
 
   private get article(): HTMLElement | null {
     return document.querySelector('article')
+  }
+
+  private get annotateToolbar(): HTMLElement | null {
+    return document.querySelector('#annotate-toolbar')
+  }
+
+  private get annotateButton(): HTMLElement | null {
+    return document.querySelector('.toolbox-annotate')
+  }
+
+  private get colorButton(): HTMLElement | null {
+    return document.querySelector('#annotate-toolbar .at-color')
+  }
+
+  private get colorPanel(): HTMLElement | null {
+    return document.querySelector('#annotate-toolbar .at-colors')
+  }
+
+  private get copyButton(): HTMLElement | null {
+    return document.querySelector('#annotate-toolbar .at-copy')
   }
 
   private read = (key: string): string | null => {
@@ -104,6 +127,130 @@ class Toolbox {
   private onKeyup = (event: KeyboardEvent): void => {
     if (event.key === 'Escape') {
       this.applyState(false)
+      this.hideToolbar()
+    }
+  }
+
+  private isAnnotating = (): boolean => {
+    return document.body.classList.contains('annotating')
+  }
+
+  private setAnnotating = (on: boolean): void => {
+    document.body.classList.toggle('annotating', on)
+    this.syncAnnotateButton()
+    if (!on) {
+      this.hideToolbar()
+      this.pendingRange = null
+    }
+  }
+
+  private syncAnnotateButton = (): void => {
+    const button = this.annotateButton
+    if (button === null) {
+      return
+    }
+    const on = this.isAnnotating()
+    button.classList.toggle('active', on)
+    button.setAttribute('aria-pressed', String(on))
+  }
+
+  private showToolbar = (range: Range): void => {
+    const toolbar = this.annotateToolbar
+    if (toolbar === null) {
+      return
+    }
+    this.placeToolbar(range)
+    toolbar.classList.add('open')
+    toolbar.setAttribute('aria-hidden', 'false')
+  }
+
+  private hideToolbar = (): void => {
+    const toolbar = this.annotateToolbar
+    if (toolbar === null) {
+      return
+    }
+    toolbar.classList.remove('open')
+    toolbar.setAttribute('aria-hidden', 'true')
+    this.closeColors()
+  }
+
+  private placeToolbar = (range: Range): void => {
+    const toolbar = this.annotateToolbar
+    if (toolbar === null || typeof range.getBoundingClientRect !== 'function') {
+      return
+    }
+    const rect = range.getBoundingClientRect()
+    if (rect.width === 0 && rect.height === 0) {
+      return
+    }
+    const margin = 8
+    const gap = 6
+    const width = toolbar.offsetWidth
+    const height = toolbar.offsetHeight
+    let left = rect.left + rect.width / 2 - width / 2
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin))
+    let top = rect.top - height - gap
+    if (top < margin) {
+      top = Math.min(rect.bottom + gap, window.innerHeight - height - margin)
+    }
+    toolbar.style.left = left + 'px'
+    toolbar.style.top = top + 'px'
+  }
+
+  private onSelectionChange = (): void => {
+    if (!this.isAnnotating()) {
+      return
+    }
+    const range = this.selectionRange()
+    if (range === null) {
+      this.hideToolbar()
+      return
+    }
+    this.showToolbar(range)
+  }
+
+  private closeColors = (): void => {
+    const panel = this.colorPanel
+    if (panel !== null) {
+      panel.classList.remove('open')
+    }
+  }
+
+  private onDocumentClick = (event: MouseEvent): void => {
+    const target = event.target as Element | null
+    if (target === null || typeof target.closest !== 'function') {
+      return
+    }
+    if (target.closest('.at-color') !== null || target.closest('.at-colors') !== null) {
+      return
+    }
+    this.closeColors()
+  }
+
+  private onToolbarClick = (event: MouseEvent): void => {
+    const target = event.target as Element | null
+    if (target === null || typeof target.closest !== 'function' || target.closest('#annotate-toolbar') === null) {
+      return
+    }
+    const colorOption = target.closest('.at-color-opt')
+    if (colorOption !== null) {
+      this.setAnnotateColor(colorOption.getAttribute('data-color'))
+      return
+    }
+    const button = target.closest('.at-btn')
+    if (button === null) {
+      return
+    }
+    if (button.classList.contains('at-annotate')) {
+      this.annotateSelection()
+    } else if (button.classList.contains('at-clear')) {
+      this.clearSelectionHighlights()
+    } else if (button.classList.contains('at-copy')) {
+      this.copySelection()
+    } else if (button.classList.contains('at-search')) {
+      this.searchSelection()
+    } else if (button.classList.contains('at-color')) {
+      this.toggleColors()
     }
   }
 
@@ -173,27 +320,37 @@ class Toolbox {
     return found === null ? layout.total : layout.starts[layout.nodes.indexOf(found)]
   }
 
-  // position 恰在文本节点末尾时归属下一节点（offset 0），避免构造的范围横跨其间元素（如被排除的 #post-info）
-  private pointAt = (layout: TextLayout, position: number): { node: Text; offset: number } | null => {
-    for (let index = 0; index < layout.nodes.length; index++) {
-      const end = layout.starts[index] + layout.nodes[index].data.length
-      if (position < end) {
-        return { node: layout.nodes[index], offset: position - layout.starts[index] }
-      }
-    }
-    const last = layout.nodes.length - 1
-    if (last < 0) {
+  // 起边界取 position 之后的首个文本（避免范围横跨其间元素，如被排除的 #post-info）；
+  // 止边界取 position 之前的末个文本（避免吞入其后元素的标签结构，产生嵌套 mark）
+  private pointAt = (layout: TextLayout, position: number, forward: boolean): { node: Text; offset: number } | null => {
+    if (layout.nodes.length === 0) {
       return null
     }
-    return { node: layout.nodes[last], offset: layout.nodes[last].data.length }
+    if (forward) {
+      for (let index = 0; index < layout.nodes.length; index++) {
+        const end = layout.starts[index] + layout.nodes[index].data.length
+        if (position < end) {
+          return { node: layout.nodes[index], offset: position - layout.starts[index] }
+        }
+      }
+      const last = layout.nodes.length - 1
+      return { node: layout.nodes[last], offset: layout.nodes[last].data.length }
+    }
+    for (let index = layout.nodes.length - 1; index >= 0; index--) {
+      const start = layout.starts[index]
+      if (position > start) {
+        return { node: layout.nodes[index], offset: Math.min(position - start, layout.nodes[index].data.length) }
+      }
+    }
+    return { node: layout.nodes[0], offset: 0 }
   }
 
   private rangeFromOffsets = (layout: TextLayout, start: number, end: number): Range | null => {
     if (start < 0 || end > layout.total || start >= end) {
       return null
     }
-    const startPoint = this.pointAt(layout, start)
-    const endPoint = this.pointAt(layout, end)
+    const startPoint = this.pointAt(layout, start, true)
+    const endPoint = this.pointAt(layout, end, false)
     if (startPoint === null || endPoint === null) {
       return null
     }
@@ -203,9 +360,10 @@ class Toolbox {
     return range
   }
 
-  private wrapRange = (range: Range): boolean => {
+  private wrapRange = (range: Range, color: string): boolean => {
     const mark = document.createElement('mark')
     mark.className = 'hl-mark'
+    mark.setAttribute('data-color', color)
     try {
       range.surroundContents(mark)
       return true
@@ -266,8 +424,16 @@ class Toolbox {
   private onMouseDown = (event: MouseEvent): void => {
     this.pendingRange = null
     const target = event.target as Element | null
-    if (target === null || typeof target.closest !== 'function' || target.closest('.toolbox-annotate') === null) {
+    if (target === null || typeof target.closest !== 'function') {
       return
+    }
+    const inToolbar = target.closest('#annotate-toolbar') !== null
+    if (!inToolbar && target.closest('.toolbox-annotate') === null) {
+      return
+    }
+    if (inToolbar) {
+      // 阻止默认（选区折叠 / 焦点转移）：否则 selectionchange 会在 click 之前隐藏工具条、丢失目标选区
+      event.preventDefault()
     }
     const selection = window.getSelection()
     if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -277,20 +443,16 @@ class Toolbox {
   }
 
   public annotate = (): void => {
-    const current = this.selectionRange()
-    const pending = this.pendingRange
-    this.pendingRange = null
-    if (current !== null) {
-      this.highlightRange(current)
-      return
-    }
-    if (pending !== null) {
-      if (this.isRangeAnnotatable(pending)) {
-        this.highlightRange(pending)
+    const on = !this.isAnnotating()
+    this.setAnnotating(on)
+    if (on) {
+      const range = this.resolveRange()
+      if (range !== null) {
+        this.highlightRange(range)
       }
-      return
     }
-    this.clearHighlights()
+    this.pendingRange = null
+    this.applyState(false)
   }
 
   private highlightRange = (range: Range): void => {
@@ -313,7 +475,7 @@ class Toolbox {
     })
     intersecting.forEach((mark) => this.unwrapMark(mark))
     const refreshed = this.rangeFromOffsets(this.textLayout(article), start, end)
-    if (refreshed !== null && this.wrapRange(refreshed)) {
+    if (refreshed !== null && this.wrapRange(refreshed, this.currentAnnotateColor())) {
       this.persistHighlights()
     }
   }
@@ -331,13 +493,144 @@ class Toolbox {
     this.persistHighlights()
   }
 
-  private clearHighlights = (): void => {
+  private resolveRange = (): Range | null => {
+    const current = this.selectionRange()
+    if (current !== null) {
+      return current
+    }
+    if (this.pendingRange !== null && this.isRangeAnnotatable(this.pendingRange)) {
+      return this.pendingRange
+    }
+    return null
+  }
+
+  private annotateSelection = (): void => {
+    const range = this.resolveRange()
+    if (range !== null) {
+      this.highlightRange(range)
+    }
+  }
+
+  private clearSelectionHighlights = (): void => {
+    const range = this.resolveRange()
     const article = this.article
-    if (article === null || article.querySelectorAll('.hl-mark').length === 0) {
+    if (range === null || article === null) {
       return
     }
-    this.removeAllMarks(article)
-    this.persistHighlights()
+    const layout = this.textLayout(article)
+    const start = this.boundaryOffset(range.startContainer, range.startOffset, layout)
+    const end = this.boundaryOffset(range.endContainer, range.endOffset, layout)
+    if (start === null || end === null || start >= end) {
+      return
+    }
+    const affected: { start: number; end: number; color: string }[] = []
+    article.querySelectorAll('.hl-mark').forEach((mark) => {
+      const offsets = this.markOffsets(mark, layout)
+      if (offsets !== null && offsets.start < end && start < offsets.end) {
+        affected.push({ start: offsets.start, end: offsets.end, color: this.markColor(mark) })
+        this.unwrapMark(mark)
+      }
+    })
+    affected.forEach((item) => {
+      const beforeEnd = Math.min(item.end, start)
+      const afterStart = Math.max(item.start, end)
+      if (beforeEnd > item.start) {
+        const before = this.rangeFromOffsets(this.textLayout(article), item.start, beforeEnd)
+        if (before !== null) {
+          this.wrapRange(before, item.color)
+        }
+      }
+      if (item.end > afterStart) {
+        const after = this.rangeFromOffsets(this.textLayout(article), afterStart, item.end)
+        if (after !== null) {
+          this.wrapRange(after, item.color)
+        }
+      }
+    })
+    if (affected.length !== 0) {
+      this.persistHighlights()
+    }
+  }
+
+  private copySelection = (): void => {
+    const range = this.resolveRange()
+    if (range === null) {
+      return
+    }
+    const text = range.toString()
+    if (text.length === 0) {
+      return
+    }
+    const complete = (): void => {
+      const button = this.copyButton
+      if (button === null) {
+        return
+      }
+      button.classList.add('copied')
+      setTimeout(() => button.classList.remove('copied'), Toolbox.COPIED_DELAY)
+    }
+    const fallback = (): void => {
+      if (typeof document.execCommand === 'function' && document.execCommand('copy')) {
+        complete()
+      }
+    }
+    try {
+      navigator.clipboard.writeText(text).then(complete).catch(fallback)
+    } catch (e) {
+      fallback()
+    }
+  }
+
+  private searchSelection = (): void => {
+    const range = this.resolveRange()
+    if (range === null) {
+      return
+    }
+    const keyword = range.toString().trim()
+    if (keyword.length === 0) {
+      return
+    }
+    const search = (window as any).searchWithKeyword
+    if (typeof search === 'function') {
+      search(keyword)
+    }
+    this.hideToolbar()
+  }
+
+  private toggleColors = (): void => {
+    const panel = this.colorPanel
+    if (panel !== null) {
+      panel.classList.toggle('open')
+    }
+  }
+
+  private setAnnotateColor = (color: string | null): void => {
+    if (color === null || !Toolbox.ANNOTATE_COLORS.includes(color)) {
+      return
+    }
+    this.write(Toolbox.ANNOTATE_COLOR_KEY, color)
+    this.applyAnnotateColor()
+  }
+
+  private currentAnnotateColor = (): string => {
+    const stored = this.read(Toolbox.ANNOTATE_COLOR_KEY)
+    return stored !== null && Toolbox.ANNOTATE_COLORS.includes(stored) ? stored : 'yellow'
+  }
+
+  private applyAnnotateColor = (): void => {
+    const color = this.currentAnnotateColor()
+    const button = this.colorButton
+    if (button !== null) {
+      button.setAttribute('data-color', color)
+    }
+    document.querySelectorAll('#annotate-toolbar .at-color-opt').forEach((option) => {
+      option.classList.toggle('active', option.getAttribute('data-color') === color)
+    })
+  }
+
+  private markColor = (mark: Element): string => {
+    const color = mark.getAttribute('data-color')
+    return color !== null && Toolbox.ANNOTATE_COLORS.includes(color) ? color : 'yellow'
   }
 
   private persistHighlights = (): void => {
@@ -350,7 +643,12 @@ class Toolbox {
     article.querySelectorAll('.hl-mark').forEach((mark) => {
       const offsets = this.markOffsets(mark, layout)
       if (offsets !== null) {
-        ranges.push({ start: offsets.start, length: offsets.end - offsets.start })
+        const color = this.markColor(mark)
+        const item: HighlightRange = { start: offsets.start, length: offsets.end - offsets.start }
+        if (color !== 'yellow') {
+          item.color = color
+        }
+        ranges.push(item)
       }
     })
     ranges.sort((left, right) => left.start - right.start)
@@ -371,7 +669,8 @@ class Toolbox {
         container.ranges.forEach((item) => {
           const range = item as Partial<HighlightRange>
           if (typeof range.start === 'number' && typeof range.length === 'number' && range.start >= 0 && range.length > 0) {
-            ranges.push({ start: range.start, length: range.length })
+            const color = typeof range.color === 'string' && Toolbox.ANNOTATE_COLORS.includes(range.color) ? range.color : 'yellow'
+            ranges.push({ start: range.start, length: range.length, color: color })
           }
         })
       }
@@ -386,7 +685,7 @@ class Toolbox {
     ranges.forEach((item) => {
       const range = this.rangeFromOffsets(this.textLayout(article), item.start, item.start + item.length)
       if (range !== null) {
-        this.wrapRange(range)
+        this.wrapRange(range, item.color ?? 'yellow')
       }
     })
   }
@@ -412,7 +711,7 @@ class Toolbox {
       setTimeout(() => {
         button.classList.remove('copied')
         this.applyState(false)
-      }, Toolbox.SHARE_COPIED_DELAY)
+      }, Toolbox.COPIED_DELAY)
     }
     try {
       navigator.clipboard.writeText(url).then(complete).catch(() => {})
@@ -464,17 +763,30 @@ class Toolbox {
 
   private onPjaxSuccess = (): void => {
     this.applyState(false)
+    this.hideToolbar()
     this.restoreHighlights()
     this.applyFavoriteState()
+    this.syncAnnotateButton()
+    this.applyAnnotateColor()
   }
 
   constructor() {
     document.addEventListener('keyup', this.onKeyup)
     document.addEventListener('mousedown', this.onMouseDown)
     document.addEventListener('click', this.onMarkClick)
+    document.addEventListener('click', this.onToolbarClick)
+    document.addEventListener('click', this.onDocumentClick)
+    document.addEventListener('selectionchange', this.onSelectionChange)
     document.addEventListener('pjax:success', this.onPjaxSuccess)
+    document.addEventListener('pjax:send', this.hideToolbar)
+    const main = document.querySelector('main')
+    if (main !== null) {
+      main.addEventListener('scroll', this.hideToolbar, { passive: true })
+    }
     this.restoreHighlights()
     this.applyFavoriteState()
+    this.syncAnnotateButton()
+    this.applyAnnotateColor()
   }
 }
 

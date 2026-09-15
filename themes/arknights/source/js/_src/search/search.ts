@@ -367,4 +367,10 @@ interface ResultItem {
       EscapeSearch()
     }
   })
+  // 供选中文字工具栏调用：展开搜索、预填关键词（截断至输入框 maxlength）并触发检索
+  ;(window as any).searchWithKeyword = (keyword: string): void => {
+    openSearch(true)
+    input.value = keyword.slice(0, input.maxLength)
+    input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }))
+  }
 })()

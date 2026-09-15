@@ -334,4 +334,9 @@
             EscapeSearch();
         }
     });
+    window.searchWithKeyword = (keyword) => {
+        openSearch(true);
+        input.value = keyword.slice(0, input.maxLength);
+        input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+    };
 })();
