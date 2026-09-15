@@ -999,6 +999,11 @@ ol.navContent {
   padding: 0;
   list-style: none;
 }
+@media (min-width: 1024px) {
+  ol.navContent {
+    margin-right: auto;
+  }
+}
 .navItem {
   position: relative;
   display: block;
@@ -1557,9 +1562,6 @@ header.nav-open .navBtnIconBar:nth-child(3) {
     box-sizing: border-box;
     border: none;
     background-color: var(--theme-search-bg);
-  }
-  .navContent + #search-header {
-    margin-left: auto;
   }
   #search-header .navItemTitle {
     flex: 1;
@@ -2133,6 +2135,11 @@ header.nav-open .navBtnIconBar:nth-child(3) {
 }
 .topbar-social a img {
   height: 1em;
+}
+@media (min-width: 1024px) {
+  .topbar-social {
+    margin-left: 0;
+  }
 }
 #giscus * {
   cursor: var(--cursor-data) 3 3, default !important;
