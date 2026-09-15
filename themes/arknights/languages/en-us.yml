@@ -6,6 +6,7 @@ page:
   noTag: empty
   noCategory: NO CATEGORY
   sticky: TOP
+  expandNav: Expand navigation
 
 vercount:
   loading: "loading..."

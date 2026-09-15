@@ -1,144 +1,69 @@
+:root
+  // 顶栏高度：全断点统一 56px；--search-row-h 为移动端栏下整行搜索框高度（1px 上边框 + 56px 内容）
+  --topbar-h 56px
+  --search-row-h 57px
+
 header
-  pointer-events none
+  position sticky
   top 0
   z-index 15
-  height 100%
+  box-sizing border-box
+  width 100%
+  height var(--topbar-h)
+  display flex
+  align-items center
+  padding 0 12px
   font-family Bender
-  display inline
-  position sticky
+  background-color var(--theme-bg-trans0)
 
 nav
-  position relative
+  flex 1
+  min-width 0
   height 100%
-  white-space nowrap
-  scrollbar-width none
   display flex
-  flex-direction column
-  justify-content center
-  &::-webkit-scrollbar
-    display none
-  &::-ms-scrollbar
-    display none
-  li
-    display block
+  align-items center
+  white-space nowrap
 
-.navBlock
-  transition unset
-  position relative
-  height 32px
-  line-height 32px
-  display inline-block
-  width 100%
-  padding unset
-  margin 6px 0
-  &:hover
-    background-color unset
-  &:active
-    background unset
-  &::after
-    content ''
-    display block
-    position absolute
-    top 0
-    bottom 0
-    left 0
-    width 0
-    transition width .3s
-    background-color var(--theme-highlight)
-    z-index -1
-  &:hover::after
-    width 100%
-.navContent
-  overflow visible
-  margin unset
-  position relative
+ol.navContent
+  margin 0
   padding 0
-  pointer-events all
+  list-style none
 
 .navItem
-  overflow visible
   position relative
-  margin unset
-  transition .6s
-  .navItemTitle
-    transition .3s
-    width 100%
-    box-sizing border-box
-    overflow-wrap break-word
-    white-space normal
-    position relative
-    display block
-    text-shadow unset
-.active > .navBlock > .navItemTitle
-  color var(--theme-highlight)
-.navBlock:hover > .navItemTitle
-  color var(--theme-text-rev)
+  display block
+  margin 0
 
-@media ( min-width 769px )
-  // 选择器带 main 前缀：特异性高于主题 header/layout 的 `header { left: 0/238px/unset }`，保证收起态生效
-  main header
-    position fixed
-    left -100%
-    top 0
-    transition left .3s
-    background-color var(--theme-bg-trans0)
-    &.expanded
-      left 0
-  main header.expanded .navExpand
-    opacity 0
-    pointer-events none
-  .navBtn
-    display none
-  main header nav
-    transform none
-  .navExpand
-    position fixed
-    left 0
-    top 50%
-    transform translateY(-50%)
-    z-index 16
-    border unset
-    border-radius 0
-    height 40px
-    padding 0 10px
-    font-size 15px
-    line-height 1
-    color var(--theme-text-rev)
-    background-color var(--theme-bg-light)
-    pointer-events auto
-    transition opacity .3s
-    cursor pointer
-    &::after
-      content ''
-      display block
-      position absolute
-      top 0
-      left 0
-      width 0
-      height 100%
-      transition width .3s
-      background-color var(--theme-highlight)
-      z-index -1
-    &:hover::after
-      width 100%
-  // 导航项左侧竖条（参考搜索框）：未选中灰、选中蓝；覆盖主题原版 :only-child 右竖条与 hover 文字左移
-  main .navContent .navBlock > .navItemTitle::before
-    content ''
-    display block
-    position absolute
-    top 0
-    left 0
-    height 100%
-    box-sizing border-box
-    border-right unset
-    border-left 4px solid var(--theme-border-light)
-  main .active > .navBlock > .navItemTitle::before
-    border-left-color var(--theme-highlight)
-  main .navContent .navBlock:hover > .navItemTitle
-    margin-left unset
-  // 桌面端搜索时保持菜单项可见：覆盖 _modules/search/left.styl 的 `.search .navItem:not(#search-header)` 滑出效果
-  // 悬浮面板下菜单被清空会呈现"导航栏直接关闭"；搜索弹窗在右侧展开（width 32%），与左侧面板不冲突
-  @media ( min-width 1024px )
-    main header nav.search .navItem:not(#search-header)
-      transform none
-      pointer-events auto
+.navBlock, .navSecond
+  position relative
+  display block
+  color var(--theme-text-light)
+  transition background-color .3s, color .3s
+
+.navItemTitle
+  position relative
+  display block
+  box-sizing border-box
+  overflow-wrap break-word
+  transition color .3s
+
+// hover / 当前页：蓝块 + 黑字（覆盖 change.styl 的标题文字阴影）
+.navBlock:hover,
+.navSecond:hover,
+.navItem.active > .navBlock,
+.navItem.active > .navSecond
+  background-color var(--theme-highlight)
+  & > .navItemTitle
+    color var(--theme-text-hover)
+    text-shadow none
+
+// 焦点环：内缩的主题反差色，避免主题蓝在浅色底上对比不足（WCAG 2.4.7 / 1.4.11）
+:is(.navBtn, .searchBtn, .navBlock, .navSecond, #search-input):focus-visible
+  outline 2px solid var(--theme-text-light)
+  outline-offset -2px
+
+@media (prefers-reduced-motion: reduce)
+  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar
+    transition none
+
+// 注：≥769px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl

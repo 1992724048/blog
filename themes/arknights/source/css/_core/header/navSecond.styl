@@ -1,47 +1,70 @@
 .navItemList
   display none
-  overflow visible
-  top 0
-  text-align left
-  background-color var(--theme-background)
+  margin 0
   padding 0
-  width 100%
-  .navItem
-    padding unset
-    min-width max-content
-    margin 0
-  a
-    min-width max-content
-    padding 0
-    display block
-    width 100%
-    line-height 40px
-    &:hover > .navItemTitle
-      color var(--theme-text-hover)
+  list-style none
 
+// 展开态（点击切换；.expanded 兼容挂在 .navItem / .navBlock / .navSecond）
+.navItem.expanded > :is(.navBlock, .navSecond) > .navItemList,
+:is(.navBlock, .navSecond).expanded > .navItemList
+  display block
+
+// 带子菜单的标题右端展开箭头（.navItemTitle 有兄弟节点时）
+.navItemTitle:not(:only-child)::after
+  content ''
+  display inline-block
+  box-sizing border-box
+  width 7px
+  height 7px
+  margin-left 8px
+  border-right 2px solid var(--theme-highlight)
+  border-bottom 2px solid var(--theme-highlight)
+  transform translateY(-2px) rotate(45deg)
+  transition transform .3s
+
+.navItem.expanded > :is(.navBlock, .navSecond) > .navItemTitle::after,
+:is(.navBlock, .navSecond).expanded > .navItemTitle::after
+  transform translateY(1px) rotate(-135deg)
+
+// 移动端：手风琴（缩进 + 整行 44px 触控高度）
 @media ( max-width 1023px )
   .navItemList
-    padding-left 1em
-  .expanded
-    & > .navItemList
-      display inline-block
-    & > .navItemTitle::before
-      transform rotate(135deg)
+    flex-basis 100%
+    padding-left 20px
+  .navItemList > .navItem > :is(.navBlock, .navSecond)
+    display flex
+    align-items center
+    flex-wrap wrap
+    box-sizing border-box
+    min-height 44px
+    padding 8px 0
+  .navContent .navItemTitle
+    display flex
+    align-items center
+    justify-content space-between
 
+// 桌面端：顶栏下悬停展开的面板（二级可向右展开三级）
 @media ( min-width 1024px )
-  .navSecond
-    left 0
-    transition .3s
-    position relative
-    &:hover
-      transition .3s
-    &:hover::after
-      content ''
-      position absolute
-      height 100%
-      width 100%
-      top 0
+  .navItem:hover > :is(.navBlock, .navSecond) > .navItemList
+    display block
   .navItemList
     position absolute
-  .navItem > div:hover > .navItemList
-    display inline-block
+    top 100%
+    left 0
+    z-index 5
+    min-width 160px
+    box-sizing border-box
+    padding 6px 0
+    background-color var(--theme-bg-trans0)
+    border 1px solid var(--theme-border-soft)
+    box-shadow 0 6px 16px rgba(0, 0, 0, .18)
+  .navItemList .navItemList
+    top 0
+    left 100%
+  .navItemList > .navItem > :is(.navBlock, .navSecond)
+    display flex
+    align-items center
+    box-sizing border-box
+    min-width max-content
+    padding 0 16px
+    line-height 40px

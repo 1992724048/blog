@@ -13,23 +13,13 @@ mixin expand_list(list)
         a.navSecond(href= url_for(url))
           span.navItemTitle= label
 
-header.closed
-  .navBtn
+header.topbar
+  button.navBtn(type="button" aria-label=__('page.expandNav') aria-expanded="false")
     i.navBtnIcon
       span.navBtnIconBar
       span.navBtnIconBar
       span.navBtnIconBar
-  button.navExpand(type="button" aria-label=__('page.expandNav')) »
   nav
-    if searchConfig !== null
-      .navItem#search-header
-        span.navItemTitle
-          input(autocomplete="off" autocorrect="off" autocapitalize="none"
-            placeholder=__('search.blurHolder') spellcheck="false" maxlength="50"
-            type="text" id="search-input")
-      .navItem#search-holder
-      .search-popup(tabindex="0")
-        #search-result
     ol.navContent
       - var finalMenu = {}
       each url, label in theme.menu
@@ -50,3 +40,16 @@ header.closed
           else
             a.navBlock(href= url_for(item.url))
               span.navItemTitle= item.label
+    if searchConfig !== null
+      .navItem#search-header
+        span.navItemTitle
+          input(autocomplete="off" autocorrect="off" autocapitalize="none"
+            placeholder=__('search.blurHolder') aria-label=__('search.blurHolder')
+            spellcheck="false" maxlength="50" type="text" id="search-input")
+      .search-popup(tabindex="0")
+        #search-result
+  if searchConfig !== null
+    button.searchBtn(type="button" aria-label=__('search.blurHolder'))
+      svg.searchBtnIcon(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        circle(cx="11" cy="11" r="8")
+        path(d="M21 21l-4.35-4.35")

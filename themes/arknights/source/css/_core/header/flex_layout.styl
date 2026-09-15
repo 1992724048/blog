@@ -1,68 +1,67 @@
-@media ( max-width 768px )
-  header
-    left 0
-    .navContent
-      padding-left 0
-
+// ===== 顶栏响应式布局
+// ≤1023px：☰ / 搜索图标按钮 + 顶栏下全宽下拉（菜单 / 搜索行）
 @media ( max-width 1023px )
-  main header
-    width max(428px, 100% - 200px)
-    max-width 100%
-    position fixed
-  nav
-    max-width 428px
-    height max-content
-    min-height 100vh
-    background-color var(--theme-bg-trans0)
-    transform translateX(-100%)
-    transition transform .6s
-    pointer-events all
-  .navItem
-    padding .2em 4em
-  .navContent
+  .navBtn, .searchBtn
+    display flex
+
+  ol.navContent
+    position absolute
+    top 100%
+    left 0
+    right 0
+    z-index 10
+    box-sizing border-box
+    max-height calc(100vh - var(--topbar-h))
     overflow-y auto
+    flex-direction column
+    align-items stretch
+    background-color var(--theme-bg-trans0)
+    visibility hidden
+    opacity 0
+    transform translateY(-6px)
+    transition opacity .2s, transform .2s, visibility 0s .2s
+
+  header.nav-open ol.navContent
+    visibility visible
+    opacity 1
+    transform none
+    transition opacity .2s, transform .2s
+
+  .navContent > .navItem
     width 100%
-    transition transform .6s
-  .navBlock
-    padding unset
-    box-sizing border-box
-  .navItemTitle
-    padding 0 .2em 5px .2em
-    color var(--theme-text-light)
-    border-bottom 1px solid var(--theme-unimportant)
-  .active > div > .navItemTitle::before
-    border-color var(--theme-highlight)
-  .expanded > nav
-    transform translateX(0)
-  .navItemList
-    box-sizing border-box
+    border-top 1px solid var(--theme-border-soft)
+    &:first-child
+      border-top unset
 
+  .navContent > .navItem > :is(.navBlock, .navSecond)
+    display flex
+    align-items center
+    flex-wrap wrap
+    box-sizing border-box
+    min-height 48px
+    padding 10px 20px
+
+  .navContent .navItemTitle
+    flex 1
+    font-size 15px
+
+// ≥1024px：导航平铺 + 右侧常驻搜索框；☰ / 搜索图标按钮隐藏
 @media ( min-width 1024px )
-  header
-    width 180px
-  .navItem
-    width 120px
-  .navBlock
-    position relative
-    List-sum = 0
-    for i in hexo-config('menu')
-      List-sum += 3
-    if hexo-config('search') && hexo-config('search.enable')
-      List-sum += 2
-    padding (30em / List-sum) 0
-  .navItemTitle
-    color var(--theme-text-light)
-    &::before
-      height 100%
-      top 0
-      box-sizing border-box
+  // 选择器带 main 前缀：保证特异性高于 header.styl 的基础内边距（导入顺序在后）
+  main header
+    padding 0 24px
 
-@media ( min-width 1440px )
-  header
-    width 240px
-  .navItem
-    width 150px
+  .navBtn, .searchBtn
+    display none
 
-@media ( min-width 1912px )
-  header
-    width 310px
+  ol.navContent
+    height 100%
+
+  .navContent > .navItem
+    height 100%
+
+  .navContent > .navItem > .navBlock
+    display flex
+    align-items center
+    height 100%
+    padding 0 20px

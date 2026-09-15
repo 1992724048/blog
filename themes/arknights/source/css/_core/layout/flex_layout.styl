@@ -1,6 +1,10 @@
 @media ( max-width 768px )
   main
     padding 0 12px
+  main header
+    // 顶栏全宽贴边：抵消 main 的 12px 内边距
+    width calc(100% + 24px)
+    margin 0 -12px
   article
     border none
     width 100%
@@ -82,7 +86,11 @@
 @media ( min-width 769px )
   main
     display flex
+    flex-wrap wrap
     justify-content space-between
+  // 顶栏独占首行，article / aside 排布在下方
+  main header
+    flex 0 0 100%
   article
     margin-left 20px
     width calc(100% - 170px - 20px)
@@ -91,7 +99,8 @@
   #to-index
     display none
   aside
-    top 0
+    top var(--topbar-h)
+    height calc(100vh - var(--topbar-h))
     width 170px
     h1
       font-size xx-large
@@ -139,7 +148,7 @@
     display block
     position relative
 @media ( min-width 1912px )
-  // 与 aside 的 2.5% 边距对称：左侧留出同宽空间（header 悬浮后不再占用布局）
+  // 与 aside 的 2.5% 边距对称：左侧留出同宽空间
   article
     margin-left 2.5%
     width calc(100% - 270px - 7.5%)
