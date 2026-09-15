@@ -1,4 +1,4 @@
-// 底部按钮组：单列 flex 栈（DOM 顺序即视觉顺序、数量可扩展）；锚点右下角 8px
+// 底部按钮组：右列单列 flex 栈（DOM 顺序即视觉顺序、数量可扩展），锚点右下角 8px；工具箱独立锚定左下角 8px（与 #color-mode 底缘齐平）
 .bottom-btn
   position sticky
   bottom 0
@@ -92,13 +92,16 @@
       transform translate(0, -50%) rotate(-45deg) scaleX(1.2)
 
 // 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 切换由 JS 侧 toolbox.toggle() 负责）
-// 扇形几何：以工具箱按钮为原点，半径 58px、角度 180° / 157.5° / 135° 向左上张开（与右侧列左缘净空 ≥1px；≤768 移动端不出视口）
+// 独立锚定 .bottom-btn 左下角 left/bottom 8px——与右列 #color-mode 底缘齐平（桌面 sticky / ≤768 fixed 同锚）
+// 扇形几何：以工具箱按钮为原点，半径 58px、角度 0° / 22.5° / 45° 向右上张开（各断点均在视口内；与右侧按钮列净空充足）
 // 层叠规则：扇形容量 3 个；第 4 个起沿原点层叠成堆（不展开），随工具数量可扩展
 .bottom-btn .toolbox
-  position relative
+  position absolute
+  left 8px
+  bottom 8px
   display flex
   flex-direction column
-  align-items flex-end
+  align-items flex-start
 .bottom-btn .toolbox-toggle
   z-index 3
 .bottom-btn .toolbox-open .toolbox-toggle
@@ -124,25 +127,25 @@
   transform translate(0, 0)
   transition transform .24s cubic-bezier(.2, .8, .3, 1.1), opacity .18s ease-out, visibility 0s linear .24s, background-color .2s, color .2s
 .bottom-btn .toolbox-item:nth-child(1)
-  --fan-x -58px
+  --fan-x 58px
   --fan-y 0px
-  --pull-x -10px
+  --pull-x 10px
   --pull-y 0px
 .bottom-btn .toolbox-item:nth-child(2)
-  --fan-x -54px
+  --fan-x 54px
   --fan-y -22px
-  --pull-x -9px
+  --pull-x 9px
   --pull-y -4px
 .bottom-btn .toolbox-item:nth-child(3)
-  --fan-x -41px
+  --fan-x 41px
   --fan-y -41px
-  --pull-x -7px
+  --pull-x 7px
   --pull-y -7px
 .bottom-btn .toolbox-item:nth-child(4)
-  --fan-x -4px
+  --fan-x 4px
   --fan-y -4px
 .bottom-btn .toolbox-item:nth-child(n+5)
-  --fan-x -8px
+  --fan-x 8px
   --fan-y -8px
 .bottom-btn .toolbox-open .toolbox-item
   opacity 1

@@ -1,4 +1,4 @@
-//- 底部按钮组：.bottom-btn-stack 单列 flex 栈（DOM 顺序即视觉顺序）；工具箱展开态类 .toolbox-open（交互由 JS 侧 toolbox.* 实现）
+//- 底部按钮组：右列 .bottom-btn-stack 单列 flex 栈（DOM 顺序即视觉顺序）；工具箱独立锚定左下角（与 #color-mode 底缘齐平）；展开态类 .toolbox-open（交互由 JS 侧 toolbox.* 实现）
 .bottom-btn
   .bottom-btn-stack
     button#to-top.i-top(type="button" onClick="scrolls.scrolltop();" title=__('btn.totop') aria-label=__('btn.totop') style="opacity: 0; display: none;")
@@ -22,30 +22,30 @@
         svg.i-icon.i-sun(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
           circle(cx="12" cy="12" r="5")
           path(d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42")
-    .toolbox
-      button#to-toolbox.toolbox-toggle(type="button" onclick="toolbox.toggle()" aria-expanded="false" aria-controls="toolbox-items" title=__('btn.toolbox') aria-label=__('btn.toolbox'))
-        svg.i-icon.i-toolbox(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
-          path(d="M2 9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z")
-          path(d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2")
-          path(d="M2 13h20")
-      .toolbox-items#toolbox-items
-        button.toolbox-item.toolbox-annotate(type="button" onclick="toolbox.annotate()" title=__('btn.annotate') aria-label=__('btn.annotate'))
-          svg.i-icon.i-annotate(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
-            path(d="m9 11-6 6v3h9l3-3")
-            path(d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4")
-        button.toolbox-item.toolbox-share(type="button" onclick="toolbox.share()" title=__('btn.share') aria-label=__('btn.share'))
-          svg.i-icon.i-share(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
-            circle(cx="18" cy="5" r="3")
-            circle(cx="6" cy="12" r="3")
-            circle(cx="18" cy="19" r="3")
-            path(d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98")
-          svg.i-icon.i-check(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
-            path(d="M20 6L9 17l-5-5")
-        button.toolbox-item.toolbox-favorite(type="button" onclick="toolbox.favorite()" title=__('btn.favorite') aria-label=__('btn.favorite') aria-pressed="false" data-label-default=__('btn.favorite') data-label-saved=__('btn.favorited'))
-          svg.i-icon.i-star(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
-            polygon(points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2")
     if theme.bgm.enable
       button.i-bgm(type="button" onclick="BgmControl()" title="BGM" aria-label="BGM")
         svg(id="bgm-control" viewBox="0 0 30 34" fill=theme.bgm.autoplay ? "#18d1ff" : "currentColor" style="width: 24px; transition: transform .3s;margin-top: 4px")
           path(d="M25.998 23.422V11.29h3.999v12.132h-3.999zM19.497 6.234h4.001v22.243h-4.001V6.234zM12.998.867h4v32.978h-4V.867zm-6.5 5.367h4.001v22.243H6.498V6.234zm-6.5 5.056h4v12.132h-4V11.29z")
         audio(id='bgm' src=theme.bgm.src autoplay=theme.bgm.autoplay loop=theme.bgm.loop crossorigin='anonymous') 
+  .toolbox
+    button#to-toolbox.toolbox-toggle(type="button" onclick="toolbox.toggle()" aria-expanded="false" aria-controls="toolbox-items" title=__('btn.toolbox') aria-label=__('btn.toolbox'))
+      svg.i-icon.i-toolbox(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+        path(d="M2 9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z")
+        path(d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2")
+        path(d="M2 13h20")
+    .toolbox-items#toolbox-items
+      button.toolbox-item.toolbox-annotate(type="button" onclick="toolbox.annotate()" title=__('btn.annotate') aria-label=__('btn.annotate'))
+        svg.i-icon.i-annotate(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+          path(d="m9 11-6 6v3h9l3-3")
+          path(d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4")
+      button.toolbox-item.toolbox-share(type="button" onclick="toolbox.share()" title=__('btn.share') aria-label=__('btn.share'))
+        svg.i-icon.i-share(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+          circle(cx="18" cy="5" r="3")
+          circle(cx="6" cy="12" r="3")
+          circle(cx="18" cy="19" r="3")
+          path(d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98")
+        svg.i-icon.i-check(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+          path(d="M20 6L9 17l-5-5")
+      button.toolbox-item.toolbox-favorite(type="button" onclick="toolbox.favorite()" title=__('btn.favorite') aria-label=__('btn.favorite') aria-pressed="false" data-label-default=__('btn.favorite') data-label-saved=__('btn.favorited'))
+        svg.i-icon.i-star(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+          polygon(points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2")
