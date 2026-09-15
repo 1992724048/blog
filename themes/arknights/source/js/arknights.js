@@ -917,10 +917,6 @@ class Header {
             } while (!(may = getParent(may)).classList.contains('navContent'));
         }
     };
-    markMoving = () => {
-        this.header.classList.add('nav-moving');
-        setTimeout(() => this.header.classList.remove('nav-moving'), 300);
-    };
     closeByEscape = (event) => {
         if (event.key === 'Escape') {
             this.close();
@@ -944,7 +940,6 @@ class Header {
         }
         this.header.classList.add('nav-open');
         this.button.setAttribute('aria-expanded', 'true');
-        this.markMoving();
         document.addEventListener('click', this.inHeader);
     };
     close = (item = this.header) => {
@@ -959,7 +954,6 @@ class Header {
         document.removeEventListener('click', this.inHeader);
         this.header.classList.remove('nav-open');
         this.button.setAttribute('aria-expanded', 'false');
-        this.markMoving();
     };
     reverse = (item = this.header) => {
         if (!this.readyRev) {

@@ -275,13 +275,25 @@
   input.addEventListener('focus', () => {
     StartSearch()
   })
+  // 点按搜索图标（含按钮内 SVG）应保持输入：作为 blur / focusout 的豁免目标，不触发 EscapeSearch
+  function isSearchBtnTarget(target) {
+    return target !== null && searchBtn !== null &&
+      (target === searchBtn ||
+        (typeof target.closest === 'function' && target.closest('.searchBtn') === searchBtn))
+  }
   input.addEventListener('blur', event => {
+    if (isSearchBtnTarget(event.relatedTarget)) {
+      return
+    }
     if (!event.relatedTarget ||
       event.relatedTarget.parentElement !== getElement('#search-result')) {
       EscapeSearch()
     }
   })
   popup.addEventListener('focusout', event => {
+    if (isSearchBtnTarget(event.relatedTarget)) {
+      return
+    }
     if (!event.relatedTarget ||
       (event.relatedTarget !== input &&
         event.relatedTarget.parentElement !== getElement('#search-result'))) {

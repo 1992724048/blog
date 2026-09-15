@@ -45,11 +45,6 @@ class Header {
     }
   }
 
-  private markMoving = () => {
-    this.header.classList.add('nav-moving')
-    setTimeout(() => this.header.classList.remove('nav-moving'), 300)
-  }
-
   private closeByEscape = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       this.close()
@@ -75,7 +70,6 @@ class Header {
     }
     this.header.classList.add('nav-open')
     this.button.setAttribute('aria-expanded', 'true')
-    this.markMoving()
     document.addEventListener('click', this.inHeader)
   }
 
@@ -91,7 +85,6 @@ class Header {
     document.removeEventListener('click', this.inHeader)
     this.header.classList.remove('nav-open')
     this.button.setAttribute('aria-expanded', 'false')
-    this.markMoving()
   }
 
   public reverse = (item: Element = this.header) => {
