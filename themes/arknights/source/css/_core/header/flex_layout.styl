@@ -48,8 +48,9 @@
 // ≥1024px：导航平铺 + 右侧常驻搜索框；☰ / 搜索图标按钮隐藏
 @media ( min-width 1024px )
   // 选择器带 main 前缀：保证特异性高于 header.styl 的基础内边距（导入顺序在后）
+  // 右侧内边距 0：右侧簇（社交图标 + 搜索框）紧贴视口右缘，无空白
   main header
-    padding 0 24px
+    padding 0 0 0 24px
 
   .navBtn, .searchBtn
     display none
@@ -65,3 +66,7 @@
     align-items center
     height 100%
     padding 0 20px
+
+  // 图标态菜单项：水平内边距收窄（按钮变窄），命中区仍为全高 36px（≥24px）
+  .navContent > .navItem > .navBlock.navBlockIcon
+    padding 0 12px

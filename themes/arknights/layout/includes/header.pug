@@ -29,17 +29,30 @@ header.topbar
           - finalMenu[url_for(url)] = {url: url, label: label}
       each item in Object.values(finalMenu)
         - var match = null
+        - var menuIcon = theme.menu_icons && theme.menu_icons[item.label]
         if typeof(item.url) === "string" && item.url.match(config.archive_dir)
           - match = config.category_dir + ',' + config.tag_dir
         li.navItem(matchdata=match)
           if typeof(item.url) === "object"
-            .navBlock
-              span.navItemTitle= item.label
+            .navBlock(class= menuIcon ? 'navBlockIcon' : null title= menuIcon ? item.label : null)
+              span.navItemTitle
+                if menuIcon
+                  i(class= menuIcon aria-hidden='true')
+                else
+                  = item.label
               ol.navItemList
                 +expand_list(item.url)
           else
-            a.navBlock(href= url_for(item.url))
-              span.navItemTitle= item.label
+            a.navBlock(
+              href= url_for(item.url)
+              class= menuIcon ? 'navBlockIcon' : null
+              title= menuIcon ? item.label : null
+              aria-label= menuIcon ? item.label : null)
+              span.navItemTitle
+                if menuIcon
+                  i(class= menuIcon aria-hidden='true')
+                else
+                  = item.label
     if theme.social
       .topbar-social
         each value, name in theme.social

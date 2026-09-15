@@ -27,6 +27,12 @@ menu:
   # Contact: contact/
   归档: archives/
 
+# 导航菜单图标：键 = 菜单项文字，值 = FontAwesome 类名
+# 配置后该项仅显示图标（悬停显示文字提示），未配置的菜单项回退显示文字
+menu_icons:
+  首页: fa-solid fa-house
+  归档: fa-solid fa-box-archive
+
 # 侧边栏
 aside:
   in_left: false # 侧边栏在左 true / false

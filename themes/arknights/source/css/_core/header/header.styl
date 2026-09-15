@@ -61,6 +61,12 @@ ol.navContent
     color var(--theme-text-hover)
     text-shadow none
 
+// 图标态菜单项（menu_icons 配置生效）：标题仅含图标，图标随标题继承色 / 悬停反色，尺寸随菜单字号
+// 图标渲染在 .navItemTitle 内（避免触发子菜单展开箭头选择器的「非仅子」判定）
+.navBlockIcon > .navItemTitle
+  display flex
+  align-items center
+
 // 焦点环：内缩的主题反差色，避免主题蓝在浅色底上对比不足（WCAG 2.4.7 / 1.4.11）
 :is(.navBtn, .searchBtn, .navBlock, .navSecond, #search-input, .topbar-social a):focus-visible
   outline 2px solid var(--theme-text-light)

@@ -69,17 +69,13 @@
     align-self flex-end
     margin-bottom -1px
     box-sizing border-box
-    // 白底搜索框：默认 / 悬停 / 焦点环均按白底取色，深浅色主题一致
-    border 1px solid rgba(0, 0, 0, .1)
+    // 无可见边框：全透明 1px 边框保留原几何（图标 / 输入区尺寸与命中区不变，白底裁到 padding-box）；
     // 底边透明 + 背景裁到 padding-box：顶栏底线从搜索框下缘连续穿过（底线即框底边，无双线 / 无断线）
-    border-bottom-color transparent
+    border 1px solid transparent
     background-color #fff
     background-clip padding-box
     transition border-color .3s
-    &:hover
-      border-color #767676
-      border-bottom-color transparent
-    // 焦点环画在整框上（含放大镜图标），键盘 / 点击聚焦均清晰可见
+    // 焦点环画在整框上（含放大镜图标），键盘 / 点击聚焦均清晰可见；底边保持透明，底线不断
     &:focus-within
       border-color var(--theme-highlight)
       border-bottom-color transparent
@@ -110,14 +106,14 @@
   #search-input:focus-visible
     outline none
 
-// 搜索结果弹层：桌面锚定顶栏下方右对齐（right=24、宽 480px 上限 + max-width 100vw-48px）；移动端全宽
+// 搜索结果弹层：桌面锚定顶栏下方右对齐（right=0，右缘与搜索框 / 视口右缘对齐；宽 480px 上限 + max-width 100vw）；移动端全宽
 .search-popup
   position absolute
   top 100%
-  right 24px
+  right 0
   z-index 20
   width 480px
-  max-width calc(100vw - 48px)
+  max-width 100vw
   height calc(100vh - var(--topbar-h))
   box-sizing border-box
   overflow-y auto
