@@ -33,8 +33,8 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
 
 // 头像悬停角标：紧贴图片边缘的左下 / 右上两枚取景框式短角线（≥769px；≤768px 时 logo 图片被固定到视口外）
 // 覆盖层与 1:1 图片逐像素重合（top 5px 对齐上方 img 的 margin-top，width 100% + aspect-ratio 1），
-// 再经 transform 沿对角外移「线粗」2px——角线内缘与图片边缘相接（贴边不留缝、不压头像）
-// 角线长度 = 图片边长 1/4.5（calc(100% / 4.5)）、粗细 2px；颜色 var(--theme-highlight)（#2bf，两主题同色）
+// 再经 transform 沿对角外移「线粗」4px——角线内缘与图片边缘相接（贴边不留缝、不压头像）
+// 角线长度 = 图片边长 1/4.5（calc(100% / 4.5)）、粗细 4px；颜色 var(--theme-highlight)（#2bf，两主题同色）
 @media ( min-width 769px )
   #logo
     position relative
@@ -50,16 +50,16 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
       transition opacity .3s
       background-repeat no-repeat
       background-image linear-gradient(var(--theme-highlight), var(--theme-highlight)), linear-gradient(var(--theme-highlight), var(--theme-highlight))
-    // 左下角标：L 绘于覆盖层左下角，整层向左下错开 2px → 角线沿图片左下角外侧贴边
+    // 左下角标：L 绘于覆盖层左下角，整层向左下错开 4px → 角线沿图片左下角外侧贴边
     &::before
-      transform translate(-2px, 2px)
+      transform translate(-4px, 4px)
       background-position left bottom, left bottom
-      background-size calc(100% / 4.5) 2px, 2px calc(100% / 4.5)
-    // 右上角标：L 绘于覆盖层右上角，整层向右上错开 2px → 角线沿图片右上角外侧贴边
+      background-size calc(100% / 4.5) 4px, 4px calc(100% / 4.5)
+    // 右上角标：L 绘于覆盖层右上角，整层向右上错开 4px → 角线沿图片右上角外侧贴边
     &::after
-      transform translate(2px, -2px)
+      transform translate(4px, -4px)
       background-position right top, right top
-      background-size calc(100% / 4.5) 2px, 2px calc(100% / 4.5)
+      background-size calc(100% / 4.5) 4px, 4px calc(100% / 4.5)
   #logo:hover::before, #logo:hover::after,
   #logo:focus-visible::before, #logo:focus-visible::after
     opacity 1
