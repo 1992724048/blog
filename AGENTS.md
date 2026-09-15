@@ -18,6 +18,18 @@
 - **构建时区**：CI 使用 `TZ=Asia/Shanghai`（否则文章 URL 日期差一天），本地构建同样注意
 - **正文字体加载**：HarmonyOS Sans SC 经 jsDelivr 分包 CDN 按需加载（`harmonyos-sans-sc-webfont-splitted@1.1.0`，unicode-range 分包、版本锁死），`Regular.css` / `Bold.css` 链接在 `themes/arknights/layout/includes/meta-data.pug`；本地不再自托管全量字体（`source/fonts/` 已移除）
 
+## 本地定制地图
+
+主题为 vendored 上游代码 + 本地定制，改动优先下列位置（同步上游时注意冲突）：
+
+| 定制点 | 位置 | 说明 |
+| --- | --- | --- |
+| 站点自定义样式 | `themes/arknights/source/css/_custom/custom.styl` | 字体栈 / 头像留白；`arknights.styl` 以 `@import '_custom/*'` 通配导入 |
+| 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify 等 |
+| JS 源码（TS） | `themes/arknights/source/js/_src/` | 主入口 `tsconfig.json` → `arknights.js`；`search/search.ts`（独立 tsconfig）→ `search.js` |
+| 中文字体 | `themes/arknights/layout/includes/meta-data.pug` | HarmonyOS Sans SC，jsDelivr 分包 CDN（`@1.1.0` 版本锁死） |
+| 缓存版本号（三处） | `meta-data.pug` `cssVersion` / `js-data.pug` `jsVersion` / `_config.arknights.yml` `stylesheets`（备用） | 对应产物变更后同步递增，避免 Cloudflare / 浏览器缓存旧版 |
+
 ## Source Tree
 
 ```
@@ -48,7 +60,7 @@ docs/superpowers/             # 设计与计划文档
 ## Verification
 
 - 无自动化测试；改动后自测 = `npm run server` 本地预览相关页面
-- 临时脚本 / 产物放 `.temp/`（已 gitignore），用完清理
+- 临时脚本 / 产物放 `.temp/`（已 gitignore），用完清理；`node .temp/nav-smoke.js` 为顶栏 / 搜索交互的 jsdom 冒烟脚本（读 `public/`），改动导航后可用于回归
 
 ## Conventions & Gotchas
 
