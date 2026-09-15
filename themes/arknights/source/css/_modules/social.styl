@@ -26,3 +26,10 @@
 
     img
       height 1em
+
+// ≥1024：右簇右锚改由 ol.navContent margin-right auto 承担（社交块被拦截隐藏时依然右贴）；
+// 社交自身 margin-left 归零，保证全断点恰有一条 auto 链、无双 auto 分摊
+@media ( min-width 1024px )
+  .topbar-social
+    margin-left 0
+// ≤1023：navContent / search-header 均为下拉 / 常驻特殊位，nav 内仅社交入流，自身 auto 右贴搜索按钮左侧（维持现状）

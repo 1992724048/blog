@@ -74,9 +74,6 @@
     // 无任何边框 / 轮廓（含焦点态）：盒体底色与输入框同值（--theme-search-bg）直接铺满内容区，消除透明边框条造成的上 / 侧缝隙
     border none
     background-color var(--theme-search-bg)
-  // 无社交图标（.topbar-social 缺失）时搜索框自身贴右；有社交图标时由 .topbar-social 接管自动边距
-  .navContent + #search-header
-    margin-left auto
   #search-header .navItemTitle
     flex 1
     min-width 0

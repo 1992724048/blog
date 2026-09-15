@@ -48,6 +48,13 @@ ol.navContent
   padding 0
   list-style none
 
+// ≥1024 右簇右锚：自动边距改由菜单列表右侧承担（社交块被广告拦截隐藏 / 移除后，右簇仍整体贴右；
+// 原 .topbar-social margin-left auto 在元素 display:none 后锚即失效）。
+// 须晚于上方 margin 0 生效：本文件编译序在 flex_layout.styl 之后，同文件按源码序即可
+@media ( min-width 1024px )
+  ol.navContent
+    margin-right auto
+
 .navItem
   position relative
   display block
