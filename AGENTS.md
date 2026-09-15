@@ -14,6 +14,7 @@
 - 主题 JS 源码为 TypeScript：`themes/arknights/source/js/_src/**/*.ts` → 产物 `themes/arknights/source/js/arknights.js`；编译用 `tsc -p source/js/_src/tsconfig.json`（主题目录无 node_modules，需自行准备 tsc）
 - **缓存版本号**：修改 `source/css/custom.css` 后，同步递增 `_config.arknights.yml` 中对应资源的版本号参数，避免 Cloudflare / 浏览器缓存旧版
 - **构建时区**：CI 使用 `TZ=Asia/Shanghai`（否则文章 URL 日期差一天），本地构建同样注意
+- **正文字体加载**：HarmonyOS Sans SC 经 jsDelivr 分包 CDN 按需加载（`harmonyos-sans-sc-webfont-splitted@1.1.0`，unicode-range 分包、版本锁死），`Regular.css` / `Bold.css` 链接在 `themes/arknights/layout/includes/meta-data.pug`；本地不再自托管全量字体（`source/fonts/` 已移除）
 
 ## Source Tree
 

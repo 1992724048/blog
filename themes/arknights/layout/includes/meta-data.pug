@@ -21,6 +21,10 @@ link(
 link(rel="preload", as="font", crossorigin="anonymous", href=url_for("font/Bender.ttf"))
 link(rel="preload", as="font", crossorigin="anonymous", href=url_for("font/BenderLight.woff2"))
 link(rel="preload", as="font", crossorigin="anonymous", href=url_for('font/JetBrainsMono-Regular.woff2'))
+//- 中文字体：HarmonyOS Sans SC 分包 CSS（jsDelivr CDN，版本锁定 1.1.0，unicode-range 按需加载）
+link(rel='preconnect', href='https://cdn.jsdelivr.net', crossorigin)
+link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css')
+link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css')
 link(rel="stylesheet", href=url_for("css/arknights.css"))
 style.
   @font-face {

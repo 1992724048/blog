@@ -1,18 +1,4 @@
-/* 自定义样式：鸿蒙字体 */
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
+/* 自定义样式：鸿蒙字体经 jsDelivr 分包 CDN 加载（Regular.css / Bold.css，链接见 themes/arknights/layout/includes/meta-data.pug） */
 
 /* 正文使用鸿蒙字体（代码块仍保留等宽字体） */
 body,
