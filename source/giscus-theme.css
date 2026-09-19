@@ -1,0 +1,185 @@
+/**
+ * Giscus 自定义主题 — 匹配 arknights 博客配色
+ * 通过 prefers-color-scheme 匹配系统明暗主题
+ * 去圆角 + 导航栏背景色 + 模糊效果
+ */
+
+/* ===== 浅色主题（默认） ===== */
+:root {
+  --color-bg: rgba(244, 245, 246, .85);
+  --color-bg-solid: #f4f5f6;
+  --color-bg-secondary: rgba(244, 245, 246, .95);
+  --color-border: #d0d7de;
+  --color-border-muted: #d8dee4;
+  --color-text: #1f2328;
+  --color-text-secondary: #656d76;
+  --color-accent: #2bf;
+  --color-accent-hover: #1a8fdf;
+  --color-btn-bg: rgba(244, 245, 246, .95);
+  --color-btn-bg-hover: rgba(0, 0, 0, .06);
+  --color-btn-border: #d0d7de;
+  --color-code-bg: rgba(0, 0, 0, .04);
+}
+
+/* ===== 深色主题 ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: rgba(20, 21, 22, .85);
+    --color-bg-solid: #141516;
+    --color-bg-secondary: rgba(20, 21, 22, .95);
+    --color-border: #30363d;
+    --color-border-muted: #21262d;
+    --color-text: #e6edf3;
+    --color-text-secondary: #8b949e;
+    --color-accent: #2bf;
+    --color-accent-hover: #4cc8ff;
+    --color-btn-bg: rgba(20, 21, 22, .95);
+    --color-btn-bg-hover: rgba(255, 255, 255, .06);
+    --color-btn-border: #30363d;
+    --color-code-bg: rgba(255, 255, 255, .04);
+  }
+}
+
+/* ===== 基础 ===== */
+.giscus, .giscus-frame {
+  color-scheme: light dark;
+  border-radius: 0 !important;
+}
+
+/* ===== 整体容器去圆角 ===== */
+.giscus {
+  border-radius: 0 !important;
+}
+
+/* ===== 头部 ===== */
+.giscus-header {
+  border-bottom-color: var(--color-border) !important;
+  border-radius: 0 !important;
+}
+
+/* ===== 评论区 ===== */
+.giscus-comment {
+  border-bottom-color: var(--color-border) !important;
+  border-radius: 0 !important;
+}
+
+.giscus-comment-body {
+  color: var(--color-text) !important;
+}
+
+.giscus-comment-body pre {
+  background-color: var(--color-code-bg) !important;
+  border-color: var(--color-border) !important;
+  border-radius: 0 !important;
+}
+
+.giscus-comment-body code {
+  background-color: var(--color-code-bg) !important;
+  color: var(--color-text) !important;
+  border-radius: 0 !important;
+}
+
+/* ===== 用户名与时间 ===== */
+.giscus-comment-author {
+  color: var(--color-text) !important;
+}
+
+.giscus-comment-date {
+  color: var(--color-text-secondary) !important;
+}
+
+/* ===== 反应按钮 ===== */
+.giscus-reaction-button {
+  background-color: var(--color-btn-bg) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: 0 !important;
+}
+
+.giscus-reaction-button:hover {
+  background-color: var(--color-btn-bg-hover) !important;
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent) !important;
+}
+
+.giscus-reaction-button.giscus-reaction-count {
+  color: var(--color-text-secondary) !important;
+}
+
+/* ===== 回复按钮 ===== */
+.giscus-reply-button {
+  background-color: transparent !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: 0 !important;
+}
+
+.giscus-reply-button:hover {
+  background-color: var(--color-btn-bg-hover) !important;
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent) !important;
+}
+
+/* ===== 输入区 ===== */
+.giscus-input {
+  background-color: var(--color-bg-solid) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+  border-radius: 0 !important;
+}
+
+.giscus-input:focus {
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 3px rgba(0x2b, 0xbf, 0xff, .15) !important;
+}
+
+.giscus-input::placeholder {
+  color: var(--color-text-secondary) !important;
+}
+
+/* ===== 提交按钮 ===== */
+.giscus-submit-button {
+  background-color: var(--color-accent) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.giscus-submit-button:hover {
+  background-color: var(--color-accent-hover) !important;
+}
+
+/* ===== 标签页 ===== */
+.giscus-tab {
+  color: var(--color-text-secondary) !important;
+  border-bottom-color: transparent !important;
+  border-radius: 0 !important;
+}
+
+.giscus-tab.giscus-tab-selected {
+  color: var(--color-accent) !important;
+  border-bottom-color: var(--color-accent) !important;
+}
+
+/* ===== 加载状态 ===== */
+.giscus-loading {
+  color: var(--color-text-secondary) !important;
+}
+
+/* ===== Avatar ===== */
+.giscus-avatar {
+  border-radius: 0 !important;
+}
+
+/* ===== 建议 / 标注 ===== */
+.giscus-note {
+  background-color: var(--color-bg-secondary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: 0 !important;
+}
+
+/* ===== 展开/收起按钮 ===== */
+.giscus-toggle-button {
+  border-radius: 0 !important;
+}

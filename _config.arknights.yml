@@ -23,14 +23,14 @@ background_image:
 # 导航栏
 menu:
   首页: ""
-  # About: about/
-  # Contact: contact/
+  关于: about/
   归档: archives/
 
 # 导航菜单图标：键 = 菜单项文字，值 = FontAwesome 类名
 # 配置后该项仅显示图标（悬停显示文字提示），未配置的菜单项回退显示文字
 menu_icons:
   首页: fa-solid fa-house
+  关于: fa-solid fa-user
   归档: fa-solid fa-box-archive
 
 # 侧边栏
@@ -177,14 +177,15 @@ giscus:
 
   # 主题配置 - 三种配置方式任选其一：
   # 方式一：使用单一主题（固定主题，不随网站主题切换）
-  # theme: preferred_color_scheme # 主题，可选值详见 README.md 或 giscus 官网
+  # theme: preferred_color_scheme # 主题，可选值: light | dark | preferred_color_scheme | transparent_dark
 
   # 方式二：分别设置明暗主题（推荐，支持主题自动切换）
   theme_light: light # 亮色模式主题
   theme_dark: dark # 暗色模式主题
 
-  # 方式三：使用自定义 CSS（高级用法）
-  # theme: https://your-domain.com/path/to/custom-giscus-theme.css
+  # 方式三：使用自定义 CSS（高级用法，需公网可访问 URL）
+  # 部署后改为: theme: https://issuimo.com/giscus-theme.css
+  # theme: /giscus-theme.css
 
   lang: zh-CN # 语言，可选值: de | en | es | fr | gsw | id | it | ja | ko | pl | ro | ru | tr | vi | zh-CN | zh-TW
   loading: lazy # 懒加载，可选值: lazy | 留空表示不使用懒加载
@@ -219,7 +220,109 @@ scripts:
 
 terms:
   list:
+    # === 编程语言与标准 ===
+    - term: "C++"
+      url: "https://isocpp.org/"
+    - term: "C++20"
+      url: "https://en.cppreference.com/w/cpp/20"
+    - term: "C#"
+      url: "https://learn.microsoft.com/zh-cn/dotnet/csharp/"
+    - term: "DPC++"
+      url: "https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html"
+    - term: "Fortran"
+      url: "https://fortran-lang.org/"
+    - term: "Dart"
+      url: "https://dart.dev/"
+    - term: "Flutter"
+      url: "https://flutter.dev/"
+    - term: "Python"
+      url: "https://www.python.org/"
+    - term: "Java"
+      url: "https://www.java.com/"
+    - term: "ASM"
+      url: "https://en.wikipedia.org/wiki/Assembly_language"
+    # === 框架与库 ===
+    - term: "ASP.NET"
+      url: "https://dotnet.microsoft.com/zh-cn/apps/aspnet"
+    - term: "WPF"
+      url: "https://learn.microsoft.com/zh-cn/dotnet/desktop/wpf/"
+    - term: "WinForm"
+      url: "https://learn.microsoft.com/zh-cn/dotnet/desktop/winforms/"
+    - term: "Hexo"
+      url: "https://hexo.io/zh-cn/"
+    # === 开发工具 ===
+    - term: "CLion"
+      url: "https://www.jetbrains.com/clion/"
+    - term: "Visual Studio"
+      url: "https://visualstudio.microsoft.com/"
+    - term: "Rider"
+      url: "https://www.jetbrains.com/rider/"
+    - term: "VS Code"
+      url: "https://code.visualstudio.com/"
+    - term: "WebStorm"
+      url: "https://www.jetbrains.com/webstorm/"
+    - term: "PyCharm"
+      url: "https://www.jetbrains.com/pycharm/"
+    - term: "dotUltimate"
+      url: "https://www.jetbrains.com/dotultimate/"
+    - term: "CMake"
+      url: "https://cmake.org/"
+    - term: "Docker"
+      url: "https://www.docker.com/"
+    - term: "Git"
+      url: "https://git-scm.com/"
+    - term: "GitHub"
+      url: "https://github.com/"
+    # === 硬件与嵌入式 ===
     - term: "ESP32"
       url: "https://docs.espressif.com/projects/esp-idf/zh_CN/latest/"
+    - term: "ESP-IDF"
+      url: "https://docs.espressif.com/projects/esp-idf/zh_CN/latest/"
+    - term: "Xtensa"
+      url: "https://www.cadence.com/en_US/home/tools/ip/tensilica-ip/xtensa-processor.html"
+    # === 分析与调试 ===
+    - term: "Intel VTune"
+      url: "https://www.intel.com/content/www/us/en/developer/tools/oneapi/vtune-profiler.html"
+    - term: "Intel Advisor"
+      url: "https://www.intel.com/content/www/us/en/developer/tools/oneapi/advisor.html"
+    - term: "IDA"
+      url: "https://hex-rays.com/ida-pro/"
+    - term: "Ghidra"
+      url: "https://ghidra-sre.org/"
+    # === 数据库 ===
+    - term: "MySQL"
+      url: "https://www.mysql.com/"
+    # === 设计与工程 ===
+    - term: "FreeCAD"
+      url: "https://www.freecad.org/"
+    - term: "Altium Designer"
+      url: "https://www.altium.com/altium-designer"
+    - term: "LabPlot"
+      url: "https://labplot.kde.org/"
+    # === 安全与逆向 ===
     - term: "XOR"
       url: "https://en.wikipedia.org/wiki/XOR_gate"
+    - term: "CBC"
+      url: "https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC)"
+    - term: "Huffman"
+      url: "https://en.wikipedia.org/wiki/Huffman_coding"
+    - term: "shellcode"
+      url: "https://en.wikipedia.org/wiki/Shellcode"
+    # === AI 与开发理念 ===
+    - term: "DeepSeek"
+      url: "https://www.deepseek.com/"
+    - term: "ChatGPT"
+      url: "https://chat.openai.com/"
+    - term: "Claude Code"
+      url: "https://docs.anthropic.com/en/docs/claude-code"
+    - term: "Kimi"
+      url: "https://kimi.moonshot.cn/"
+    - term: "vibe coding"
+      url: "https://en.wikipedia.org/wiki/Vibe_coding"
+    # === 领域概念 ===
+    - term: "HPC"
+      url: "https://en.wikipedia.org/wiki/High-performance_computing"
+    - term: "PCB"
+      url: "https://en.wikipedia.org/wiki/Printed_circuit_board"
+    - term: "Minecraft"
+      url: "https://www.minecraft.net/"
