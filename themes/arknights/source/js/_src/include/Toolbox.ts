@@ -6,6 +6,7 @@ interface HighlightRange {
   start: number
   length: number
   color?: string
+  text?: string
 }
 
 interface TextLayout {
@@ -427,10 +428,13 @@ class Toolbox {
     return range
   }
 
-  private wrapRange = (range: Range, color: string): boolean => {
+  private wrapRange = (range: Range, color: string, text?: string): boolean => {
     const mark = document.createElement('mark')
     mark.className = 'hl-mark'
     mark.setAttribute('data-color', color)
+    if (text !== undefined) {
+      mark.setAttribute('data-text', text)
+    }
     try {
       range.surroundContents(mark)
       return true
@@ -538,8 +542,11 @@ class Toolbox {
     let wrapped = false
     gaps.forEach((gap) => {
       const gapRange = this.rangeFromOffsets(this.textLayout(article), gap.start, gap.end)
-      if (gapRange !== null && this.wrapRange(gapRange, this.currentAnnotateColor())) {
-        wrapped = true
+      if (gapRange !== null) {
+        const text = gapRange.toString()
+        if (this.wrapRange(gapRange, this.currentAnnotateColor(), text)) {
+          wrapped = true
+        }
       }
     })
     if (wrapped) {
@@ -548,6 +555,10 @@ class Toolbox {
   }
 
   private onMarkClick = (event: MouseEvent): void => {
+    // 标注模式下点击标注文字不移除——由工具栏「清除」按钮操作
+    if (this.isAnnotating()) {
+      return
+    }
     const target = event.target as Element | null
     if (target === null || typeof target.closest !== 'function') {
       return
@@ -715,9 +726,13 @@ class Toolbox {
       const offsets = this.markOffsets(mark, layout)
       if (offsets !== null) {
         const color = this.markColor(mark)
+        const text = mark.getAttribute('data-text') || undefined
         const item: HighlightRange = { start: offsets.start, length: offsets.end - offsets.start }
         if (color !== 'yellow') {
           item.color = color
+        }
+        if (text !== undefined) {
+          item.text = text
         }
         ranges.push(item)
       }
@@ -741,7 +756,8 @@ class Toolbox {
           const range = item as Partial<HighlightRange>
           if (typeof range.start === 'number' && typeof range.length === 'number' && range.start >= 0 && range.length > 0) {
             const color = typeof range.color === 'string' && Toolbox.ANNOTATE_COLORS.includes(range.color) ? range.color : 'yellow'
-            ranges.push({ start: range.start, length: range.length, color: color })
+            const text = typeof range.text === 'string' ? range.text : undefined
+            ranges.push({ start: range.start, length: range.length, color: color, text: text })
           }
         })
       }
@@ -756,7 +772,7 @@ class Toolbox {
     ranges.forEach((item) => {
       const range = this.rangeFromOffsets(this.textLayout(article), item.start, item.start + item.length)
       if (range !== null) {
-        this.wrapRange(range, item.color ?? 'yellow')
+        this.wrapRange(range, item.color ?? 'yellow', item.text)
       }
     })
   }

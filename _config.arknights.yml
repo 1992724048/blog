@@ -26,6 +26,7 @@ menu:
   关于: about/
   项目: projects/
   友链: links/
+  数据: data/
   归档: archives/
 
 # 导航菜单图标：键 = 菜单项文字，值 = FontAwesome 类名
@@ -35,6 +36,7 @@ menu_icons:
   关于: fa-solid fa-circle-info
   项目: fa-solid fa-folder-open
   友链: fa-solid fa-link
+  数据: fa-solid fa-database
   归档: fa-solid fa-box-archive
 
 # 侧边栏
