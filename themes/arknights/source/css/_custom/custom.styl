@@ -272,3 +272,49 @@ blockquote.alert
 @media (prefers-reduced-motion: reduce)
   #logo::before, #logo::after, .spoiler, .spoiler::after
     transition none
+
+// 项目页面 Grid 卡片布局
+.projects-grid
+  display grid
+  grid-template-columns repeat(auto-fill, minmax(200px, 1fr))
+  gap 16px
+
+.project-card
+  display block
+  padding 3px
+  border-radius 0
+  background var(--theme-bg-soft)
+  transition background .2s
+  cursor pointer
+  text-decoration none
+  color inherit
+  position relative
+  &:hover
+    background var(--theme-bg-soft-hover)
+    &::before
+      opacity 1
+  &::before
+    content ''
+    position fixed
+    left calc(var(--mx, -9999) * 1px + 16px)
+    top calc(var(--my, -9999) * 1px + 16px)
+    width 50vw
+    aspect-ratio 16 / 9
+    border 3px solid var(--theme-bg-soft)
+    background-image var(--card-img)
+    background-size cover
+    background-position center
+    opacity 0
+    pointer-events none
+    transition opacity .2s ease
+    z-index 100
+  img
+    width 100%
+    aspect-ratio 16 / 10
+    object-fit cover
+    display block
+  .project-name
+    padding 10px 12px
+    font-weight bold
+    color var(--theme-text-light)
+    text-align center
