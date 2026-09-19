@@ -15,11 +15,4 @@ type: projects
 </a>
 </div>
 
-<script>
-document.querySelectorAll('.project-card').forEach(function(card) {
-  card.addEventListener('mousemove', function(e) {
-    card.style.setProperty('--mx', e.clientX);
-    card.style.setProperty('--my', e.clientY);
-  });
-});
-</script>
+<script src="/js/project-tooltip.js"></script>
