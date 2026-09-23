@@ -668,23 +668,26 @@ blockquote.alert
   background-color #909399
 .ai-badge--notreview .ai-badge__status
   background-color #E6A23C
-// 悬停图例：徽标上方浮层，列四态标签（对应底色）+ 介绍；display none 不占位，hover 展示
+// 悬停图例：徽标下方浮层，列四态标签（对应底色）+ 介绍；display none 不占位，hover 展示
 .ai-badge__tip
   position absolute
   left 0
-  bottom calc(100% + 6px)
+  top calc(100% + 6px)
   z-index 30
   display none
   flex-direction column
   gap 4px
   min-width max-content
   padding 8px 10px
-  background-color var(--theme-bg-light)
-  border 1px solid var(--theme-subcolor)
-  box-shadow 0 4px 12px rgba(0, 0, 0, .18)
-  font-size 12px
+  // 跟随主题的半透明背景，叠加轻度毛玻璃；不设边框，避免与标签色块产生额外分割线
+  background-color var(--theme-bg-trans1)
+  -webkit-backdrop-filter blur(8px)
+  backdrop-filter blur(8px)
+  box-shadow 0 4px 12px rgba(0, 0, 0, .12)
+  font-size 11px
   font-weight normal
   letter-spacing normal
+  line-height 1.4
   white-space nowrap
   color var(--theme-text)
 .ai-badge:hover .ai-badge__tip
@@ -697,6 +700,7 @@ blockquote.alert
   display flex
   align-items center
   gap 8px
+  line-height 1.4
 .ai-badge__tip-tag
   display inline-flex
   align-items center
@@ -704,6 +708,7 @@ blockquote.alert
   font-family 'JetBrains Mono', monospace
   font-size 11px
   font-weight 600
+  line-height 1.4
   letter-spacing .05em
   color #000
   // 底色复用四态（与 .ai-badge--* .ai-badge__status 同值）
