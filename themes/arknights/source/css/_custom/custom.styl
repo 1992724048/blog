@@ -206,8 +206,9 @@ header
     // 关原生标记改 ::before 自绘：原生 inside 标记与文字间距由字体字形边距决定、偏大且不可调
     list-style none
     // task-list / terms-ref 各自占用 li::before（复选框 / 计数角标），不覆盖
+    // > li 仅直接子项：避免后代选择把 • 漏进嵌套 ol > li（有序列表应保留原生数字）
     &:not(.task-list):not(.terms-ref)
-      li
+      > li
         &::before
           content '•'
           margin-right .3em
