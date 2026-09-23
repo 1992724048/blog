@@ -681,8 +681,8 @@ blockquote.alert
   padding 8px 10px
   // 跟随主题的半透明背景，叠加轻度毛玻璃；不设边框，避免与标签色块产生额外分割线
   background-color var(--theme-bg-trans1)
-  -webkit-backdrop-filter blur(8px)
-  backdrop-filter blur(8px)
+  -webkit-backdrop-filter blur(4px)
+  backdrop-filter blur(4px)
   box-shadow 0 4px 12px rgba(0, 0, 0, .12)
   font-size 11px
   font-weight normal
@@ -696,11 +696,17 @@ blockquote.alert
   font-weight 600
   color var(--theme-text-light)
   margin-bottom 2px
+.ai-badge__tip-table
+  display grid
+  gap 4px
 .ai-badge__tip-row
-  display flex
+  display grid
+  grid-template-columns auto 1fr
   align-items center
   gap 8px
   line-height 1.4
+.ai-badge__tip-cell
+  min-width 0
 .ai-badge__tip-tag
   display inline-flex
   align-items center

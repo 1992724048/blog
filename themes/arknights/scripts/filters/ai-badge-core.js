@@ -18,9 +18,9 @@ const BADGES = {
 const TIP_ROWS = Object.values(BADGES)
   .map(
     (b) =>
-      `<span class="ai-badge__tip-row">` +
-      `<span class="ai-badge__tip-tag ai-badge--${b.key}">${b.label}</span>` +
-      `<span class="ai-badge__tip-desc">${b.desc}</span>` +
+      `<span class="ai-badge__tip-row" role="row">` +
+      `<span class="ai-badge__tip-cell ai-badge__tip-tag ai-badge--${b.key}" role="cell">${b.label}</span>` +
+      `<span class="ai-badge__tip-cell ai-badge__tip-desc" role="cell">${b.desc}</span>` +
       `</span>`
   )
   .join('')
@@ -39,7 +39,9 @@ const renderBadge = (badge, text) =>
   (text ? `<span class="ai-badge__text">${text}</span>` : '') +
   `<span class="ai-badge__tip" role="tooltip">` +
   `<span class="ai-badge__tip-title">AI 生成内容标记</span>` +
+  `<span class="ai-badge__tip-table" role="table">` +
   TIP_ROWS +
+  `</span>` +
   `</span>` +
   '</span>'
 
