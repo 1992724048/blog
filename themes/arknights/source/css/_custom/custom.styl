@@ -124,15 +124,22 @@ header
     backdrop-filter blur(8px)
     overflow hidden
     // 内容区：隔行换色
+    // padding-left 须带 #post-content 前缀压过 #post-content ul 的 0.25em（1,0,0 > 0,2,0），否则左缘泄漏缩进
     ul
       margin 0
       padding 0
+      padding-left 0
       list-style none
+    // li 左距 8px：收窄列表文字相对 h4 标题（12px）的左侧空白，条纹底色更贴卡片左缘
     li
-      padding 6px 12px
+      padding 6px 8px
       color var(--theme-text-light)
       &:nth-child(even)
         background-color rgba(0, 0, 0, .04)
+
+// tools ul 的 #post-content 泄漏补偿：#post-content ul { padding-left: .25em } 特异性 (1,0,0) 压过 .tools-group ul (0,2,0)
+#post-content .tools-grid .tools-group ul
+  padding-left 0
 
 // 标题栏：4px 主题蓝底边；须带 #post-content 前缀压过 #post-content h4 的 display:flex 与 font-size:1.3em（1,0,1 > 0,2,0）
 #post-content .tools-grid .tools-group h4
