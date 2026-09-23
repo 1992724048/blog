@@ -1,84 +1,90 @@
 ---
-title: Core Ultra 9 285K 的 iGPU 能打过 CPU 吗？——SYCL 五内存模式实测
+title: Core Ultra 9 285K 的 iGPU 能打过 CPU 吗？SYCL 五内存模式实测
 date: 2026-09-23
 tags: [C++, SYCL, 性能测试, GPU]
 categories: [性能测试]
 ---
 
-## 结论先行
+[&]AI|EDIT|测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改|
 
-同一套算法（两侧逐语句一致的实现），在 Intel Core Ultra 9 285K 的 CPU（串行 + 24 线程 TBB）与核显（SYCL 五种内存分配模式）上各跑一遍，结果**胜负分化非常明显**，不存在"谁全面碾压谁"：
+## 测试结果
 
-| 测试项 | CPU tbb_24 | GPU 最佳值 | 胜者 | 倍率 |
-| --- | --- | --- | --- | --- |
-| GEMM 算力 | 355.4 GFLOP/s | 160.9 GFLOP/s | CPU | 2.2× |
-| 压缩吞吐 | 11169.4 MB/s | 448.8 MB/s | CPU | 24.9× |
-| 读带宽 | 66.6 GB/s | 61.0 GB/s | CPU | 1.1× |
-| FFT 吞吐 | 43.1 MSamples/s | 145.4 MSamples/s | GPU | 3.4× |
-| 查询吞吐 | 122.7 Mqueries/s | 444.8 Mqueries/s | GPU | 3.6× |
-| 写带宽 | 54.0 GB/s | 87.6 GB/s | GPU | 1.6× |
-| 拷贝带宽 | 78.1 GB/s | 77.8 GB/s | 平手 | ≈1.0× |
+相同的算法，在 Intel Core Ultra 9 285K 的 CPU 与 核显(iGPU) 上各跑一遍的测试结果：
 
-一句话规律：**规则的数据并行（FFT、批量查找、流式写入）GPU 赢；分支密集 / 串行依赖重（压缩哈希表）与高并行算力密集（分块 GEMM）CPU 赢**。另外 iGPU 没有独立显存、与 CPU 共享 DDR5，主机↔设备传输是绕不开的额外开销（256 MiB 上传约 16.5 ms）。
+| 测试项    | CPU (24 Core)    | iGPU (64 EU)     | 最优设备               | 倍率  |
+| --------- | ---------------- | ---------------- | ---------------------- | ----- |
+| GEMM 算力 | 355.4 GFLOP/s    | 160.9 GFLOP/s    | CPU                    | 2.2×  |
+| 压缩吞吐  | 11169.4 MB/s     | 448.8 MB/s       | CPU                    | 24.9× |
+| 读带宽    | 66.6 GB/s        | 61.0 GB/s        | CPU                    | 1.1×  |
+| FFT 吞吐  | 43.1 MSamples/s  | 145.4 MSamples/s | iGPU                   | 3.4×  |
+| 查询吞吐  | 122.7 Mqueries/s | 444.8 Mqueries/s | iGPU                   | 3.6×  |
+| 写带宽    | 54.0 GB/s        | 87.6 GB/s        | iGPU                   | 1.6×  |
+| 拷贝带宽  | 78.1 GB/s        | 77.8 GB/s        | 误差范围内表现视为相同 | ≈1.0× |
 
-## 测试平台与方法
+## 测试平台与细节
 
-| 项目 | 配置 |
-| --- | --- |
-| CPU | Intel Core Ultra 9 285K，D2D / NGU 3200 MHz |
-| 内存 | DDR5-6400 CL32 48 GB × 2 |
-| iGPU | Arrow Lake-S 核显（Xe 架构，oneAPI 设备名 `Intel(R) Graphics`），共享系统内存 |
-| 编程模型 | SYCL 2020（Intel oneAPI DPC++ Compiler 2026.1） |
-| CPU 侧并行 | oneTBB 2023.1，24 线程（`tbb_24`）；另含串行基线（`serial`） |
-| 构建 | Visual Studio 2026，两侧均 Release |
+| 项目       | 配置                                                                          |
+| ---------- | ----------------------------------------------------------------------------- |
+| CPU        | Intel Core Ultra 9 285K，**D2D/NGU Up to 3200 MHz**                           |
+| 内存       | DDR5-6400 CL32 48 GB × 2                                                      |
+| iGPU       | Arrow Lake-S 核显（Xe 架构，oneAPI 设备名 `Intel(R) Graphics`），共享系统内存 |
+| 编程模型   | SYCL 2020（Intel oneAPI DPC++ Compiler 2026.1）                               |
+| CPU 侧并行 | oneTBB 2023.1，24 线程（`tbb_24`）；另含串行基线（`serial`）                  |
+| 构建       | Visual Studio 2026，Intel oneAPI Toolkit 2026.1，两侧均 Release               |
 
-**测试设计的几个关键点：**
+**测试细节**
 
-- **两侧算法同源**：zip / FFT 为逐语句镜像实现，数据生成确定性同源，每项内置 PASS/FAIL 校验（zip 解压回读逐字节比对、FFT/GEMM 与 CPU 参考对照、lookup 校验和跨程序一致），保证结果可跨程序对照。
-- **GPU 五种内存模式**：`malloc_device` / `malloc_host` / `malloc_shared` / `usm_allocator`（`sycl::usm_allocator` + `std::vector`）/ `buffer`（纯 buffer + accessor），每种模式独立实现、独立计时。
-- **计时口径**：两侧统一 `std::chrono::steady_clock` 主机端计时（提交 → 等待完成取时间差），队列不开 profiling；每项 warmup 1 次 + 重复 3 次**取最优值**。
-- **全量规模**（非 quick 冒烟档）：zip 128 MiB / 2048 块、FFT n = 4,194,304（2²²）复数点、GEMM n = 4096、lookup 1,048,576 次查询、带宽数组 256 MiB、指针追逐 4,194,304 步。
+- **GPU 内存模式**：`malloc_device` / `malloc_host` / `malloc_shared` / `usm_allocator`（`sycl::usm_allocator` + `std::vector`）/ `buffer`（sycl::buffer + sycl::accessor）
+- **计时设计**：统一使用 `std::chrono::steady_clock` 主机端计时，SYCL 未使用 profiling；每项 warmup 1 次 + 重复 3 次**取最优值**。
+- **测试规模**：zip 128 MiB / 2048 块、FFT n = 4,194,304（2²²）复数点、GEMM n = 4096、lookup 1,048,576 次查询、带宽数组 256 MiB、指针追逐 4,194,304 步。
 
-## 五项核心对比
+## 测试项目对比
 
 ### 1. 内存带宽：写入 GPU 强，读取 CPU 略胜，拷贝平手
 
 **Workload**：256 MiB 数组的 read / write / copy 顺序访问，`GB/s = 字节数 / 时间`（copy 为 2×字节数）。
 
-| 来源 | 读取 (GB/s) | 写入 (GB/s) | 拷贝 (GB/s) |
-| --- | --- | --- | --- |
-| CPU serial | 7.6 | 18.1 | 47.3 |
-| CPU tbb_24 | **66.6** | 54.0 | **78.1** |
-| GPU malloc_device | 61.0 | **87.6** | 76.1 |
-| GPU malloc_host | 56.2 | 64.1 | 75.8 |
-| GPU malloc_shared | 55.7 | 64.0 | 75.3 |
-| GPU usm_allocator | 53.9 | 61.5 | 71.1 |
-| GPU buffer | 56.5 | 64.0 | 77.8 |
+| 来源              | 读取 (GB/s) | 写入 (GB/s) | 拷贝 (GB/s) |
+| ----------------- | ----------- | ----------- | ----------- |
+| CPU serial        | 7.6         | 18.1        | 47.3        |
+| CPU tbb_24        | **66.6**    | 54.0        | **78.1**    |
+| GPU malloc_device | 61.0        | **87.6**    | 76.1        |
+| GPU malloc_host   | 56.2        | 64.1        | 75.8        |
+| GPU malloc_shared | 55.7        | 64.0        | 75.3        |
+| GPU usm_allocator | 53.9        | 61.5        | 71.1        |
+| GPU buffer        | 56.5        | 64.0        | 77.8        |
 
-**为什么拷贝平手？** 双方挤在 71–78 GB/s——**iGPU 与 CPU 共享同一条 DDR5**（DDR5-6400 双通道理论峰值 102.4 GB/s），物理上限本来就是同一个；copy 指标 = 实际总线流量，78 GB/s 已是理论峰值的约 76%，两边都摸到了同一条天花板。
+1. **为什么拷贝平手？**
 
-**为什么 GPU 写入（87.6）比 CPU（54.0）快？** 两侧写内核是同样的"逐元素填充"循环，差在 CPU 写路径受 **RFO（Read-For-Ownership，写前读）机制**拖累：
+- 双方处在 71–78.1 GB/s 区间，**iGPU 与 CPU 共享同一条 DDR5**（DDR5-6400 双通道理论峰值 102.4 GB/s），物理上限本来就是同一个；copy 指标 = 实际总线流量，78.1 GB/s 已是理论峰值的约 76%，两边都触及了代码执行所能到达的最大峰值性能 (跑满带宽需要更大的数组)。
 
-- CPU 缓存写是 write-allocate 策略：要写入的缓存行不在缓存时，必须先发一次 **RFO 读——把整行读回来取得所有权**，然后才能标脏、逐级淘汰写回。一次"写"实际混入一次读往返，RFO 读流量还额外占用 DDR5 带宽，流水线被缓存行粒度的分配—标脏—写回拖住；
-- GPU 把数千 work-item 的写**合并成大段连续写**，以大块粒度取得行所有权、避开逐行 RFO 往返，直接灌满内存控制器的写队列——同一条 DDR5，GPU 的写路径少了 RFO 开销，有效吞吐推得更满。
+1. **为什么 GPU 写入（87.6 GB/s）比 CPU（54.0 GB/s）快？**
 
-**为什么 CPU 读（66.6）又能略胜 GPU 读（61.0）？** 读内核两侧其实不同构：CPU 是一段可被 AVX2 完全向量化的紧致求和循环，硬件预取器把顺序读拉满；GPU 读用的是 SYCL `reduction`（树形归约），**测的不是纯读带宽**——额外的归约组合与同步开销混在指标里。共享 DDR5 下纯读上限本就同量级，这点结构差异足以让 CPU "略胜"。
+- 两侧实现都是"单个元素填充"循环，CPU 写路径受微架构中 **RFO（Read-For-Ownership，写前读）机制**影响：
+  - CPU 缓存写是 write-allocate 策略：要写入的缓存行不在缓存时，必须先发一次 **RFO 读——把整行读回来取得所有权**，然后才能标脏、逐级淘汰写回。一次"写"实际混入一次读往返，RFO 读流量还额外占用 DDR5 带宽，流水线被缓存行粒度的分配—标脏—写回拖住；
+  - GPU 把数千 work-item 的写**合并成大段连续写**，以大块粒度取得行所有权、避开逐行 RFO 往返，直接灌满内存控制器的写队列——同一条 DDR5，GPU 的写路径少了 RFO 开销，有效吞吐推得更满。
 
-**为什么串行版低到 7.6 / 18.1？** 单线程发出的未完成访存请求数有限，打不满多通道内存控制器（读的求和还有累加依赖链）；写侧靠合并缓冲吸收，所以串行写（18.1）反而高于串行读（7.6）。这类带宽测试对并发访存请求数极为敏感。
+1. **为什么 CPU 读（66.6）又能略胜 GPU 读（61.0）？**
+
+- 读内核两侧其实不同构：CPU 是一段可被 AVX2 完全向量化的紧致求和循环，硬件预取器把顺序读拉满；GPU 读用的是 SYCL `reduction`（树形归约），**测的不是纯读带宽**——额外的归约组合与同步开销混在指标里。共享 DDR5 下纯读上限本就同量级，这点结构差异足以让 CPU "略胜"。
+
+1. **为什么 CPU 串行版低到 7.6 GB/s / 18.1 GB/s？**
+
+- 单线程发出的未完成访存请求数有限，打不满多通道内存控制器（读的求和还有累加依赖链）；写侧靠合并缓冲吸收，所以串行写（18.1）反而高于串行读（7.6）。这类带宽测试对并发访存请求数极为敏感。
 
 ### 2. GEMM 矩阵乘：CPU 大胜
 
 **Workload**：分块矩阵乘，n = 4096，算力口径 `2·n³ / t`；TBB 按行块并行。
 
-| 来源 | GEMM 算力 (GFLOP/s) |
-| --- | --- |
-| CPU serial | 23.3 |
-| CPU tbb_24 | **355.4** |
-| GPU malloc_device | 160.9 |
-| GPU malloc_shared | 157.1 |
-| GPU usm_allocator | 157.0 |
-| GPU buffer | 156.9 |
-| GPU malloc_host | 156.2 |
+| 来源              | GEMM 算力 (GFLOP/s) |
+| ----------------- | ------------------- |
+| CPU serial        | 23.3                |
+| CPU tbb_24        | **355.4**           |
+| GPU malloc_device | 160.9               |
+| GPU malloc_shared | 157.1               |
+| GPU usm_allocator | 157.0               |
+| GPU buffer        | 156.9               |
+| GPU malloc_host   | 156.2               |
 
 tbb_24 打出 355.4 GFLOP/s，是 GPU 最佳值（160.9）的 **2.2 倍**。GPU 五种内存模式彼此差距不到 3%——**算力瓶颈不在分配方式上**。
 
@@ -88,15 +94,15 @@ tbb_24 打出 355.4 GFLOP/s，是 GPU 最佳值（160.9）的 **2.2 倍**。GPU 
 
 **Workload**：radix-2 就地 FFT，n = 4,194,304 复数点，算力口径 `5·n·log2(n)`；GPU 侧 22 个蝶形 pass + 1 个 bit-reversal 共 23 次内核提交。
 
-| 来源 | FFT 吞吐 (MSamples/s) | FFT 算力 (GFLOP/s) |
-| --- | --- | --- |
-| CPU serial | 19.0 | 2.1 |
-| CPU tbb_24 | 43.1 | 4.7 |
-| GPU malloc_device | **145.4** | **16.0** |
-| GPU malloc_shared | 140.1 | 15.4 |
-| GPU usm_allocator | 139.8 | 15.4 |
-| GPU malloc_host | 139.7 | 15.4 |
-| GPU buffer | 125.3 | 13.8 |
+| 来源              | FFT 吞吐 (MSamples/s) | FFT 算力 (GFLOP/s) |
+| ----------------- | --------------------- | ------------------ |
+| CPU serial        | 19.0                  | 2.1                |
+| CPU tbb_24        | 43.1                  | 4.7                |
+| GPU malloc_device | **145.4**             | **16.0**           |
+| GPU malloc_shared | 140.1                 | 15.4               |
+| GPU usm_allocator | 139.8                 | 15.4               |
+| GPU malloc_host   | 139.7                 | 15.4               |
+| GPU buffer        | 125.3                 | 13.8               |
 
 GPU 最佳是 tbb_24 的 **3.4 倍**。`buffer` 模式在这里掉了约 14%（125.3 vs 145.4），是五模式中差距最大的一项。
 
@@ -113,15 +119,15 @@ FFT 是"独立小运算 + 规则访存"的教科书场景，正是 GPU 的主场
 
 **Workload**：1,048,576 个查询在有序数组上二分查找（命中 524,862 次），每工作项一个查询；两侧校验和一致。
 
-| 来源 | 查询吞吐 (Mqueries/s) |
-| --- | --- |
-| CPU serial | 8.8 |
-| CPU tbb_24 | 122.7 |
-| GPU malloc_device | **444.8** |
-| GPU malloc_host | 433.7 |
-| GPU malloc_shared | 433.7 |
-| GPU usm_allocator | 433.1 |
-| GPU buffer | 427.5 |
+| 来源              | 查询吞吐 (Mqueries/s) |
+| ----------------- | --------------------- |
+| CPU serial        | 8.8                   |
+| CPU tbb_24        | 122.7                 |
+| GPU malloc_device | **444.8**             |
+| GPU malloc_host   | 433.7                 |
+| GPU malloc_shared | 433.7                 |
+| GPU usm_allocator | 433.1                 |
+| GPU buffer        | 427.5                 |
 
 GPU 最佳是 tbb_24 的 **3.6 倍**、是串行的 50 倍。这也是五模式差距最小的一项（最差与最佳仅差 4%）。
 
@@ -131,15 +137,15 @@ GPU 最佳是 tbb_24 的 **3.6 倍**、是串行的 50 倍。这也是五模式�
 
 **Workload**：128 MiB 输入 / 2048 块的块压缩（哈希表匹配），仅压缩计时（含哈希表清零），解压回读逐字节校验；两侧压缩比同为 1.30。
 
-| 来源 | 压缩吞吐 (MB/s) |
-| --- | --- |
-| CPU serial | 533.8 |
-| CPU tbb_24 | **11169.4** |
-| GPU buffer | 448.8 |
-| GPU malloc_device | 446.9 |
-| GPU malloc_host | 443.8 |
-| GPU malloc_shared | 443.3 |
-| GPU usm_allocator | 442.0 |
+| 来源              | 压缩吞吐 (MB/s) |
+| ----------------- | --------------- |
+| CPU serial        | 533.8           |
+| CPU tbb_24        | **11169.4**     |
+| GPU buffer        | 448.8           |
+| GPU malloc_device | 446.9           |
+| GPU malloc_host   | 443.8           |
+| GPU malloc_shared | 443.3           |
+| GPU usm_allocator | 442.0           |
 
 这是全场最悬殊的一项：tbb_24 是 GPU 的 **24.9 倍**，甚至**串行 CPU（533.8）都快过所有 GPU 模式（≈447）**。
 
@@ -161,11 +167,11 @@ GPU 最佳是 tbb_24 的 **3.6 倍**、是串行的 50 倍。这也是五模式�
 
 指针追逐（4,194,304 步依赖访问，每次访问必须等上一次完成）：
 
-| 视角 | CPU | GPU（malloc_device 最佳） |
-| --- | --- | --- |
-| 单追逐者延迟 | **91.5 ns/access**（serial） | 330.4 ns/access |
-| 并行聚合吞吐 | 144.2 Maccess/s（24 追逐者） | **417.6 Maccess/s**（256 追逐者） |
-| 并行摊薄每访问 | 6.9 ns | 2.4 ns |
+| 视角           | CPU                          | GPU（malloc_device 最佳）         |
+| -------------- | ---------------------------- | --------------------------------- |
+| 单追逐者延迟   | **91.5 ns/access**（serial） | 330.4 ns/access                   |
+| 并行聚合吞吐   | 144.2 Maccess/s（24 追逐者） | **417.6 Maccess/s**（256 追逐者） |
+| 并行摊薄每访问 | 6.9 ns                       | 2.4 ns                            |
 
 两个要点：
 
@@ -174,8 +180,8 @@ GPU 最佳是 tbb_24 的 **3.6 倍**、是串行的 50 倍。这也是五模式�
 
 ### 主机↔设备传输：256 MiB 约 16.5 ms
 
-| 方向 | 耗时 | 等效带宽 |
-| --- | --- | --- |
+| 方向             | 耗时     | 等效带宽  |
+| ---------------- | -------- | --------- |
 | H2D 上传 256 MiB | 16.54 ms | 16.2 GB/s |
 | D2H 回读 256 MiB | 16.39 ms | 16.4 GB/s |
 
@@ -185,12 +191,12 @@ GPU 最佳是 tbb_24 的 **3.6 倍**、是串行的 50 倍。这也是五模式�
 
 CPU 侧四档拷贝带宽（`copy = 2×字节数 / 时间`）：
 
-| 档位 | serial (GB/s) | tbb_24 (GB/s) |
-| --- | --- | --- |
-| 32 KiB | 218.5 | 131.1 |
-| 512 KiB | 163.8 | 59.6 |
-| 8192 KiB | 31.1 | 224.0 |
-| 262144 KiB | 47.1 | 79.1 |
+| 档位       | serial (GB/s) | tbb_24 (GB/s) |
+| ---------- | ------------- | ------------- |
+| 32 KiB     | 218.5         | 131.1         |
+| 512 KiB    | 163.8         | 59.6          |
+| 8192 KiB   | 31.1          | 224.0         |
+| 262144 KiB | 47.1          | 79.1          |
 
 小尺寸完全命中缓存时能冲到 200+ GB/s；256 MiB 落回 DRAM 后就是 47–79 GB/s，与前面的全尺寸带宽一致。tbb 在 32 KiB/512 KiB 反而不如串行（线程分发开销 > 并行收益），8 MiB 档并行收益最大（224.0）。**带宽数字不标注尺寸就是耍流氓**——同一程序不同档位能差 7 倍。
 
