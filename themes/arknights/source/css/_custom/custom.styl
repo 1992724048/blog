@@ -206,6 +206,11 @@ header
     padding-left 2.5em
     list-style-position outside
 
+// 正文表格末行底部主题蓝 1px 实线（表格收口；border-collapse 下挂在 td 上保证连续）
+#post-content table tbody tr:last-child
+  td
+    border-bottom 1px solid var(--theme-highlight)
+
 // GitHub 风格 Alert（> [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]）
 // 缩小引用块上下间距
 blockquote
