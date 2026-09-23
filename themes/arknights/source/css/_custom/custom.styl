@@ -207,7 +207,8 @@ header
     list-style-position outside
 
 // 正文表格末行底部主题蓝 1px 实线（表格收口；border-collapse 下挂在 td 上保证连续）
-#post-content table tbody tr:last-child
+// 仅直接子元素：排除 .highlight 代码块的 table 布局（其 td 已 border 0，特异性压不过 #id）
+#post-content > table tbody tr:last-child
   td
     border-bottom 1px solid var(--theme-highlight)
 
