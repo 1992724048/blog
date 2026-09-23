@@ -580,3 +580,49 @@ blockquote.alert
     font-weight bold
     color var(--theme-text-light)
     text-align center
+
+// AI 生成内容徽标（scripts/filters/ai-badge.js）：左蓝段 AI 图标 + 中彩块状态词 + 右主题反色文本；无圆角
+.ai-badge
+  display inline-flex
+  align-items stretch
+  margin 0 3px
+  border-radius 0
+  overflow hidden
+  font-size .8em
+  line-height 1
+  vertical-align middle
+  white-space nowrap
+  cursor default
+.ai-badge__icon
+  display inline-flex
+  align-items center
+  justify-content center
+  padding 3px 4px 3px 5px
+  color #fff
+  background-color var(--theme-highlight)
+.ai-badge__svg
+  display block
+  width 14px
+  height 14px
+.ai-badge__text
+  display inline-flex
+  align-items center
+  padding 0 7px
+  color var(--theme-search-text)
+  background-color var(--theme-search-bg)
+  letter-spacing .02em
+// 状态词：黑字压中间色（绿/灰/黄上黑字对比约 7–10:1），两主题同色
+.ai-badge__status
+  display inline-flex
+  align-items center
+  padding 0 7px
+  color #000
+  font-family 'JetBrains Mono', monospace
+  font-weight 600
+  letter-spacing .05em
+.ai-badge--pass .ai-badge__status
+  background-color #22c55e
+.ai-badge--ignore .ai-badge__status
+  background-color #9e9e9e
+.ai-badge--notreview .ai-badge__status
+  background-color #f59e0b
