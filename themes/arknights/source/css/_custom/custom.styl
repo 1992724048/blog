@@ -194,6 +194,14 @@ header
   ul
     // disc 标记视觉比数字偏左，微调右移与标题 / 表格对齐线齐平
     padding-left .25em
+    // 关原生标记改 ::before 自绘：原生 inside 标记与文字间距由字体字形边距决定、偏大且不可调
+    list-style none
+    // task-list / terms-ref 各自占用 li::before（复选框 / 计数角标），不覆盖
+    &:not(.task-list):not(.terms-ref)
+      li
+        &::before
+          content '•'
+          margin-right .3em
   ul ul, ul ol, ol ul, ol ol
     padding-left 2.5em
     list-style-position outside
