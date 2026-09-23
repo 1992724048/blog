@@ -31,7 +31,7 @@ date: 2026-09-19 06:10:09
 - **C#**: 语法糖最丰富的一集, 用来写WebAPI服务、ASP.NET、Winform、WPF程序, 还有小工具
 - **Fortran**: 配合C/C++实现高性能计算
 - **Python**: 写写脚本, 还有小工具
-- **HTML/CSS/JavaScript**: 以前经常用, 现在被flutter web替代大部分工作
+- **HTML/CSS/JavaScript**: 以前用, 现在被flutter web替代大部分工作
 - **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好 ??~~
 - **Java**: 学校教的, 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
 
