@@ -4164,3 +4164,57 @@ blockquote.alert strong::before {
   color: var(--theme-text-light);
   text-align: center;
 }
+.ai-badge {
+  display: inline-flex;
+  align-items: stretch;
+  margin: 0 3px;
+  border-radius: 0;
+  overflow: hidden;
+  font-size: 0.8em;
+  line-height: 1;
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: default;
+}
+.ai-badge__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 4px 3px 5px;
+  color: #fff;
+  background-color: var(--theme-highlight);
+}
+.ai-badge__svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.ai-badge__text {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  color: var(--theme-search-text);
+  background-color: var(--theme-search-bg);
+  letter-spacing: 0.02em;
+}
+.ai-badge__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  color: #000;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.ai-badge--pass .ai-badge__status {
+  background-color: #22c55e;
+}
+.ai-badge--edit .ai-badge__status {
+  background-color: #a855f7;
+}
+.ai-badge--ignore .ai-badge__status {
+  background-color: #9e9e9e;
+}
+.ai-badge--notreview .ai-badge__status {
+  background-color: #f59e0b;
+}
