@@ -3722,7 +3722,7 @@ header {
   padding-left: 0.25em;
   list-style: none;
 }
-#post-content ul:not(.task-list):not(.terms-ref) li::before {
+#post-content ul:not(.task-list):not(.terms-ref) > li::before {
   content: '•';
   margin-right: 0.3em;
 }
