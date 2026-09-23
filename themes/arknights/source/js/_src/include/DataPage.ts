@@ -455,12 +455,12 @@ class DataPage {
 
   constructor() {
     this.container = document.querySelector('#data-page')
-    if (this.container === null) {
-      return
+    if (this.container !== null) {
+      this.render()
+      this.container.addEventListener('click', this.onContainerClick)
+      this.container.addEventListener('change', this.onContainerChange)
     }
-    this.render()
-    this.container.addEventListener('click', this.onContainerClick)
-    this.container.addEventListener('change', this.onContainerChange)
+    // 非数据页首屏时 #data-page 不存在，仍须挂 pjax 监听，否则导航切入后不渲染
     document.addEventListener('pjax:success', () => {
       this.container = document.querySelector('#data-page')
       if (this.container !== null) {
