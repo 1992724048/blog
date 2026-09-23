@@ -25,15 +25,15 @@ date: 2026-09-19 06:10:09
 
 ## 常用语言
 
-- **C/C++**: 最最最常用, 模板! 爽!, 编译期计算! 爽!, 总之就是写的爽! ~~?? (前提是C++20) ??~~
+- **C/C++**: 最好用, 喜欢这种没有过多限制的语言
 - **DPC++**: 与C/C++/Fortran组合, CPU-GPU异构流水线
 - **Flutter/Dart**: 主要用来给C++编写GUI程序, 还有小工具, 开发GUI最方便很喜欢material风格设计(也有fluent可用)
-- **C#**: 用来写WebAPI服务、ASP.NET、Winform、WPF程序, 还有小工具
+- **C#**: 语法糖最丰富的一集, 用来写WebAPI服务、ASP.NET、Winform、WPF程序, 还有小工具
 - **Fortran**: 配合C/C++实现高性能计算
 - **Python**: 写写脚本, 还有小工具
 - **HTML/CSS/JavaScript**: 以前经常用, 现在被flutter web替代大部分工作
 - **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好 ??~~
-- **Java**: 学校教的, 除了给Minecraft写Mod外根本不用~~?? , 没C#写的舒服 ??~~
+- **Java**: 学校教的, 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
 
 ## 工具
 
