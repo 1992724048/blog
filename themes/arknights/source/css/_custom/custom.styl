@@ -610,7 +610,6 @@ blockquote.alert
   border-radius 0
   overflow hidden
   font-size .8em
-  line-height 1
   vertical-align middle
   white-space nowrap
   cursor default
@@ -632,20 +631,23 @@ blockquote.alert
   color var(--theme-search-text)
   background-color var(--theme-search-bg)
   letter-spacing .02em
-// 状态词：黑字压中间色（绿/灰/黄/紫上黑字对比约 5–10:1），两主题同色
+// 状态词：黑字压中间色（绿/灰/黄/紫上黑字对比约 7–10:1），两主题同色；
+// line-height normal 脱离徽标行盒——等宽字体在 line-height 1 行盒内字形光学偏上，正常行盒再 flex 居中
 .ai-badge__status
   display inline-flex
   align-items center
+  justify-content center
   padding 0 7px
+  line-height normal
   color #000
   font-family 'JetBrains Mono', monospace
   font-weight 600
   letter-spacing .05em
 .ai-badge--pass .ai-badge__status
-  background-color #22c55e
+  background-color #67C23A
 .ai-badge--edit .ai-badge__status
   background-color #a855f7
 .ai-badge--ignore .ai-badge__status
-  background-color #9e9e9e
+  background-color #909399
 .ai-badge--notreview .ai-badge__status
-  background-color #f59e0b
+  background-color #E6A23C
