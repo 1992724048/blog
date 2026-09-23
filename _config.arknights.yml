@@ -364,6 +364,8 @@ terms:
       url: "https://en.wikipedia.org/wiki/Single-precision_floating-point_format"
     - term: "DRAM"
       url: "https://en.wikipedia.org/wiki/DRAM"
+    - term: "VRAM"
+      url: "https://en.wikipedia.org/wiki/Video_memory"
     - term: "RFO"
       url: "https://en.wikipedia.org/wiki/CPU_cache"
     # === 领域概念 ===
