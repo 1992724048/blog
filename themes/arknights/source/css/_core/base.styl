@@ -196,13 +196,11 @@ input
   margin 0
   padding-left 2em
   list-style none
-  counter-reset terms
   li
     margin .2em 0
     scroll-margin-top 60px
-    counter-increment terms
     &::before
-      content '[' counter(terms) '] '
+      content '[' attr(data-term-index) '] '
     a
       color var(--theme-highlight)
       &:hover

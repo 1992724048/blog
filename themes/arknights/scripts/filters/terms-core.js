@@ -24,38 +24,46 @@ const buildPattern = (terms) => {
   return new RegExp(parts.join('|'), 'gi')
 }
 
-// 将 HTML 中的术语替换为站内锚点链接（href=#term-{index}）；<pre>/<code>/<a> 与 span.spoiler 包裹内容原样保留；
-// 传入 matched（Set）时收集实际命中的词条（小写），供底部列表过滤
-const replaceTerms = (html, termList, matched = null) => {
+// 保护段：<pre>/<code>/<a> 与 span.spoiler 整元素、任意 HTML 标签（属性区）
+const PROTECTED_SEGMENT = /(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<span\b[^>]*class="[^"]*\bspoiler\b[^"]*"[^>]*>[\s\S]*?<\/span>|<[^>]*>)/g
+
+// 将 HTML 中的术语替换为站内锚点链接；matched 以小写词条为键，按首次命中记录全局锚点与文章内编号
+const replaceTerms = (html, termList, matched = new Map()) => {
   if (!Array.isArray(termList) || termList.length === 0) return html
   const terms = dedupeTerms(termList)
   const pattern = buildPattern(terms)
   if (!pattern) return html
-  const indexMap = new Map(terms.map(({ term }, index) => [term.toLowerCase(), index]))
+  const definitions = new Map(
+    terms.map(({ term, url }, index) => [term.toLowerCase(), { term, url, anchorIndex: index }])
+  )
   return html
-    .split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<span\b[^>]*class="[^"]*\bspoiler\b[^"]*"[^>]*>[\s\S]*?<\/span>)/g)
+    .split(PROTECTED_SEGMENT)
     .map((segment, index) => {
       if (index % 2 === 1) return segment
       return segment.replace(pattern, (match) => {
-        if (matched) matched.add(match.toLowerCase())
-        return `<a class="term-link" href="#term-${indexMap.get(match.toLowerCase())}">${match}</a>`
+        const key = match.toLowerCase()
+        let entry = matched.get(key)
+        if (!entry) {
+          entry = {
+            ...definitions.get(key),
+            termIndex: matched.size + 1
+          }
+          matched.set(key, entry)
+        }
+        return `<a class="term-link" href="#term-${entry.anchorIndex}" data-term-index="${entry.termIndex}">${match}</a>`
       })
     })
     .join('')
 }
 
-// 生成底部引用式术语列表（分隔线 + 非 h 标题 + 编号列表）；matched 为实际命中词条（小写 Set）：
-// 仅输出命中词条且 id 保持全词条去重序的原始 index（正文锚点与之对应）；编号 [n] 由 CSS counter 呈现
-const buildTermsList = (termList, matched = null) => {
-  const terms = dedupeTerms(termList)
-  if (terms.length === 0) return ''
+// 生成底部引用式术语列表；条目顺序与文章内首次出现顺序一致，data-term-index 与正文角标共用编号
+const buildTermsList = (matched) => {
+  if (!(matched instanceof Map) || matched.size === 0) return ''
   const items = []
-  terms.forEach(({ term, url }, index) => {
-    if (matched && !matched.has(term.toLowerCase())) return
+  for (const { term, url, anchorIndex, termIndex } of matched.values()) {
     const safeUrl = url.replace(/"/g, '&quot;')
-    items.push(`    <li id="term-${index}"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${term}</a></li>`)
-  })
-  if (items.length === 0) return ''
+    items.push(`    <li id="term-${anchorIndex}" data-term-index="${termIndex}"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${term}</a></li>`)
+  }
   return `<hr class="terms-sep">\n<div class="terms-title">术语表</div>\n<ol class="terms-ref">\n${items.join('\n')}\n</ol>`
 }
 
