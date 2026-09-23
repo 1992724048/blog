@@ -14,5 +14,3 @@ type: projects
   <div class="project-name">C++ 包管理工具</div>
 </a>
 </div>
-
-<script src="/js/project-tooltip.js"></script>

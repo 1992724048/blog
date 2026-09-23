@@ -1,6 +1,8 @@
-//- 缓存版本号：修改 arknights.js / search.js 后同步递增，避免 Cloudflare / 浏览器缓存旧版
-- var jsVersion = "20260919"
+//- 缓存版本号：修改 arknights.js / search.js / project-tooltip.js 后同步递增，避免 Cloudflare / 浏览器缓存旧版
+- var jsVersion = "20260946"
 script(defer src=url_for("js/arknights.js") + "?v=" + jsVersion)
+//- 项目页卡片悬停预览：Pjax 不执行 article 内嵌 script（pjax.js 关闭 executeScripts），故全站常驻加载
+script(defer src=url_for("js/project-tooltip.js") + "?v=" + jsVersion)
 
 if searchConfig !== null
   script(defer src=url_for("js/search.js") + "?v=" + jsVersion)
