@@ -619,11 +619,13 @@ blockquote.alert
     text-align center
 
 // AI 生成内容徽标（scripts/filters/ai-badge.js）：左蓝段 AI 图标 + 中彩块状态词 + 右主题反色文本；无圆角
+// overflow visible：内嵌悬停图例 .ai-badge__tip 不被裁切（border-radius 0，无需 hidden）
 .ai-badge
+  position relative
   display inline-flex
   align-items stretch
   border-radius 0
-  overflow hidden
+  overflow visible
   font-size .8em
   vertical-align middle
   white-space nowrap
@@ -666,3 +668,52 @@ blockquote.alert
   background-color #909399
 .ai-badge--notreview .ai-badge__status
   background-color #E6A23C
+// 悬停图例：徽标上方浮层，列四态标签（对应底色）+ 介绍；display none 不占位，hover 展示
+.ai-badge__tip
+  position absolute
+  left 0
+  bottom calc(100% + 6px)
+  z-index 30
+  display none
+  flex-direction column
+  gap 4px
+  min-width max-content
+  padding 8px 10px
+  background-color var(--theme-bg-light)
+  border 1px solid var(--theme-subcolor)
+  box-shadow 0 4px 12px rgba(0, 0, 0, .18)
+  font-size 12px
+  font-weight normal
+  letter-spacing normal
+  white-space nowrap
+  color var(--theme-text)
+.ai-badge:hover .ai-badge__tip
+  display flex
+.ai-badge__tip-title
+  font-weight 600
+  color var(--theme-text-light)
+  margin-bottom 2px
+.ai-badge__tip-row
+  display flex
+  align-items center
+  gap 8px
+.ai-badge__tip-tag
+  display inline-flex
+  align-items center
+  padding 1px 6px
+  font-family 'JetBrains Mono', monospace
+  font-size 11px
+  font-weight 600
+  letter-spacing .05em
+  color #000
+  // 底色复用四态（与 .ai-badge--* .ai-badge__status 同值）
+  &.ai-badge--pass
+    background-color #67C23A
+  &.ai-badge--edit
+    background-color #9B6FE8
+  &.ai-badge--ignore
+    background-color #909399
+  &.ai-badge--notreview
+    background-color #E6A23C
+.ai-badge__tip-desc
+  color var(--theme-text)
