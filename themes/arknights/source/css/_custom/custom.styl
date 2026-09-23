@@ -185,6 +185,19 @@ header
     margin 0
     scroll-margin-top 60px
 
+// 正文列表左缘与表格 / 标题对齐（同为内容线）：顶层 ul/ol 去默认 40px 缩进，
+// 标记 inside 行内起排（不悬挂到内容线外侧）；嵌套列表 outside + 缩进保留层级
+#post-content
+  ul, ol
+    padding-left 0
+    list-style-position inside
+  ul
+    // disc 标记视觉比数字偏左，微调右移与标题 / 表格对齐线齐平
+    padding-left .25em
+  ul ul, ul ol, ol ul, ol ol
+    padding-left 2.5em
+    list-style-position outside
+
 // GitHub 风格 Alert（> [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]）
 // 缩小引用块上下间距
 blockquote
