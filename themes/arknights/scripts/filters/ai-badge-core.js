@@ -3,12 +3,13 @@
 // 保护段：pre/code/a 整元素与任意 HTML 标签（属性区），避免把标记塞进标签或代码
 const PROTECTED_SEGMENT = /(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<[^>]*>)/g
 
-// [&]AI|PASS 或 [&]AI|PASS|自定义文本|；兼容 markdown 渲染后 & 变为 &amp; 的形态；
+// [&]AI|PASS 或 [&]AI|PASS|自定义文本|（状态亦可为 IGNORE / NOTREVIEW / EDIT）；兼容 markdown 渲染后 & 变为 &amp; 的形态；
 // 自定义文本限 1–40 字符、不含 | ] < >（标签注入防护）；缺省时不渲染文本段
-const AI_BADGE_PATTERN = /\[(?:&|&amp;)\]AI\|(PASS|IGNORE|NOTREVIEW)(?:\|([^|\]<>]{1,40})\|)?/g
+const AI_BADGE_PATTERN = /\[(?:&|&amp;)\]AI\|(PASS|EDIT|IGNORE|NOTREVIEW)(?:\|([^|\]<>]{1,40})\|)?/g
 
 const BADGES = {
   PASS: { key: 'pass', label: 'PASS', title: 'AI 生成内容 · 已人工审核通过' },
+  EDIT: { key: 'edit', label: 'EDIT', title: 'AI 生成内容 · 经人工审核并被人工修改' },
   IGNORE: { key: 'ignore', label: 'IGNORE', title: 'AI 生成内容 · 可忽略此标记' },
   NOTREVIEW: { key: 'notreview', label: 'NOTREVIEW', title: 'AI 生成内容 · 尚未经人工审核' }
 }

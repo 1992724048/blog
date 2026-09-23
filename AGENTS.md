@@ -28,7 +28,7 @@
 | --- | --- | --- |
 | 站点自定义样式 | `themes/arknights/source/css/_custom/custom.styl` | 字体栈 / 头像留白 / logo 悬停角标（图片外左下 / 右上） / 文本选中色 / `??内容??` 遮盖等站点级样式；`arknights.styl` 以 `@import '_custom/*'` 通配导入 |
 | 底部按钮组 | `themes/arknights/layout/includes/bottom-btn.pug` + `source/css/_page/post/bottom_btn.styl` | 右列单列 flex 栈（列内 6px 间隙）；返回上一页 / 工具箱（与右列共用 --btn-inset 底部基线、与切换主题底缘齐平；扇形展开 `.toolbox-open`、层叠容量 3、悬停抽出、展开项轻度投影）；标注模式（`body.annotating` + `.toolbox-annotate.active`）与选中文字工具栏 `#annotate-toolbar`（at-* 按钮 / `.at-colors` 五色板 / `.copied` 反馈）；`hl-mark` 五色（`data-color`）/ 分享 `.copied` / 收藏 `.saved` 视觉态；JS 契约 `toolbox.*` 实现于 `Toolbox.ts`（标注 / 收藏持久化 `arknights:*`，载入 + pjax 恢复） |
-| 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify、`??内容??` 遮盖（`filters/spoiler.js`，悬停显示）、AI 生成内容标记（`filters/ai-badge.js` + `ai-badge-core.js`，`[&]AI|PASS|文本|` → 三态徽标，样式在 `custom.styl` `.ai-badge`）等 |
+| 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify、`??内容??` 遮盖（`filters/spoiler.js`，悬停显示）、AI 生成内容标记（`filters/ai-badge.js` + `ai-badge-core.js`，`[&]AI|PASS|文本|` → 四态徽标 PASS/EDIT/IGNORE/NOTREVIEW，样式在 `custom.styl` `.ai-badge`）等 |
 | JS 源码（TS） | `themes/arknights/source/js/_src/` | 主入口 `tsconfig.json` → `arknights.js`；`search/search.ts`（独立 tsconfig）→ `search.js` |
 | 中文字体 | `themes/arknights/layout/includes/meta-data.pug` | HarmonyOS Sans SC，jsDelivr 分包 CDN（`@1.1.0` 版本锁死） |
 | 缓存版本号 | 生效机制：`meta-data.pug` `cssVersion` / `js-data.pug` `jsVersion`；备用机制：`_config.arknights.yml` `stylesheets` 版本参数（当前未使用） | 对应产物变更后同步递增，避免 Cloudflare / 浏览器缓存旧版 |
