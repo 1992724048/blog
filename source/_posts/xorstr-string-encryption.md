@@ -3,6 +3,7 @@ title: 编译期 XOR 字符串加密：stdpp::xorstr 设计与实现
 date: 2026-08-14
 tags: [C++, 安全, 逆向, 教程]
 categories: [逆向工程]
+description: 解析 C++20 编译期 XOR 字符串加密 stdpp::xorstr：哈夫曼压缩、CBC 链式 XOR 与奇偶分拆三层管线如何打散明文特征，以及 NTTP/consteval 带来的零运行时开销。
 ---
 
 [&]AI|PASS|本文由AI辅助生成|

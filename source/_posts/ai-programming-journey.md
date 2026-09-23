@@ -3,6 +3,7 @@ title: 我对vibe coding的看法和观点
 date: 2026-08-14
 tags: [AI, 随笔, 观点]
 categories: [随笔]
+description: 从 ChatGPT 到 DeepSeek R1 再到 Agent 时代，回顾 AI 对开发流程的改变，讨论 vibe coding 的质量与门槛，以及从执行者转向决策者的角色变化。
 ---
 
 [&]AI|PASS|本文由AI辅助生成|

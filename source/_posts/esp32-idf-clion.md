@@ -3,6 +3,7 @@ title: ESP32 IDF6.0 CLion环境配置
 date: 2026-03-04
 tags: [C, C++, 工具, 开发, 教程]
 categories: [环境搭建]
+description: Windows 下 ESP-IDF 6.0 与 CLion 环境配置教程：IDF 安装、一键 source 脚本、工具链与 CMake 配置，快速搭好 ESP32 嵌入式开发环境。
 ---
  
 ## 一、环境准备

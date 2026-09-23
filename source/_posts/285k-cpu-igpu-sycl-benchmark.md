@@ -3,6 +3,7 @@ title: Core Ultra 9 285K 的 iGPU 能打过 CPU 吗？SYCL 五内存模式实测
 date: 2026-09-23
 tags: [C++, SYCL, 性能测试, GPU]
 categories: [性能测试]
+description: 在 Core Ultra 9 285K 上对比 CPU 与 iGPU 的 SYCL 性能：GEMM、FFT、压缩与内存带宽实测，覆盖五种 USM/Buffer 内存模式，并分析 RFO 与共享 DDR5 等瓶颈成因。
 ---
 
 [&]AI|EDIT|测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改|

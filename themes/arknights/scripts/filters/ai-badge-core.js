@@ -44,4 +44,14 @@ const replaceAiBadges = (html) => {
     .join('')
 }
 
-module.exports = { replaceAiBadges }
+// 剥离已渲染的徽标 HTML（外层 + 末尾两个嵌套 span）与未渲染的原始标记，供 meta description 等纯文本场景使用
+const AI_BADGE_HTML = /<span class="ai-badge\b[\s\S]*?<\/span>\s*<\/span>/g
+
+const stripAiBadgeMarkup = (text) => {
+  if (typeof text !== 'string' || (!text.includes('ai-badge') && !text.includes('[&]') && !text.includes('[&amp;]'))) {
+    return text
+  }
+  return text.replace(AI_BADGE_HTML, '').replace(AI_BADGE_PATTERN, '').trim()
+}
+
+module.exports = { replaceAiBadges, stripAiBadgeMarkup }
