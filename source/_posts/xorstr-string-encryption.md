@@ -6,7 +6,7 @@ categories: [逆向工程]
 description: 解析 C++20 编译期 XOR 字符串加密 stdpp::xorstr：哈夫曼压缩、CBC 链式 XOR 与奇偶分拆三层管线如何打散明文特征，以及 NTTP/consteval 带来的零运行时开销。
 ---
 
-[&]AI|PASS|本文由AI辅助生成|
+[#]<AI>{PASS, "本文由AI辅助生成"}
 
 ## 为什么需要字符串加密
 
