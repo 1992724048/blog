@@ -26,6 +26,36 @@ function failure(code, reason) {
   }
 }
 
+function readArgumentCount(args) {
+  try {
+    return Array.isArray(args) ? args.length : null
+  } catch {
+    return null
+  }
+}
+
+function readOwnDataValue(object, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(object, key)
+  return descriptor !== undefined && Object.hasOwn(descriptor, 'value')
+    ? descriptor.value
+    : undefined
+}
+
+function readArgumentFields(args, index) {
+  try {
+    const argument = args[index]
+    if (argument === null || typeof argument !== 'object' || Array.isArray(argument)) {
+      return null
+    }
+    return {
+      type: readOwnDataValue(argument, 'type'),
+      value: readOwnDataValue(argument, 'value')
+    }
+  } catch {
+    return null
+  }
+}
+
 function escapeHtmlText(value) {
   return value.replace(/[&<>"']/g, character => HTML_TEXT_ENTITIES[character])
 }
@@ -41,29 +71,28 @@ const TIP_ROWS = Object.values(AI_BADGES)
   .join('')
 
 function parseAi(args, context) {
-  if (!Array.isArray(args) || args.length < 1 || args.length > 2) {
+  const argumentCount = readArgumentCount(args)
+  if (argumentCount === null || argumentCount < 1 || argumentCount > 2) {
     return failure('AI_ARGUMENT_COUNT', 'AI marker requires one or two arguments')
   }
 
-  const stateArgument = args[0]
+  const stateArgument = readArgumentFields(args, 0)
   if (
     stateArgument === null ||
-    typeof stateArgument !== 'object' ||
     stateArgument.type !== 'enum' ||
+    typeof stateArgument.value !== 'string' ||
     !Object.hasOwn(AI_BADGES, stateArgument.value)
   ) {
     return failure('AI_INVALID_STATE', 'AI state must be PASS, EDIT, IGNORE, or NOTREVIEW')
   }
 
   let text = null
-  const textArgument = args[1]
-  if (textArgument !== undefined) {
+  if (argumentCount === 2) {
+    const textArgument = readArgumentFields(args, 1)
     const isNull = textArgument !== null &&
-      typeof textArgument === 'object' &&
       textArgument.type === 'null' &&
       textArgument.value === null
     const isValidText = textArgument !== null &&
-      typeof textArgument === 'object' &&
       textArgument.type === 'text' &&
       typeof textArgument.value === 'string' &&
       textArgument.value.length >= 1 &&
