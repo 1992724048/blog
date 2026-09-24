@@ -12,7 +12,6 @@ const MAX_GENERATION_ATTEMPTS = 32
 const TOKEN_PATTERN = /^arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
 const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/
 const ENUM_PATTERN = /^[A-Z][A-Z0-9_-]*$/
-const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 
 function isValidMode(mode) {
   return mode === 'block' || mode === 'inline'
@@ -177,12 +176,6 @@ function createTokenStore(options) {
     }
     const end = start + TOKEN_TEXT_LENGTH
     if (end > content.length) {
-      return null
-    }
-    if (start > 0 && TOKEN_PART_PATTERN.test(content[start - 1])) {
-      return null
-    }
-    if (end < content.length && TOKEN_PART_PATTERN.test(content[end])) {
       return null
     }
 

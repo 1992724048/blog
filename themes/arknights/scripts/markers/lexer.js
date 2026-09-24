@@ -86,11 +86,50 @@ function scanFencedCode(source, start) {
   return source.length
 }
 
+function hasIndentedCodePrefix(source, lineStart, lineEnd) {
+  let cursor = lineStart
+  let spaces = 0
+  while (cursor < lineEnd && source[cursor] === ' ' && spaces < 4) {
+    cursor += 1
+    spaces += 1
+  }
+  return spaces === 4 || (spaces <= 3 && cursor < lineEnd && source[cursor] === '\t')
+}
+
+function isBlankLine(source, start, end) {
+  for (let index = start; index < end; index += 1) {
+    if (source[index] !== ' ' && source[index] !== '\t') {
+      return false
+    }
+  }
+  return true
+}
+
+function isIndentedCodeLine(source, start) {
+  const lineEnd = findLineEnd(source, start)
+  return !isBlankLine(source, start, lineEnd) && hasIndentedCodePrefix(source, start, lineEnd)
+}
+
 function scanIndentedCode(source, start) {
-  if (source[start] !== '\t' && !source.startsWith('    ', start)) {
+  if (!isIndentedCodeLine(source, start)) {
     return null
   }
-  return findLineEnd(source, start)
+
+  let lineStart = start
+  let end = findLineEnd(source, start)
+  while (lineStart < source.length) {
+    const currentEnd = findLineEnd(source, lineStart)
+    if (!isBlankLine(source, lineStart, currentEnd) && !isIndentedCodeLine(source, lineStart)) {
+      break
+    }
+    end = currentEnd
+    if (currentEnd === source.length) {
+      return source.length
+    }
+    lineStart = skipLineBreak(source, currentEnd)
+  }
+
+  return end
 }
 
 function scanMarkerShell(source, start) {
@@ -101,11 +140,11 @@ function scanMarkerShell(source, start) {
     return null
   }
 
+  const lineEnd = findLineEnd(source, start)
   let quote = null
   let escaped = false
   let end = null
-  let nextMarkerStart = null
-  for (let index = nameEnd + 2; index < source.length; index += 1) {
+  for (let index = nameEnd + 2; index < lineEnd; index += 1) {
     const character = source[index]
     if (quote !== null) {
       if (escaped) {
@@ -115,9 +154,6 @@ function scanMarkerShell(source, start) {
       } else if (character === quote) {
         quote = null
       }
-    } else if (source.startsWith(MARKER_PREFIX, index)) {
-      nextMarkerStart = index
-      break
     } else if (character === '"') {
       quote = character
     } else if (character === '}') {
@@ -125,10 +161,7 @@ function scanMarkerShell(source, start) {
     }
   }
 
-  return {
-    end,
-    resumeAt: nextMarkerStart ?? source.length
-  }
+  return { end }
 }
 
 function findMarkerMode(source, start, end) {
@@ -236,12 +269,20 @@ function scanMarkupDeclaration(source, start) {
   return source.length
 }
 
+function scanProcessingInstruction(source, start) {
+  const instructionEnd = source.indexOf('?>', start + 2)
+  return instructionEnd === -1 ? source.length : instructionEnd + 2
+}
+
 function scanRawHtml(source, start) {
   if (source.startsWith('<!--', start)) {
     const commentEnd = source.indexOf('-->', start + 4)
     return commentEnd === -1 ? source.length : commentEnd + 3
   }
-  if (source[start + 1] === '!' || source[start + 1] === '?') {
+  if (source[start + 1] === '?') {
+    return scanProcessingInstruction(source, start)
+  }
+  if (source[start + 1] === '!') {
     return scanMarkupDeclaration(source, start)
   }
 
@@ -249,7 +290,7 @@ function scanRawHtml(source, start) {
   if (tag === null) {
     return null
   }
-  if (tag.closing || tag.selfClosing || (tag.name !== 'script' && tag.name !== 'style')) {
+  if (tag.closing || (tag.name !== 'script' && tag.name !== 'style')) {
     return tag.end
   }
 
@@ -351,12 +392,8 @@ function scanMarkers(source) {
         builder.addMarker(cursor, shell.end, findMarkerMode(source, cursor, shell.end))
         cursor = shell.end
       } else {
-        const nextMarkerStart = source.indexOf(MARKER_PREFIX, cursor + MARKER_PREFIX.length)
-        const resumeAt = shell === null
-          ? (nextMarkerStart === -1 ? source.length : nextMarkerStart)
-          : shell.resumeAt
-        builder.addText(cursor, resumeAt)
-        cursor = resumeAt
+        builder.addText(cursor, cursor + 1)
+        cursor += 1
       }
       continue
     }
