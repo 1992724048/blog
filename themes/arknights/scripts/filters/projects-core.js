@@ -13,12 +13,18 @@ const HTML_ESCAPES = {
 
 const PROJECT_MARKER_PATTERN = /^\[&\]PJ\|([^|]*)\|([^|]*)\|([^|]*)\|$/
 const PROJECT_MARKER_LINE_PATTERN = /^([ \t]*)(\[(?:&|&amp;)\]PJ\|[^\r\n]*)(?=\r?$)/gm
-const PROJECT_TOKEN_PREFIX = 'arknights-project-marker:'
-const PROJECT_TOKEN_PATTERN = /^arknights-project-marker:([A-Za-z0-9_-]+)$/
+const PROJECT_TOKEN_PREFIX = 'arknightsprojectmarker'
+const PROJECT_TOKEN_PAYLOAD_PATTERN = /^[0-9a-f]+$/i
+const PROJECT_TOKEN_PATTERN = new RegExp(`^${PROJECT_TOKEN_PREFIX}([0-9a-f]+)$`)
+const PROJECT_TOKEN_FRAGMENT_PATTERN = new RegExp(`${PROJECT_TOKEN_PREFIX}([0-9a-f]+)(?![0-9a-z])`, 'gi')
 const PARAGRAPH_PATTERN = /<p\b([^>]*)>([\s\S]*?)<\/p>/gi
 const SINGLE_PARAGRAPH_PATTERN = /^<p\b([^>]*)>([\s\S]*?)<\/p>$/i
 const LINE_BREAK_PATTERN = /<br\s*\/?>(?:[ \t]*\r?\n)?|\r?\n/gi
 const PROTECTED_SEGMENT = /(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>|<[^>]*>)/g
+const SAFE_LINK_PROTOCOLS = new Set(['http:', 'https:'])
+const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z\d+.-]*:/
+const UNSAFE_LINK_CHARACTER_PATTERN = /[\u0000-\u0020\u007f\\]/
+const UNSAFE_CSS_URL_PATTERN = /[\u0000-\u001f\u007f"'\\]/
 
 const escapeHtml = (value) => value.replace(HTML_ESCAPE_PATTERN, (character) => HTML_ESCAPES[character])
 
