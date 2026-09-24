@@ -16,6 +16,7 @@
 - **顶栏导航**：`header.topbar`（sticky，全断点高 36px，毛玻璃底 blur(8px)）；≥1024px 菜单平铺（菜单项图标来自根级 `menu_icons` 映射：键 = 菜单文字、值 = FontAwesome 类名；图标渲染在 `.navItemTitle` 内、悬停 title 提示，未映射回退文字；当前页 active 项全断点隐藏图标、平滑展开名称 `.navItemLabel`（左缘 5px 主题蓝条 + 中度对比底色，与归档 / 分类列表项选中态同语言））+ 右侧簇（社交图标 `.topbar-social` + 常驻搜索框，框内含放大镜图标；搜索框按压顶栏内容区 35px 满高（上缘贴顶、下缘接底线），无任何边框 / 轮廓（含焦点态），底线不被覆盖；右簇紧贴视口右缘），≤1023px 折叠为 ☰ / 搜索图标按钮 + 栏下全宽下拉（菜单与搜索行互斥，锚在同一位置）；社交图标（源 `theme.social`，样式在 `_modules/social.styl`）全断点显示于搜索入口左侧。header 级状态类：`nav-open`（菜单展开）、`search-open`（搜索行展开），开合节流由 JS `readyRev` 控制；二级菜单展开态为 `.navBlock` / `.navSecond` 的 `.expanded`（由 `Header.ts` 切换）。交互在 `Header.ts`（菜单开合 / aria-expanded / 外点 / Escape）与 `search.js`（检索、弹层、移动端展开后聚焦）
 - **底部按钮组**：`bottom-btn.pug` + `source/css/_page/post/bottom_btn.styl`（随 article 交换、各页面显示）；右列 `.bottom-btn-stack` 单列 flex 栈（DOM 顺序即视觉顺序，列内 gap 6px）——依次为回到顶部 `#to-top` / 返回上一页 `#to-back`（`history.back()`）/ 目录 `#to-index`（≥769px 隐藏）/ 切换主题 `#color-mode`（另有 BGM 按钮，`bgm` 配置关闭时不渲染）；工具箱 `.toolbox` 独立锚定左下角（左距经 `--toolbox-shift` 补偿 article 偏移，视觉左间距 = 底缘 8px；与右列共用 `--btn-inset: 8px` 底部基线，toggle 底缘与 `#color-mode` 严格同行；桌面 sticky / ≤768 fixed 同锚）；工具箱展开态类 **`.toolbox-open`**（挂载 `.toolbox` 根）——点击扇形展开（半径 66px、角度 0°/22.5°/45° 向右上；扇形容量 3，第 4 个起沿原点层叠成堆），展开项（含层叠）带轻度投影（rest 0 2px 8px / 悬停 0 4px 10px，rgba(0,0,0,.25/.35)），≥769px 悬停沿径向外抽（位移 + 放大 + 投影加强）；工具为标注 / 分享 / 收藏（视觉态 `.toolbox-share.copied`、`.toolbox-favorite.saved`；收藏标题经 `data-label-default` / `data-label-saved` 切换；正文高亮元素类 `.hl-mark`——默认主题黄，另有 `data-color` 五色变体、`data-text` 存标注原文摘要）；标注为**常驻模式开关**（模式开启：`body.annotating` + `.toolbox-annotate.active`，选中文字由 `#annotate-toolbar` 浮动工具栏承载【标注 / 清除 / 复制 / 搜索 / 颜色】——fixed 视口坐标由 JS 定位、颜色面板 `.at-colors` 五色、复制反馈 `.copied`、z-index 65536 低于 lightgallery / 光标；DOM 与样式契约在 `bottom-btn.pug` / `bottom_btn.styl`）；接线契约 `toolbox.toggle()/annotate()/share()/favorite()` 实现于 `Toolbox.ts`：展开态外点 / Escape 收起、`pjax:success` 重置；标注按 `arknights:highlights:<pathname>` 以文本偏移持久化（`.hl-mark`，含 `data-text` 原文摘要）、收藏按 `arknights:favorites` 存 `{url,title,time}`（`.saved` / `aria-pressed` / data-label 同步），均在载入 + `pjax:success` 恢复
 - **数据页面**：`source/data/index.md` + `DataPage.ts`（`_src/include/DataPage.ts`）；读取 localStorage 中 `arknights:favorites` 和 `arknights:highlights:*` 渲染收藏列表和标注数据，支持单条/批量删除、按文章清除标注、导出 JSON；页面容器 `#data-page`，容器存在时首屏渲染并绑事件；**无论首屏是否有容器都挂 `pjax:success` 监听**（非数据页首屏时容器为空若提前 return 会导致导航切入后不渲染），切入后再查询容器、渲染并绑事件
+- **项目列表页面**：`source/projects/index.md` 以每行 `[&]PJ|项目名称|项目链接|图片路径|` 声明项目；`themes/arknights/scripts/filters/projects-core.js` 负责纯解析，`projects.js` 仅对 `type: projects` 页面注册过滤器：`before_post_render` 优先级 5 先编码完整标记行，避免 GFM 自动链接吞入链接 / 图片字段；`after_post_render` 优先级 5 再解析并解除 Markdown 生成的段落包装。解析兼容原始与 `[&amp;]PJ|…|` 形式，连续合法行合并为不带额外包装层的 `.projects-grid > .project-card`；字段缺失或为空时保留原标记、不生成卡片。名称、链接、图片路径统一安全 HTML 转义；卡片保留 `--card-img`、懒加载图片与 `.project-name`，继续兼容 `source/js/project-tooltip.js` 的悬停及 Pjax 行为
 - **缓存版本号**：修改主题 CSS 产物（`arknights.css`，即主题 Stylus 源）后递增 `themes/arknights/layout/includes/meta-data.pug` 中的 `cssVersion`；修改主题 JS 产物（`arknights.js` / `search.js` / `project-tooltip.js`）后递增 `themes/arknights/layout/includes/js-data.pug` 中的 `jsVersion`——均用于避免 Cloudflare / 浏览器缓存旧版
 - **构建时区**：CI 使用 `TZ=Asia/Shanghai`（否则文章 URL 日期差一天），本地构建同样注意
 - **正文字体加载**：HarmonyOS Sans SC 经 jsDelivr 分包 CDN 按需加载（`harmonyos-sans-sc-webfont-splitted@1.1.0`，unicode-range 分包、版本锁死），`Regular.css` / `Bold.css` 链接在 `themes/arknights/layout/includes/meta-data.pug`；本地不再自托管全量字体（`source/fonts/` 已移除）
@@ -28,7 +29,7 @@
 | --- | --- | --- |
 | 站点自定义样式 | `themes/arknights/source/css/_custom/custom.styl` | 字体栈 / 头像留白 / logo 悬停角标（图片外左下 / 右上） / 文本选中色 / `??内容??` 遮盖等站点级样式；`arknights.styl` 以 `@import '_custom/*'` 通配导入 |
 | 底部按钮组 | `themes/arknights/layout/includes/bottom-btn.pug` + `source/css/_page/post/bottom_btn.styl` | 右列单列 flex 栈（列内 6px 间隙）；返回上一页 / 工具箱（与右列共用 --btn-inset 底部基线、与切换主题底缘齐平；扇形展开 `.toolbox-open`、层叠容量 3、悬停抽出、展开项轻度投影）；标注模式（`body.annotating` + `.toolbox-annotate.active`）与选中文字工具栏 `#annotate-toolbar`（at-* 按钮 / `.at-colors` 五色板 / `.copied` 反馈）；`hl-mark` 五色（`data-color`）/ 分享 `.copied` / 收藏 `.saved` 视觉态；JS 契约 `toolbox.*` 实现于 `Toolbox.ts`（标注 / 收藏持久化 `arknights:*`，载入 + pjax 恢复） |
-| 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify、`??内容??` 遮盖（`filters/spoiler.js`，悬停显示）、AI 生成内容标记（`filters/ai-badge.js` + `ai-badge-core.js`，`[&]AI|PASS|文本|` → 四态徽标 PASS/EDIT/IGNORE/NOTREVIEW，悬停显示四态图例 tooltip `.ai-badge__tip`（各态对应底色 + 介绍），样式在 `custom.styl` `.ai-badge`）、meta description 剥徽标（`filters/meta-description.js`，优先级 20：剥离已渲染 `.ai-badge` 含内嵌 tip 与原始 `[&]AI|…|` 标记，无 frontmatter 时从 excerpt/content 派生 ≤160 字纯文本）等 |
+| 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify、`??内容??` 遮盖（`filters/spoiler.js`，悬停显示）、AI 生成内容标记（`filters/ai-badge.js` + `ai-badge-core.js`，`[&]AI|PASS|文本|` → 四态徽标 PASS/EDIT/IGNORE/NOTREVIEW，悬停显示四态图例 tooltip `.ai-badge__tip`（各态对应底色 + 介绍），样式在 `custom.styl` `.ai-badge`）、项目列表解析（`filters/projects.js` + `projects-core.js`，仅 `type: projects`，`[&]PJ|名称|链接|图片路径|` → 现有项目卡片 DOM）、meta description 剥徽标（`filters/meta-description.js`，优先级 20：剥离已渲染 `.ai-badge` 含内嵌 tip 与原始 `[&]AI|…|` 标记，无 frontmatter 时从 excerpt/content 派生 ≤160 字纯文本）等 |
 | JS 源码（TS） | `themes/arknights/source/js/_src/` | 主入口 `tsconfig.json` → `arknights.js`；`search/search.ts`（独立 tsconfig）→ `search.js` |
 | 中文字体 | `themes/arknights/layout/includes/meta-data.pug` | HarmonyOS Sans SC，jsDelivr 分包 CDN（`@1.1.0` 版本锁死） |
 | 缓存版本号 | 生效机制：`meta-data.pug` `cssVersion` / `js-data.pug` `jsVersion`；备用机制：`_config.arknights.yml` `stylesheets` 版本参数（当前未使用） | 对应产物变更后同步递增，避免 Cloudflare / 浏览器缓存旧版 |
@@ -40,8 +41,10 @@ _config.yml                   # Hexo 主配置（permalink、theme；deploy 为�
 _config.arknights.yml         # 主题配置（实际生效）
 scaffolds/                    # hexo new 模板（post / page / draft）
 source/_posts/                # 文章
+source/projects/index.md      # 项目列表（PJ 标记）
 source/images/<文章名>/        # 文章配图
 themes/arknights/             # 主题（含本地定制：_custom 样式 / scripts / _src TS）
+themes/arknights/scripts/filters/projects*.js # 项目标记核心解析与 Hexo 过滤器注册
 .github/workflows/deploy.yml  # CI：构建并部署 GitHub Pages
 docs/superpowers/             # 设计与计划文档
 ```
@@ -62,8 +65,9 @@ docs/superpowers/             # 设计与计划文档
 
 ## Verification
 
-- 无自动化测试；改动后自测 = `npm run server` 本地预览相关页面
+- 无自动化测试；一般改动后自测 = `npm run server` 本地预览相关页面
 - 临时脚本 / 产物放 `.temp/`（已 gitignore），用完清理；`node .temp/nav-smoke.js` 为顶栏 / 搜索交互的 jsdom 冒烟脚本（读 `public/`），改动导航后可用于回归
+- 项目列表解析改动先用 `.temp/` 下的 Node `assert` 探针覆盖合法/连续/非法/转义/页面类型/段落解包，再以 `TZ=Asia/Shanghai npm run build` 验证，并检查 `public/projects/index.html` 中 `.projects-grid`、`.project-card`、`--card-img`、懒加载图片、`.project-name` 及非法标记保留行为
 
 ## Conventions & Gotchas
 
