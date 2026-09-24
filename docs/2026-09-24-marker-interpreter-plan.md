@@ -1,6 +1,6 @@
 # 通用标记解释器与 AI/PJ 迁移实施计划
 
-> **执行约束：** 后续实现者按任务依赖和复选框逐项执行；本轮按第八轮架构审查裁决修订规格、计划与 `AGENTS.md`，不派发子 Agent、不修改运行时代码、探针、内容或配置。
+> **当前状态：** carrier runtime 已实现于 `5cc707a` 及其前置提交，Task 1–6 自动化门禁均已通过；真实有头浏览器验收仍待用户执行。文中第八轮架构修订、旧 runtime baseline、待实施任务与未勾选步骤仅保存历史实施语境，不得理解为当前代码或验证状态。
 
 **Goal:** 在不改变现有 AI/PJ DOM 契约的前提下，迁移到严格 `[#]<NAME>{...}` 协议，并以每次 `post.render` 的私有 carrier 和实际 Marked token provenance 正确区分完整 raw-text 保护区、实际 block raw HTML、普通 Markdown text、非文本字段和 Markdown 生成块。
 
@@ -37,13 +37,13 @@
 - TDD：先写失败测试、确认 RED，再写最小实现、确认 GREEN；每任务独立 commit，Conventional Commits + 中文描述；不 push。
 - `docs/superpowers/` 不写入、不提交；`.temp/` 只放临时探针并已 gitignore。
 
-### 当前执行基线
+### 历史实施基线与当前状态
 
 - Task 1 已完成：`64b35a9`（lexer/parser/token 核心）与 `74e8ecd`（词法保护边界/token 邻接修复）。
 - Task 2 已完成：`fc191b4`（registry/AI 徽标）与 `fc3f38d`（AI 参数边界）；`ed158dd` 补齐继承参数槽位拒绝。
 - Task 3 已完成：`c7d5eaa`（PJ handler、URL/CSS 安全与卡片契约）。
-- Task 4 旧实现 `00b723a` 仅作为当前 runtime baseline；其中 `raw-html.js`、宽松 sentinel 和旧 after 生命周期由本计划的新 carrier/Marked provenance 架构取代，不得把旧实现视为完成态，也不得重复创建 Task 1–3 文件或重复其 RED 阶段。
-- Task 4 从当前 runtime baseline 继续：先建立新 `carrier.js`/`marked-extension.js` 的接口与行为探针，再替换 pipeline/sentinel/register 的旧来源判断；Task 5 只在修订后的 Task 4 GREEN 后迁移内容，Task 6 只在 Task 5 后做最终 AGENTS/全量门禁同步。
+- `00b723a` 的旧 Task 4 runtime 只是 carrier 架构实施前的历史起点；其中 `raw-html.js`、宽松 sentinel 和旧 after 生命周期已由 `3e09718` 至 `b57ac84` 的 carrier/Marked provenance 实现取代，不是当前 runtime。
+- Task 4、Task 5、Task 6 已依次完成；`620e718` 完成内容迁移与旧路径删除，`5cc707a` 完成最终 `AGENTS.md`、自动化 E2E、构建与产物证据同步。Task 1–6 自动化门禁均已通过，真实有头浏览器验收仍待用户执行。
 
 ---
 
@@ -172,7 +172,7 @@ const scan = scanMarkers(source)
 
 1. `segments` 按 `start` 升序、无重叠、无间隙，首个 `start` 为 0，末个 `end` 为 `source.length`；每个 `source.slice(start, end) === raw`。
 2. `kind` 只允许 `text`、`marker`、`protected`；marker 的 `mode` 只允许 `block`、`inline`；protected 的 `reason` 只允许 `fenced-code`、`indented-code`、`inline-code`、`raw-html`。
-3. marker 候选包含从 `[#]` 到与引号/转义状态匹配的最后一个外层 `}` 的完整 `raw`。候选外壳完整但引号、参数或业务字段非法时仍返回 marker，错误留给 parser/handler。
+3. marker 候选包含从 `[#]` 到当前物理行第一个与引号/转义状态不匹配的 `}` 的完整 `raw`；引号内 `}` 与转义 `\}` 不终止外壳。相邻两枚或以普通文字分隔的两枚 marker 必须各自产生独立 candidate/range，后续正文和下一枚 marker 不得并入前一枚。候选外壳完整但引号、参数或业务字段非法时仍返回该枚 marker，错误留给 parser/handler。
 4. 未闭合外壳无法确定终点时保留为 text；未闭合 fenced code、`pre`/`textarea`/`script`/`style`、HTML 注释或标签保护到 EOF，不能重新落入正文扫描。
 5. block 模式仅在 marker 是当前物理行唯一非空白内容时使用；同一行存在其它非空白内容时为 inline。行首/行尾空白仍属于相邻 text segment。
 6. fenced code 支持反引号和波浪线，闭合围栏字符和长度必须合法；缩进 code 按行首 tab 或四空格识别，并持续到首个不再满足缩进的非空行。
@@ -186,6 +186,7 @@ const scan = scanMarkers(source)
     - `前文 <https://example.com/[#]<AI>{PASS}> 后文`：candidate=`[24,37)`，projection=`前文 <https://example.com/xxxxxxxxxxxxx> 后文`，segments=`text[0,24) + marker[24,37) + text[37,41)`。
     - `前文 https://example.com/[#]<AI>{PASS} 后文`：candidate=`[23,36)`，projection=`前文 https://example.com/xxxxxxxxxxxxx 后文`，segments=`text[0,23) + marker[23,36) + text[36,39)`。
     - 两者必须各有且仅有一枚 `mode:'inline'` marker、零 protected segment；autolink 内普通前后正文仍存在。`x` 只消除 candidate 内部的 angle/URL 终止字符和空白/control，不承担 opaque token 重建；before 仍替换为 store 的完整 token，真实 Marked parse 后由实际 `link.href` provenance 绑定 `link-url`。
+    - `[#]<AI>{PASS}[#]<AI>{EDIT}` 必须得到两枚相邻 marker；`前 [#]<AI>{PASS} 中 [#]<AI>{EDIT} 后` 必须得到 `text + marker + text + marker + text`。两组均为两枚 `mode:'inline'` occurrence、零 protected，真实 Hexo 同段必须物化两枚状态/文案正确的 AI 徽标。
 11. HTML 开始/结束标签及属性始终是 `protected/raw-html` 原文；projection 中即使暂含 candidate，`<span data-marker="[#]<AI>{PASS}">正文</span>` 的最终 scan 仍必须 marker=0、属性标签 protected、occurrence/metadata=0。image alt、link label、link href/title 不在 lexer 中生成 context/id，而由 store 与 `processAllTokens` 按实际 Marked 字段识别。
 12. lexer 不调用 parser、registry、handler、carrier 或 token string parser，也不把未知名称提前删除；CRLF 测试只比较分段/保护区结构语义，不比较原始换行字节。
 
@@ -728,7 +729,7 @@ after 阶段：
 
 ## 4. 任务 1：纯 lexer、parser、token 核心（已完成，不重复执行）
 
-> 状态：`64b35a9`、`74e8ecd` 已提供当前 runtime baseline。本节保留接口与历史断言供回归；后续不重新创建文件、不重复 RED，也不把本轮文档修订当作实现提交。Task 4 直接从现有 `themes/arknights/scripts/markers/{lexer,parser,token}.js` 继续。
+> 历史状态：`64b35a9`、`74e8ecd` 提供 Task 4 实施前的 runtime baseline。本节保留接口与历史断言供回归；Task 4 当时从现有 `themes/arknights/scripts/markers/{lexer,parser,token}.js` 继续。
 
 ### Files
 
@@ -876,7 +877,7 @@ console.log('marker core: ok')
 
 ## 5. 任务 2：registry 与 AI handler（已完成，不重复执行）
 
-> 状态：`fc191b4`、`fc3f38d`、`ed158dd` 已提供当前 runtime baseline。本节接口和断言仅用于回归；不重新创建文件或重复 RED。Task 4 复用现有 registry/AI handler。
+> 历史状态：`fc191b4`、`fc3f38d`、`ed158dd` 提供 Task 4 实施前的 registry/AI baseline。本节接口和断言仅用于回归；Task 4 当时复用现有 registry/AI handler。
 
 ### Files
 
@@ -973,7 +974,7 @@ console.log('registry + AI: ok')
 
 ## 6. 任务 3：PJ handler、URL/CSS 安全与卡片契约（已完成，不重复执行）
 
-> 状态：`c7d5eaa` 已提供当前 runtime baseline。本节接口和断言仅用于回归；不重新创建文件或重复 RED。Task 4 复用现有 PJ handler。
+> 历史状态：`c7d5eaa` 提供 Task 4 实施前的 PJ baseline。本节接口和断言仅用于回归；Task 4 当时复用现有 PJ handler。
 
 ### Files
 
@@ -1084,12 +1085,12 @@ console.log('PJ handler: ok')
 
 ---
 
-## 7. 任务 4：从当前 runtime baseline 接入 carrier bridge、Marked token provenance、pipeline、唯一注册入口与真实 Hexo 矩阵
+## 7. 任务 4（历史实施记录）：从旧 runtime baseline 接入 carrier bridge、Marked token provenance、pipeline、唯一注册入口与真实 Hexo 矩阵
 
 ### Files
 
-- Create: `themes/arknights/scripts/markers/carrier.js`（当前不存在；本次实现）
-- Create: `themes/arknights/scripts/markers/marked-extension.js`（当前不存在；本次实现）
+- Create: `themes/arknights/scripts/markers/carrier.js`（Task 4 实施前不存在；现已落地）
+- Create: `themes/arknights/scripts/markers/marked-extension.js`（Task 4 实施前不存在；现已落地）
 - Modify: `themes/arknights/scripts/markers/lexer.js`（Task 1 基线上的增量：完整保护 `pre`/`textarea`/`script`/`style` raw-text；实现 candidate → 等长 `x` masked projection → Marked 15 angle/GFM boundary → original-source segments；不重建 Task 1）
 - Modify: `themes/arknights/scripts/markers/token.js`（Task 1 基线上的增量：store-owned occurrence API；不重建 Task 1）
 - Modify: `themes/arknights/scripts/markers/sentinel.js`（从旧宽松 strip 改为精确 context API）
@@ -1108,14 +1109,14 @@ console.log('PJ handler: ok')
 
 ### Interfaces
 
-- Consumes: 当前 runtime baseline 中 Task 1–3 已存在的 `scanMarkers`、`parseMarker`、`createTokenStore`、`createRegistry`、`aiHandler`、`projectsHandler`；第 2.7–2.10 节固定 carrier/extension/sentinel/registration 契约。Task 4 只对 lexer/token 做已列明的增量，不重建 Task 1。
+- Consumes: Task 4 实施前 runtime baseline 中已有的 `scanMarkers`、`parseMarker`、`createTokenStore`、`createRegistry`、`aiHandler`、`projectsHandler`；第 2.7–2.10 节固定 carrier/extension/sentinel/registration 契约。Task 4 当时只对 lexer/token 做已列明的增量，未重建 Task 1。
 - Produces: 每次 post.render 唯一 carrier、store-owned occurrence、非枚举 `data.markdown` + 可枚举私有 symbol bridge、own unsupported value/accessor/Proxy 失败原子回滚、lexer candidate + masked projection + original-source segment 两阶段 autolink、只依据实际 Marked token 的 raw/pending provenance、冻结 owner metadata 数组、synthetic URL link 单 `link-url` owner、普通 image/link direct-field-first、非文本上下文规则、heading-only 保留 children 且不污染 `_headingId`、连续 PJ、content/显式 excerpt projection 和 fail-closed；`registerMarkerFilters(hexoContext, pipeline)` 幂等注册 before 4、after 9、marked:use 0。
 - Registration: 真实 Hexo 只在 `await hexo.init()` 时由 `register.js` 自动注册；init 后不手动注册。
 - Lifecycle: renderer、`onRenderEnd` 或 `after_render:html` rejection 不执行 after；应用不建 global current carrier，但 Marked singleton 可短暂保留 parse options。已进入 processAllTokens 的 parse 在 finally 清 symbol；下一次同 data before 修复字段和 descriptor，错误必须向上抛出。
 
 ### 实施步骤
 
-- [ ] 以当前 `00b723a` runtime baseline 为输入，先阅读旧 `pipeline.js`/`raw-html.js`/`sentinel.js` 与锁定的 renderer/Marked 源码；不重复创建 Task 1–3 文件，不重复其 RED。
+- [x] 历史实施步骤：以 `00b723a` runtime baseline 为输入，阅读旧 `pipeline.js`/`raw-html.js`/`sentinel.js` 与锁定的 renderer/Marked 源码；未重复创建 Task 1–3 文件或重复其 RED。
 - [ ] 创建/扩展 `.temp/marker-carrier.test.js`，先覆盖 `CARRIER_SYMBOL` 非 `Symbol.for`、入口有无 `data.markdown` 的 descriptor、options symbol 可枚举、`getCarrierFromOptions(options, expectedCarrier)` 对旧/伪 carrier 返回 null、`createRenderCarrier` 不接收 id/occurrences、`findOccurrences(value, field)` 精确返回 `{ id, token, start, end, raw, mode }`、`bindContext(id, context)` 的深度冻结 snapshot/状态迁移、`originalField(field)` 权威值及重复 before 修复旧状态；bridge 必须单列 own data descriptor `value: undefined` 与其它 unsupported value，断言 `CARRIER_BRIDGE_DESCRIPTOR` 且绝不改成 `{}`。另覆盖 configurable accessor（getter/setter 零调用）、descriptor/spread throwing Proxy（`CARRIER_BRIDGE_READ`）及两条 data define trap 先写入再抛错路径（`CARRIER_BRIDGE_DEFINE`）：无 own property 时断言临时属性删除、descriptor=`undefined`、原 key 集合不变；已有 `writable:false`/`enumerable:false`/`configurable:true` data descriptor 时深比较原 value 引用与全部 flags，并断言 `data.markdown` 访问读/写计数保持为 0。
 - [ ] 在真实 Hexo carrier 测试中覆盖 renderer、`onRenderEnd` 和 `after_render:html` rejection：断言 after filter 均不执行、应用无 global current carrier、再次 before 修复字段/descriptor；在 hook 已进入的成功或拒绝路径断言 `marked.defaults.hooks.options` 与 renderer options 不再含 `CARRIER_SYMBOL`。另覆盖 lexer/hook 前拒绝和下一次 parse 覆盖旧 options 的短暂引用，不作绝对零强引用断言。
 - [ ] 运行 `node .temp/marker-carrier.test.js`；新文件/新行为断言缺失时允许出现 `MODULE_NOT_FOUND`，但只作为 Task 4 首次 RED；不得回退或重做 Task 1–3 的 RED。
@@ -2376,7 +2377,9 @@ main().catch(error => {
 
 ---
 
-## 9. 任务 6：同步 AGENTS.md、端到端回归、构建与产物检查
+## 9. 任务 6（历史实施记录）：同步 AGENTS.md、端到端回归、构建与产物检查
+
+> 实施结果：Task 6 已由 `5cc707a` 完成自动化部分；真实有头浏览器验收仍待用户执行。下列复选框与代码片段保留当时的执行记录。
 
 ### Files
 
@@ -2405,7 +2408,7 @@ main().catch(error => {
 - [ ] 修改 `AGENTS.md` 的 Source Tree：加入最终存在的 `markers/register.js`、`carrier.js`、`marked-extension.js`、`sentinel.js` 和完整新模块树，删除旧 AI/PJ core/filter 与 `raw-html.js` 条目，登记 `.temp/marker-*.test.js` 探针。
 - [ ] 修改 `AGENTS.md` 的 Verification：记录真实 Hexo 自动加载与 priority、renderer/`onRenderEnd`/`after_render:html` 边界、raw-text/属性/block raw/Markdown 对照、store/carrier spy、angle/GFM candidate + 等长 masked projection + `text/marker/text`、synthetic `link-url` 单 owner、普通 image/link direct-field-first、真实 Marked sibling duplicate `CARRIER_BINDING_ERROR`、bridge own `value: undefined`/accessor/Proxy descriptor 精确恢复、content/excerpt DOM+`consumed`/`failed` 分阶段审计与统一内部串断言、抛异常 more getter/setter 零计数、fallback、真实 heading/PJ 门禁、Marked options symbol 清理、projection/meta description、上海时区构建和 artifact check；不得记录成 init 后再次显式注册。
 - [ ] 修改 `AGENTS.md` 的 Conventions：记录旧语法硬切换、最终 HTML 标签不是 raw 来源事实、carrier/sentinel 必须清零、`data.more` 由 Hexo 派生、独立语法范围、注册幂等、每任务独立 commit 和不 push。
-- [ ] 明确写入 `AGENTS.md`：`meta-description.js` 与 `register.js` 从同一 `markers/pipeline.js` 普通缓存实例取得 `projectText`/默认 pipeline；Alert/Spoiler/Terms 独立；预期不改 CSS/TS/project-tooltip；如未来修改则递增相应缓存版本。Task 6 完成前保留“旧路径待删除”的实施状态，不得提前写成已上线事实。
+- [x] `AGENTS.md` 已明确记录：`meta-description.js` 与 `register.js` 从同一 `markers/pipeline.js` 普通缓存实例取得 `projectText`/默认 pipeline；Alert/Spoiler/Terms 独立；预期不改 CSS/TS/project-tooltip；如未来修改则递增相应缓存版本。Task 6 实施前的“旧路径待删除”仅为历史状态。
 - [ ] 创建 `.temp/marker-e2e.test.js`，导入普通 require 的默认导出；先 `await hexo.init()` 并依赖 `register.js` 自动注册，禁止 init 后手动注册或创建第二套 pipeline。断言默认方法身份以及 before 4/after 9/marked:use 0 各唯一，再读取三篇 AI 文章和项目页逐个真实 render。
 - [ ] E2E 断言三篇 AI 分别为 PASS/PASS/EDIT，四态 tooltip 行数、文案和 DOM 契约正确，无旧标记、carrier、token、sentinel 或 NUL；加入当前 Hexo `image.text`、普通 link label/href/title、null/undefined title、外层 link/image direct-field-first ownership，以及 angle/GFM 的等长 masked projection、`text + marker + text`、mode=inline、唯一 `link-url` owner、state/parent、synthetic child 无 metadata，与真实 `<a>` href/label。纯扩展门禁另断言 metadata.id=occurrence.id，并以实际 Marked angle/GFM synthetic link、普通 link/image sibling fixtures 断言重复绑定错误。store/carrier spy 还证明 protected 区域无 metadata，两个连续 heading-only 与成功/失败/PJ 的真实 Hexo 引用身份/`_headingId`、bridge own unsupported value/accessor/Proxy 原子回滚及 renderer/`onRenderEnd`/`after_render:html` rejection 后同 data 重试清理。
 - [ ] E2E 断言项目页为 projects 类型、`.projects-grid > .project-card`、URL/图片、懒加载、target/rel/name/style 完整。
@@ -2788,22 +2791,23 @@ console.log('marker artifacts: ok')
 
 ### 12.1 文档语义检查清单
 
-> 以下项目用于每次文档或实现变更后的重复语义核对。本轮只运行文档门禁，Task 4 runtime gate、真实 Hexo 探针、构建和浏览器验收均未运行。
+> 以下项目用于每次文档或实现变更后的重复语义核对。当前 carrier runtime 已实施，Task 1–6 自动化门禁、上海时区构建与产物检查已通过；真实有头浏览器验收仍待用户执行。
 
-- [ ] lexer 先收集 candidate/range，再构造逐 UTF-16 code unit 等长 `x` projection；angle/GFM 最终原始 segments 均为 `text + marker + text`，各为 mode=inline occurrence=1、protected=0，HTML 属性仍 occurrence=0/protected；projection 不进入 data/token/extension。
-- [ ] link label 是 text-carrier；image alt 唯一采用当前 Hexo `image.text`；link href 与字符串 title raw-preserve；synthetic URL link 唯一 `link-url` owner，text/child 只复制 snapshot，child 无 metadata；null/undefined title 跳过，不扫描 `link.raw`。
-- [ ] 公开 store API、owner metadata descriptor/深度冻结、普通 image/link direct-field-first、synthetic 单 owner、nested projection snapshot 复制与 `CARRIER_BINDING_ERROR` 冲突规则一致；扩展不拆 token。
-- [ ] bridge 只有无 own property 才从 `{}` 开始；own accessor/`value: undefined`/其它 unsupported value 在 getter/改写前拒绝，descriptor/spread/define Proxy 错误码正确；define 部分写入后，无 own property 时临时属性被删除，已有 `writable:false`/`enumerable:false` descriptor 时原 value、flags 与访问计数精确恢复。
-- [ ] `processAllTokens` 只审计 content；explicit excerpt 由 after 9 审计并直接断言 DOM/恢复文本与 `consumed`/`failed`，两条路径复用覆盖 NUL/card/grid/opaque token/wrapper 的同一内部串断言；无显式 excerpt 且无分隔符时 excerpt projection 与已保存 content projection 严格等值；`data.more` 由抛异常 getter/setter 和读/写计数证明 pipeline 不读不写。
-- [ ] block raw 只认 `type==='html' && block===true`；raw-text、空行拆分 paragraph、inline HTML 与 Markdown 生成块有对照。
-- [ ] 纯 `new Marked()` 只测扩展基本行为、field-aware ownership 和实际 Marked sibling duplicate fixture；当前 Hexo image/link、heading、连续 PJ、after 契约和完整 DOM 均由真实 `Hexo#post.render` 验收。
-- [ ] 两个连续 PJ 为单网格/双卡片/无额外 p wrapper，普通文字和空行中断；不依赖纯 pipeline `breaks:false` 假设。
-- [ ] `carrier.originalField(field)` 是 fallback 权威，`store.restore` 仅 best effort；token 已变形测试存在。
-- [ ] heading-only 同一引用、连续 heading-only、失败/PJ、`headerIds:false`、后续 heading、最终无 id/headerlink 与内部串审计只在真实 Hexo 门禁；每个 `_headingId` snapshot 同时断言无 `''` 和 `'-1'` key。
-- [ ] renderer/`onRenderEnd`/`after_render:html` rejection 后下一次 before 修复；`getCarrierFromOptions` 校验 expected carrier 同一引用。
-- [ ] `AGENTS.md` 明确当前 runtime 仍是旧 Task 4 baseline，Task 4 增量模块未实现，旧内容/旧 filter 仍待 Task 5 删除。
-- [ ] 文档修改范围排除运行时代码、探针、内容、配置、CSS/TS 和缓存版本；Task 1–3 不重复创建，Task 6 才按最终实现再次同步 AGENTS。
-- [ ] 每次修订执行占位/旧契约反向扫描、关键接口与测试矩阵扫描、Markdown fence 配对和 `git diff --check`；结果只证明文档语义与文本结构，不替代实现验证。
+- [x] lexer 先收集 candidate/range，再构造逐 UTF-16 code unit 等长 `x` projection；angle/GFM 最终原始 segments 均为 `text + marker + text`，各为 mode=inline occurrence=1、protected=0，HTML 属性仍 occurrence=0/protected；projection 不进入 data/token/extension。
+- [x] 同一物理行相邻两枚、普通文字分隔两枚 marker 均按首个未引用/未转义 `}` 独立产生两枚 inline occurrence、零 protected；纯 Marked 与真实 Hexo 分别验证双 occurrence、双 badge 和内部串清零。
+- [x] link label 是 text-carrier；image alt 唯一采用当前 Hexo `image.text`；link href 与字符串 title raw-preserve；synthetic URL link 唯一 `link-url` owner，text/child 只复制 snapshot，child 无 metadata；null/undefined title 跳过，不扫描 `link.raw`。
+- [x] 公开 store API、owner metadata descriptor/深度冻结、普通 image/link direct-field-first、synthetic 单 owner、nested projection snapshot 复制与 `CARRIER_BINDING_ERROR` 冲突规则一致；扩展不拆 token；同行真实 nested image/link fixture 已恢复。
+- [x] bridge 只有无 own property 才从 `{}` 开始；own accessor/`value: undefined`/其它 unsupported value 在 getter/改写前拒绝，descriptor/spread/define Proxy 错误码正确；define 部分写入后，无 own property 时临时属性被删除，已有 `writable:false`/`enumerable:false` descriptor 时原 value、flags 与访问计数精确恢复。
+- [x] `processAllTokens` 只审计 content；explicit excerpt 由 after 9 审计并直接断言 DOM/恢复文本与 `consumed`/`failed`，两条路径复用覆盖 NUL/card/grid/opaque token/wrapper 的同一内部串断言；无显式 excerpt 且无分隔符时 excerpt projection 与已保存 content projection 严格等值；`data.more` 由抛异常 getter/setter 和读/写计数证明 pipeline 不读不写。
+- [x] block raw 只认 `type==='html' && block===true`；raw-text、空行拆分 paragraph、inline HTML 与 Markdown 生成块有对照。
+- [x] 纯 `new Marked()` 只测扩展基本行为、field-aware ownership 和实际 Marked sibling duplicate fixture；当前 Hexo image/link、heading、连续 PJ、after 契约和完整 DOM 均由真实 `Hexo#post.render` 验收。
+- [x] 两个连续 PJ 为单网格/双卡片/无额外 p wrapper，普通文字和空行中断；不依赖纯 pipeline `breaks:false` 假设。
+- [x] `carrier.originalField(field)` 是 fallback 权威，`store.restore` 仅 best effort；token 已变形测试存在。
+- [x] heading-only 同一引用、连续 heading-only、失败/PJ、`headerIds:false`、后续 heading、最终无 id/headerlink 与内部串审计只在真实 Hexo 门禁；每个 `_headingId` snapshot 同时断言无 `''` 和 `'-1'` key。
+- [x] renderer/`onRenderEnd`/`after_render:html` rejection 后下一次 before 修复；`getCarrierFromOptions` 校验 expected carrier 同一引用。
+- [x] `AGENTS.md` 明确当前 carrier runtime 已实现，旧 Task 4 baseline 仅为历史实施起点，旧内容/旧 filter 已由 Task 5 删除。
+- [x] 最终文档状态与已实施模块树、九探针、构建/产物证据一致；真实有头浏览器验收单独保持待办。
+- [x] 每次修订执行占位/旧契约反向扫描、关键接口与测试矩阵扫描、Markdown fence 配对和 `git diff --check`；结果只证明文档语义与文本结构，不替代实现验证。
 
 ### 12.2 实现阶段停止条件
 
@@ -2823,3 +2827,10 @@ console.log('marker artifacts: ok')
 12. 删除旧路径后 Alert、Spoiler、Terms、搜索、excerpt 或 Hexo 派生 more 发生回退；显式 excerpt 无法同时证明具体 DOM/恢复文本、统一内部串清零与 `consumed`/`failed`，无分隔符 excerpt projection 未与完整 content projection 严格相等，或 throwing-more 计数证明 pipeline 曾读写 `data.more`。
 13. 完整构建、artifact check 或真实浏览器验收失败。
 14. 工作区出现与本实施无关的用户变更；不得覆盖、暂存或提交这些变更。
+
+## 13. 最终交付状态
+
+- **已实施：** carrier runtime 已在 `5cc707a` 及其前置提交落地；`00b723a` 仅是历史实施起点。
+- **自动化门禁：** Task 1–6 九个 Node 探针、真实 Hexo E2E、上海时区构建与 artifact probe 已通过。
+- **人工门禁：** 真实有头浏览器中的 AI tooltip、项目悬停、图片懒加载与 Pjax 重绑仍待用户执行；无头截图不作为替代证据。
+- **延期 Minor：** `pipeline.js` 的职责拆分与 registry handler 元数据可变性保持 parked/deferred；静态签名 Minor 已关闭。本轮 final fix 不处理这两项。

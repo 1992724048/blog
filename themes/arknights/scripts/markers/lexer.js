@@ -146,25 +146,24 @@ function scanMarkerShell(source, start) {
   const lineEnd = findLineEnd(source, start)
   let quote = null
   let escaped = false
-  let end = null
   for (let index = nameEnd + 2; index < lineEnd; index += 1) {
     const character = source[index]
-    if (quote !== null) {
-      if (escaped) {
-        escaped = false
-      } else if (character === '\\') {
-        escaped = true
-      } else if (character === quote) {
+    if (escaped) {
+      escaped = false
+    } else if (character === '\\') {
+      escaped = true
+    } else if (quote !== null) {
+      if (character === quote) {
         quote = null
       }
     } else if (character === '"') {
       quote = character
     } else if (character === '}') {
-      end = index + 1
+      return { end: index + 1 }
     }
   }
 
-  return { end }
+  return { end: null }
 }
 
 function findMarkerMode(source, start, end) {

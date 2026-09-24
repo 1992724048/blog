@@ -1,6 +1,6 @@
 # 通用标记解释器与 AI/PJ 迁移规格
 
-- 文档状态：carrier provenance 架构修订已批准；本轮按第八轮审查裁决补齐无显式 excerpt 的 content projection 等值回退断言、`data.markdown` 两条原子回滚路径的可执行门禁，以及真实 Hexo heading-only `_headingId` 空键/`-1` 双排除断言。本轮仅修订规格、实施计划与 `AGENTS.md`，并写入架构复核报告，不修改运行时代码、测试探针、内容或配置；下述 runtime gate 均未在本轮运行。
+- 文档状态：最终实现态。carrier runtime 已实现于 `5cc707a` 及其前置提交，Task 1–6 自动化门禁均已通过；真实有头浏览器验收仍待用户执行。文中“旧 Task 4 baseline”“待实施门禁”等表述仅用于保存架构迁移的历史语境，不得理解为当前实现或当前验证状态。
 - 适用仓库：遂沫'Blog（Hexo 8.1.2，主题 `themes/arknights`）
 - 文档目的：统一 AI 生成内容标记与项目列表标记的词法、解析、渲染和纯文本投影，明确完整 raw-text 保护区、实际 block raw HTML、普通 inline HTML text、非文本字段和 Markdown 生成块的边界，并为一次性迁移提供可执行规格
 
@@ -37,8 +37,8 @@ Task 4 的候选实现暴露了两个不能靠最终 HTML 修补的问题：
 
 1. 本轮只迁移 AI 和 PJ。Alert、Spoiler、Terms 是独立语法，保持现有实现、现有优先级和现有输出，不迁移到 markers 模块。
 2. 旧 `[&]` 语法一次性硬切换。所有内容迁移完成后删除旧 AI/PJ 解析与注册路径；不保留旧语法读取、别名或兼容分支。
-3. 本轮只写入本规格文档、对应实施计划、`AGENTS.md` 与指定架构复核报告，不实现运行时代码，不修改 `source/`、`themes/`、测试探针或配置文件。
-4. 本轮不运行构建，不修改 CSS、TypeScript 或项目悬停脚本，不递增缓存版本号。
+3. 第八轮架构修订轮当时只写入本规格文档、对应实施计划、`AGENTS.md` 与指定架构复核报告；这是历史实施边界，不是当前状态。当前 carrier runtime 已在 `5cc707a` 及其前置提交落地。
+4. 同上，该架构修订轮不运行构建、不修改 CSS、TypeScript、项目悬停脚本或缓存版本号；这些历史约束不否定后续已完成的任务与门禁。
 5. 搜索生成、字数统计以及其它未列入本规格的现有行为不做无关重设计。
 6. `docs/superpowers/` 是生成目录，不写入、不提交；正式规格与计划只放在 `docs/` 根目录。
 
@@ -79,6 +79,7 @@ quoted-text := '"' ... '"'
 - `quoted-text` 中的逗号、尖括号、花括号和普通空白不作为参数分隔符。
 - 反斜杠只用于转义双引号和反斜杠；例如 `\"` 表示双引号，`\\` 表示反斜杠。
 - 语法不接受尾随逗号、空参数或未闭合的外壳。
+- 每一枚 marker 都是独立原子：外壳在第一个未引用、未转义的 `}` 处结束；引号内的 `}` 与反斜杠转义的 `\}` 不作为终止符。因此同一物理行可相邻或以普通文字分隔多枚 marker，后续 `}`、正文与下一枚 marker 不得并入前一枚。
 
 ### 5.2 合法示例
 
@@ -178,7 +179,8 @@ themes/arknights/scripts/markers/
 - masked projection 只允许决定 angle/GFM 外边界，不得写入 `data.content`、进入最终 token、交给 custom tokenizer，或由 extension 重新拼接/还原 marker。before 仍把原 candidate 替换为 store 签发的完整 opaque token；真实 Marked parse 后，只有实际 `link.href` token provenance 才能把该 occurrence 绑定为 `link-url`。angle/GFM 各用“URL 内唯一 marker + 同一段普通正文”经过已安装扩展的实际 `new Marked().parse`，断言 `mode === 'inline'`、`contentOccurrences.length === 1`、`bindings.length === 1`、metadata.id 与 occurrence.id 相等、唯一 context=`link-url`、state=`raw-preserved`、parent=`{ type:'link', field:'href' }`，并确认没有 protected/raw 误判；同两枚 source 再进入真实 `Hexo#post.render` 验证自动注册、实际 token metadata 与最终 `<a>`，DOM 断言不能替代前述证据。
 - 普通 block-level raw HTML 只保护开始/结束标签及属性，不在 lexer 中把整个元素猜成 raw；元素内部 marker 可以先签发 token，之后只能由本次满足 `token.type === 'html' && token.block === true` 的实际 token provenance 恢复。普通 inline HTML 标签及其间文本保持 Markdown text 语义，例如 `<span>`、`<a>`、`<em>` 之间的 marker 可以物化。
 - image alt、link label、link href/title 由 Marked 实际字段和第 7.5 节 dispatcher 处理；lexer 不为这些字段生成 context/id，也不能把 carrier 或 HTML wrapper 放入这些字段。
-- 扫描到 `[#]<...>{...}` 候选时，候选外壳中的 `<AI>`/`<PJ>` 不得先被当作 raw HTML；只有候选外部的 raw-text 区域才按上述完整保护规则跳过。
+- 扫描到 `[#]<...>{...}` 候选时，`scanMarkerShell` 只在当前物理行第一个未引用、未转义的 `}` 处提交该枚 candidate/range；引号内 `}` 与转义 `\}` 均不提前结束。相邻两枚或以普通文字分隔的两枚 marker 必须分别进入后续 candidate collection，不能共享外壳。
+- 候选外壳中的 `<AI>`/`<PJ>` 不得先被当作 raw HTML；只有候选外部的 raw-text 区域才按上述完整保护规则跳过。
 - 识别代码围栏、autolink、HTML raw-text 区域和普通标签时必须覆盖开始、结束和未闭合边界，不能因为保护区域不完整而把后续正文当作代码或 raw。
 - lexer 只提取候选，不执行 AI/PJ 业务校验，不选择 handler，不生成最终 DOM。
 - 保留 Markdown 的其它结构、缩进、列表、表格和 HTML 语义；token 替换不得破坏 `<!-- more -->` 等 Hexo/Marked 标记。CRLF 由 Marked 归一化，规格只承诺结构和语义，不承诺原始换行字节。
@@ -458,7 +460,7 @@ Alert、Spoiler、Terms 及其 core 文件不在迁移范围内，不因 markers
 
 ## 12. 验证矩阵
 
-以下验证属于后续实现任务；本次仅文档任务不执行构建或浏览器测试。
+以下矩阵现已由 `5cc707a` 及其前置提交中的实现执行：Task 1–6 自动化门禁、上海时区构建与产物检查均通过；唯一仍待用户完成的是真实有头浏览器验收。
 
 | 层级 | 覆盖内容 | 通过标准 |
 | --- | --- | --- |
@@ -496,17 +498,19 @@ Task 4 的纯 `new Marked()` 测试只覆盖扩展基本行为、无 bridge no-o
 9. 完整 token 已被改写或截断时，after 字段级 fallback 使用 `carrier.originalField(field)`；`store.restore` 只作局部 best effort。
 10. Task 1–3 探针回归。
 
+最终修复门禁还固定覆盖：同一物理行相邻两枚 marker、同行普通文字分隔两枚 marker 均产生各自 candidate/occurrence；纯 Marked 路径为两枚 inline occurrence，真实 Hexo 同段物化两枚 AI 徽标；双向 nested image/link direct-field ownership 使用同一物理行真实 fixture，并继续核对 canonical owner、投影 child 无 metadata 与最终 `<img alt>`。所有路径执行内部串清零断言。
+
 无头浏览器截图不能作为位置、布局或 CSS 注入结论的依据；tooltip、项目悬停和 Pjax 必须在真实浏览器中手测。
 
 ## 13. 实施交付边界
 
-1. 本轮文档修订只修改设计文档、实施计划与 `AGENTS.md`，并写入指定 `.superpowers/` 架构复核报告；不修改运行时代码、测试探针、内容或配置。
-2. 后续实现任务由 fixer 按计划逐项执行 TDD；Task 1–3 已完成，Task 4 从当前 runtime baseline 继续，Task 5/6 依赖修订后的 Task 4；每个任务一个独立 Conventional Commit，最终状态再执行一次完整构建门禁。
-3. 主控随后派发 oracle 审查，重点复核 carrier provenance、非文本上下文、heading slug/`_headingId`、renderer rejection 生命周期、注册幂等、并发隔离和内部串 fail-closed。
-4. 审查问题由原执行 Agent 修复并追加提交；不在本规格任务中预先修改运行时代码。
+1. 第八轮架构修订轮只修改设计文档、实施计划与 `AGENTS.md`，并写入指定 `.superpowers/` 架构复核报告；该文件范围仅作为历史实施记录。
+2. 后续实现任务已由 fixer 按计划逐项执行 TDD：Task 1–3 提供核心基础，Task 4 以历史 `00b723a` baseline 为输入完成 carrier/Marked provenance，Task 5 完成内容迁移与旧路径删除，Task 6 完成 `AGENTS.md`、自动化 E2E、构建和产物门禁。
+3. 主控与 oracle 已对 carrier provenance、非文本上下文、heading slug/`_headingId`、renderer rejection 生命周期、注册幂等、并发隔离和内部串 fail-closed 执行多轮审查；审查问题由原执行 Agent 在对应任务提交中修复。
+4. `5cc707a` 及其前置提交构成当前已实施 runtime；文档中的旧 baseline、未实现模块和待删除路径只用于解释迁移过程，不是当前代码来源事实。
 5. 不执行 `git push`。实际部署仍遵循仓库既有 CI 和 GitHub Pages 流程。
-6. 本轮 Git 提交只包含 `docs/2026-09-24-marker-interpreter-design.md`、`docs/2026-09-24-marker-interpreter-plan.md` 与 `AGENTS.md`；`.superpowers/` 报告、`docs/superpowers/`、构建产物和临时探针均不提交。
-7. 本轮没有执行任何 Task 4 runtime gate、真实 Hexo 探针、构建或浏览器验收；当前 runtime 仍是旧 Task 4 baseline，以下矩阵均是待实施门禁，不能表述为已经通过。
+6. `.superpowers/` 报告、`docs/superpowers/`、构建产物和临时探针均不进入版本库；各正式任务仍保持独立 Conventional Commit。
+7. 当前验证状态：Task 1–6 自动化门禁、上海时区构建与产物检查已通过；真实有头浏览器中的 AI tooltip、项目悬停、懒加载和 Pjax 重绑仍待用户验收。
 
 ## 14. 风险与缓解
 
@@ -532,4 +536,4 @@ Task 4 的纯 `new Marked()` 测试只覆盖扩展基本行为、无 bridge no-o
 
 ## 15. 结论
 
-本规格把待实施的旧 AI/PJ 分散路径收敛为“原始 Markdown 词法提取、严格语法解析、store-owned occurrence、每次 post.render 私有 carrier、实际 Marked token provenance、深度冻结 parent metadata、registry 分发、handler 校验渲染、通用纯文本投影”的两阶段架构。最终 HTML 标签不承担 raw 来源判断；只有实际 `type==='html' && block===true` 的 token 才恢复 raw carrier。lexer 先收集原始 marker range，再以等长 `x` masked projection 执行 Marked 15 angle/GFM 边界判断，最终仍从原始 source 发出 `text + marker + text`；真实 token provenance 才把唯一 occurrence 绑定到 `link-url`。普通 image/link 采用 direct-field-first ownership，nested 投影 child 只复制 snapshot；synthetic URL link 只有 href owner。bridge 只有无 own property 时才从 `{}` 开始，accessor/own unsupported value 与 Proxy 失败按稳定错误码执行 descriptor 原子回滚。`processAllTokens` 只审计 content，explicit excerpt 由 after 9 审计并以具体 DOM/恢复文本、统一内部串断言和 `consumed`/`failed` 证明；`data.more` 以抛异常 getter/setter 零计数证明 pipeline 不读写。renderer/`onRenderEnd`/`after_render:html` 任一拒绝都会跳过 after 9，fallback 以 `carrier.originalField(field)` 为权威。heading-only 与 `_headingId` 门禁必须在真实 `Hexo#post.render` 中验证，纯 `new Marked()` 只覆盖扩展基本行为。当前 runtime 仍是旧 Task 4 baseline，本规格及列出的 gate 尚未实施或运行；Task 4 验证显式 excerpt 字段与 projection，但不验证 meta description；后者接线属于 Task 5。
+本规格已把旧 AI/PJ 分散路径收敛为“原始 Markdown 词法提取、严格语法解析、store-owned occurrence、每次 post.render 私有 carrier、实际 Marked token provenance、深度冻结 parent metadata、registry 分发、handler 校验渲染、通用纯文本投影”的两阶段架构。最终 HTML 标签不承担 raw 来源判断；只有实际 `type==='html' && block===true` 的 token 才恢复 raw carrier。lexer 先收集原始 marker range，再以等长 `x` masked projection 执行 Marked 15 angle/GFM 边界判断，最终仍从原始 source 发出 `text + marker + text`；真实 token provenance 才把唯一 occurrence 绑定到 `link-url`。普通 image/link 采用 direct-field-first ownership，nested 投影 child 只复制 snapshot；synthetic URL link 只有 href owner。bridge 只有无 own property 时才从 `{}` 开始，accessor/own unsupported value 与 Proxy 失败按稳定错误码执行 descriptor 原子回滚。`processAllTokens` 只审计 content，explicit excerpt 由 after 9 审计并以具体 DOM/恢复文本、统一内部串断言和 `consumed`/`failed` 证明；`data.more` 以抛异常 getter/setter 零计数证明 pipeline 不读写。renderer/`onRenderEnd`/`after_render:html` 任一拒绝都会跳过 after 9，fallback 以 `carrier.originalField(field)` 为权威。heading-only 与 `_headingId` 由真实 `Hexo#post.render` 门禁验证，纯 `new Marked()` 只覆盖扩展基本行为。carrier runtime 已实现于 `5cc707a` 及其前置提交，Task 1–6 自动化门禁已通过；真实有头浏览器验收仍待用户执行。历史旧 Task 4 baseline 仅是迁移起点，不是当前状态。
