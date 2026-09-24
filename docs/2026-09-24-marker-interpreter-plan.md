@@ -322,16 +322,20 @@ const projectedExcerpt = pipeline.projectText(data, 'excerpt')
 模块导出和默认实例契约：
 
 ```js
+'use strict'
+
+const assert = require('node:assert/strict')
+const pipelineExports = require('./pipeline')
 const {
-  createMarkerPipeline,
   defaultPipeline,
-  registerMarkerFilters,
   beforePostRender,
   afterPostRender,
   projectText
-} = require('./pipeline')
+} = pipelineExports
 
-registerMarkerFilters(hexo, defaultPipeline)
+assert.equal(beforePostRender, defaultPipeline.beforePostRender)
+assert.equal(afterPostRender, defaultPipeline.afterPostRender)
+assert.equal(projectText, defaultPipeline.projectText)
 ```
 
 `pipeline.js` 的导出集合固定为 `createMarkerPipeline`、`defaultPipeline`、`registerMarkerFilters`、`beforePostRender`、`afterPostRender`、`projectText`；不得再从其它文件导出一套默认 pipeline 或过滤器别名。
@@ -339,7 +343,9 @@ registerMarkerFilters(hexo, defaultPipeline)
 - `defaultPipeline` 是 `pipeline.js` 在普通 Node 缓存中唯一的默认实例，固定使用 AI/PJ handler；`beforePostRender`、`afterPostRender`、`projectText` 必须分别是该实例的同一方法引用，不重新创建第二个默认 pipeline。
 - `registerMarkerFilters(hexoContext, pipeline = defaultPipeline)` 只把传入 pipeline 的 before/after 方法注册到 `hexoContext.extend.filter`，priority 固定为 4/9；它不从全局变量取 Hexo，也不隐式创建 pipeline。
 - `pipeline.js` require 时没有 Hexo 注册副作用；`register.js` 是 markers 子树中唯一由 Hexo 主题脚本自动加载并产生注册副作用的入口。`register.js` 只从 `./pipeline` 取得 `defaultPipeline` 与 `registerMarkerFilters`，然后执行一次 `registerMarkerFilters(hexo, defaultPipeline)`。
-- `meta-description.js` 必须从同一 `../markers/pipeline` 普通缓存模块取得 `projectText`，不得重新创建 pipeline；因此自动注册实例与 SEO 投影实例共享同一组 WeakMap。真实 Hexo 探针须显式导入 `createMarkerPipeline`/`registerMarkerFilters`（或按 `register.js` 契约注册），并用传入的 `hexo` 上下文断言 filter priority，不依赖普通 require 与主题脚本加载身份偶然相同。
+- `meta-description.js` 必须从同一 `../markers/pipeline` 普通缓存模块取得 `projectText`，不得重新创建 pipeline；因此自动注册实例与 SEO 投影实例共享同一组 WeakMap。
+- 真实 Hexo 探针先执行 `await hexo.init()`，由主题脚本加载器自动执行 `register.js`；随后用普通 `require` 得到的 `defaultPipeline`、`beforePostRender`、`afterPostRender`、`projectText` 断言已注册函数的身份、唯一条目与 priority 4/9。探针不得在 init 后调用 `registerMarkerFilters`，也不得创建或注册第二套 pipeline。
+- `registerMarkerFilters` 的参数传递只在纯测试中以独立 mock `hexoContext` 验证，不得与真实 Hexo 的自动注册叠加。`createMarkerPipeline` 仍可保留为纯行为测试工具；Hexo 直接 VM 执行产生的额外 `pipeline.js` 求值不会调用注册函数，只有 CommonJS 缓存导出的 `defaultPipeline` 承担实际标记功能。
 
 `register.js` 的唯一副作用实现契约：
 
@@ -819,7 +825,7 @@ console.log('PJ handler: ok')
 ### Interfaces
 
 - Consumes: `createTokenStore`、`createRegistry`、`aiHandler`、`projectsHandler`。
-- Produces: `createMarkerPipeline(options)`、普通 Node 缓存中唯一的 `defaultPipeline`、`registerMarkerFilters(hexoContext, pipeline = defaultPipeline)`，以及该默认实例的 `beforePostRender(data)`、`afterPostRender(data)`、`projectText(data, sourceField)`；`register.js` 以显式 `hexo` 上下文注册 before 4、after 9。
+- Produces: `createMarkerPipeline(options)`、普通 Node 缓存中唯一的 `defaultPipeline`、`registerMarkerFilters(hexoContext, pipeline = defaultPipeline)`，以及该默认实例的 `beforePostRender(data)`、`afterPostRender(data)`、`projectText(data, sourceField)`；真实 Hexo 在 `init()` 时自动加载 `register.js`，由它把默认实例注册为 before 4、after 9。
 
 ### 实施步骤
 
@@ -845,8 +851,8 @@ console.log('PJ handler: ok')
 - [ ] 实现 `projectText(data, sourceField)` 的字段选择、未知/null fallback 和当前实例私有 WeakMap 生命周期。
 - [ ] 实现 `registerMarkerFilters(hexoContext, pipeline = defaultPipeline)`，只向传入上下文注册 before 4、after 9；不要读取 `global.hexo`，不要读取或调用 `PostRenderEscape`。
 - [ ] 创建 `themes/arknights/scripts/markers/register.js`，只从 `./pipeline` 取得 `defaultPipeline` 与 `registerMarkerFilters`，并以主题脚本传入的 `hexo` 显式调用 `registerMarkerFilters(hexo, defaultPipeline)`；不得在 `pipeline.js` 或 handler 中重复注册。
-- [ ] 创建 `.temp/marker-hexo-integration.test.js`，导入 `createMarkerPipeline`、`registerMarkerFilters` 和 handlers，显式创建/注册测试 pipeline 后使用真实 `Hexo#post.render` 覆盖 priority 4/9/10、显式 excerpt、正常 more 派生、代码区和 raw HTML；断言注册的函数就是该 pipeline 的方法，不依赖 `global.hexo` 或脚本加载身份。
-- [ ] 加入默认导出身份与单入口断言：`beforePostRender`/`afterPostRender`/`projectText` 与 `defaultPipeline` 方法同一引用，`register.js` 只调用一次 `registerMarkerFilters`，且不创建第二个默认 pipeline。
+- [ ] 创建 `.temp/marker-hexo-integration.test.js`，导入普通 require 导出的 `defaultPipeline`、`beforePostRender`、`afterPostRender`、`projectText`，先执行 `await hexo.init()` 并依赖 `register.js` 自动注册；不得在 init 后调用 `registerMarkerFilters`，也不得创建或注册第二套 pipeline。随后使用真实 `Hexo#post.render` 覆盖 priority 4/9/10、显式 excerpt、正常 more 派生、代码区和 raw HTML。
+- [ ] 加入默认导出身份与单入口断言：`beforePostRender`/`afterPostRender`/`projectText` 与 `defaultPipeline` 方法同一引用；已注册列表中两个默认方法各恰好一条，priority 分别为 4/9；`register.js` 只调用一次 `registerMarkerFilters`，且不创建第二个默认 pipeline。`registerMarkerFilters` 的参数行为另用不启动真实 Hexo 的 mock 上下文单测。
 - [ ] 运行两个探针；GREEN 预期输出 `marker pipeline: ok` 与 `marker Hexo integration: ok`。
 - [ ] 复跑任务 1–3 探针，确认纯模块行为未回退。
 - [ ] 运行 `git diff --check`，提交：`git add themes/arknights/scripts/markers/pipeline.js themes/arknights/scripts/markers/register.js && git commit -m "feat(markers): 接入两阶段渲染、唯一注册入口与纯文本投影"`。
@@ -862,6 +868,7 @@ const assert = require('node:assert/strict')
 const {
   createMarkerPipeline,
   defaultPipeline,
+  registerMarkerFilters,
   beforePostRender: defaultBeforePostRender,
   afterPostRender: defaultAfterPostRender,
   projectText: defaultProjectText
@@ -873,6 +880,23 @@ const { projectsHandler } = require('../themes/arknights/scripts/markers/handler
 assert.equal(defaultBeforePostRender, defaultPipeline.beforePostRender)
 assert.equal(defaultAfterPostRender, defaultPipeline.afterPostRender)
 assert.equal(defaultProjectText, defaultPipeline.projectText)
+
+const mockRegistrations = []
+const mockHexoContext = {
+  extend: {
+    filter: {
+      register(type, handler, priority) {
+        mockRegistrations.push({ type, handler, priority })
+      }
+    }
+  }
+}
+registerMarkerFilters(mockHexoContext, defaultPipeline)
+assert.deepEqual(mockRegistrations, [
+  { type: 'before_post_render', handler: defaultBeforePostRender, priority: 4 },
+  { type: 'after_post_render', handler: defaultAfterPostRender, priority: 9 }
+])
+
 const pipeline = createMarkerPipeline({
   handlers: [aiHandler, projectsHandler],
   tokenStoreFactory: createTokenStore
@@ -948,7 +972,7 @@ assert.equal(encrypted.content, encryptedBefore)
 console.log('marker pipeline: ok')
 ```
 
-真实 Hexo 探针的关键断言：
+真实 Hexo 探针的关键断言（仅由 `init()` 自动加载 `register.js`，不重复注册）：
 
 ```js
 'use strict'
@@ -957,32 +981,30 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const Hexo = require('hexo')
 const {
-  createMarkerPipeline,
-  registerMarkerFilters
+  defaultPipeline,
+  beforePostRender,
+  afterPostRender,
+  projectText
 } = require('../themes/arknights/scripts/markers/pipeline')
-const { createTokenStore } = require('../themes/arknights/scripts/markers/token')
-const { aiHandler } = require('../themes/arknights/scripts/markers/handlers/ai')
-const { projectsHandler } = require('../themes/arknights/scripts/markers/handlers/projects')
 
 async function main() {
   const hexo = new Hexo(path.resolve(__dirname, '..'), { silent: true })
   try {
     await hexo.init()
-    const pipeline = createMarkerPipeline({
-      handlers: [aiHandler, projectsHandler],
-      tokenStoreFactory: createTokenStore
-    })
-    registerMarkerFilters(hexo, pipeline)
-    const beforeEntry = hexo.extend.filter
+    assert.equal(defaultPipeline.beforePostRender, beforePostRender)
+    assert.equal(defaultPipeline.afterPostRender, afterPostRender)
+    assert.equal(defaultPipeline.projectText, projectText)
+
+    const beforeEntries = hexo.extend.filter
       .list('before_post_render')
-      .find(filter => filter === pipeline.beforePostRender)
-    const afterEntry = hexo.extend.filter
+      .filter(entry => entry === beforePostRender)
+    const afterEntries = hexo.extend.filter
       .list('after_post_render')
-      .find(filter => filter === pipeline.afterPostRender)
-    assert.ok(beforeEntry)
-    assert.ok(afterEntry)
-    assert.equal(beforeEntry.priority, 4)
-    assert.equal(afterEntry.priority, 9)
+      .filter(entry => entry === afterPostRender)
+    assert.equal(beforeEntries.length, 1)
+    assert.equal(afterEntries.length, 1)
+    assert.equal(beforeEntries[0].priority, 4)
+    assert.equal(afterEntries[0].priority, 9)
 
     const source = [
       '摘要 [ # ]',
@@ -1068,7 +1090,7 @@ main().catch(error => {
 
 - [ ] 创建 `.temp/marker-migration.test.js`，先断言四个源文件分别只含规格表中的新标记，且旧标记计数均为 0。
 - [ ] 加入四个旧模块必须不存在、meta-description 必须只从 `../markers/pipeline` 导入 `projectText` 且不得引用 `ai-badge-core` 或自行注册过滤器的断言。
-- [ ] 加入 meta-description 真实 Hexo 探针：先确认 `defaultPipeline` 的 before/after 方法就是注册到同一 Hexo 上下文的函数，再无显式 description 时只出现 `PASS 摘要说明`，不出现 tooltip 标题、四态说明、SVG、链接或 CSS URL；由此验证 SEO 读取的是注册实例的 WeakMap。
+- [ ] 加入 meta-description 真实 Hexo 探针：先执行 `await hexo.init()`，不调用 `registerMarkerFilters`；确认 `defaultPipeline` 的 before/after 方法就是自动注册到同一 Hexo 上下文的函数、两个默认方法各恰好一条且 priority 为 4/9，再在无显式 description 时只出现 `PASS 摘要说明`，不出现 tooltip 标题、四态说明、SVG、链接或 CSS URL；由此验证 SEO 读取的是注册实例的 WeakMap。
 - [ ] 加入迁移后项目页真实 Hexo 探针：一张网格、一个卡片、懒加载和安全 style，不断言卡片外层额外 wrapper。
 - [ ] 运行 `node .temp/marker-migration.test.js`；RED 预期首先在源文件仍含 `[&]AI|` 或 `[&]PJ|` 处失败。
 - [ ] 精确替换 `ai-programming-journey.md` 的 PASS 标记；确认 frontmatter 和正文其它字节未变化。
@@ -1077,7 +1099,7 @@ main().catch(error => {
 - [ ] 精确替换 `source/projects/index.md` 的 PJ 标记；保留项目名、GitHub URL 与图片根相对路径。
 - [ ] 在 meta-description 通过同一 `require('../markers/pipeline')` 普通缓存实例引入 `{ projectText }`，不得新建 pipeline 或调用 `registerMarkerFilters`；删除 `stripAiBadgeMarkup` 依赖和 AI 专用清理分支。
 - [ ] 保留显式 description 的空白归一化逻辑；派生路径按 `data.excerpt ? 'excerpt' : 'content'` 取得 sourceField。
-- [ ] 派生路径先调用 `projectText(data, sourceField)`，null 时回退原 source，再执行 strip_html、160 字限制和省略号；用真实 Hexo 断言注册函数的 before/after 身份与该默认实例一致。
+- [ ] 派生路径先调用 `projectText(data, sourceField)`，null 时回退原 source，再执行 strip_html、160 字限制和省略号；用真实 Hexo 的自动注册结果断言 `projectText`/before/after 与该默认实例身份一致、before/after 各唯一且 priority 为 4/9，不得在 `init()` 后再次显式注册。
 - [ ] 删除四个旧 AI/PJ 文件；执行 `rg -n -F '[&]AI|' source themes/arknights/scripts` 与 `rg -n -F '[&]PJ|' source themes/arknights/scripts`，两次都应无输出且退出码 1。
 - [ ] 搜索 `ai-badge-core`、`projects-core` 和旧 filter 文件名的 require/import，预期无命中。
 - [ ] 运行 `node .temp/marker-migration.test.js`；GREEN 预期输出 `marker migration: ok`。
@@ -1099,7 +1121,7 @@ const {
   defaultPipeline,
   beforePostRender,
   afterPostRender,
-  registerMarkerFilters
+  projectText
 } = require('../themes/arknights/scripts/markers/pipeline')
 
 const root = path.resolve(__dirname, '..')
@@ -1141,17 +1163,20 @@ async function main() {
   const hexo = new Hexo(root, { silent: true })
   try {
     await hexo.init()
-    registerMarkerFilters(hexo, defaultPipeline)
-    const beforeEntry = hexo.extend.filter
+    assert.equal(defaultPipeline.beforePostRender, beforePostRender)
+    assert.equal(defaultPipeline.afterPostRender, afterPostRender)
+    assert.equal(defaultPipeline.projectText, projectText)
+
+    const beforeEntries = hexo.extend.filter
       .list('before_post_render')
-      .find(filter => filter === beforePostRender)
-    const afterEntry = hexo.extend.filter
+      .filter(entry => entry === beforePostRender)
+    const afterEntries = hexo.extend.filter
       .list('after_post_render')
-      .find(filter => filter === afterPostRender)
-    assert.ok(beforeEntry)
-    assert.ok(afterEntry)
-    assert.equal(beforeEntry.priority, 4)
-    assert.equal(afterEntry.priority, 9)
+      .filter(entry => entry === afterPostRender)
+    assert.equal(beforeEntries.length, 1)
+    assert.equal(afterEntries.length, 1)
+    assert.equal(beforeEntries[0].priority, 4)
+    assert.equal(afterEntries[0].priority, 9)
     const described = await hexo.post.render('description-probe.md', {
       content: '[#]<AI>{PASS, "摘要说明"}\n正文',
       type: 'post',
@@ -1211,10 +1236,10 @@ main().catch(error => {
 - [ ] 修改 `AGENTS.md` 的 Architecture：记录 markers 模块树、严格协议、两阶段数据流、before 4/after 9、原子恢复，以及 `pipeline.js` 无注册副作用、`defaultPipeline` 为普通 Node 缓存唯一默认实例。
 - [ ] 修改 `AGENTS.md` 的 Local Customization Map：用通用 markers 入口替换旧 AI/PJ 两套说明，登记 `markers/register.js` 是 Hexo 主题脚本自动加载的唯一标记注册副作用入口，并保留 DOM/Pjax/projection 契约。
 - [ ] 修改 `AGENTS.md` 的 Source Tree：加入 `markers/register.js` 和完整新模块树，删除旧 AI/PJ core/filter 条目，登记 `.temp/marker-*.test.js` 探针。
-- [ ] 修改 `AGENTS.md` 的 Verification：记录七个 Node 探针、显式 `registerMarkerFilters(hexo, pipeline)` 的真实 Hexo 探针、上海时区构建、artifact check 和主题测试非门禁。
+- [ ] 修改 `AGENTS.md` 的 Verification：记录七个 Node 探针、真实 Hexo 在 `init()` 时自动加载 `register.js` 且默认 before/after 各唯一并保持 priority 4/9、上海时区构建、artifact check 和主题测试非门禁；不得记录成 init 后再次显式注册。
 - [ ] 修改 `AGENTS.md` 的 Conventions：记录旧语法硬切换、独立语法范围、`register.js` 不重复注册、每任务独立 commit 和不 push。
 - [ ] 明确写入 `AGENTS.md`：`meta-description.js` 与 `register.js` 从同一 `markers/pipeline.js` 普通缓存实例取得 `projectText`/默认 pipeline；Alert/Spoiler/Terms 独立；预期不改 CSS/TS/project-tooltip；如未来修改则递增相应缓存版本。
-- [ ] 创建 `.temp/marker-e2e.test.js`，导入同一 `defaultPipeline` 与 `registerMarkerFilters`，显式注册到真实 Hexo 上下文后，再使用 `hexo-front-matter` 读取三篇 AI 文章和项目页，逐个调用真实 `Hexo#post.render`。
+- [ ] 创建 `.temp/marker-e2e.test.js`，导入普通 require 导出的 `defaultPipeline`、`beforePostRender`、`afterPostRender`、`projectText`；先执行 `await hexo.init()` 并依赖 `register.js` 自动注册，禁止在 init 后调用 `registerMarkerFilters` 或创建第二套 pipeline。断言默认方法身份、各唯一条目与 priority 4/9 后，再使用 `hexo-front-matter` 读取三篇 AI 文章和项目页，逐个调用真实 `Hexo#post.render`。
 - [ ] E2E 断言三篇 AI 分别为 PASS/PASS/EDIT，四态 tooltip 行数正确，文案可见，DOM 契约保留，无旧标记和 token。
 - [ ] E2E 断言项目页为 projects 类型、`.projects-grid > .project-card`、URL/图片、懒加载、target/rel/name/style 完整。
 - [ ] E2E 断言 Alert/Spoiler/Terms 既有代表语法仍能渲染，且没有改为 marker token。
@@ -1241,7 +1266,9 @@ const frontMatter = require('hexo-front-matter')
 const Hexo = require('hexo')
 const {
   defaultPipeline,
-  registerMarkerFilters
+  beforePostRender,
+  afterPostRender,
+  projectText
 } = require('../themes/arknights/scripts/markers/pipeline')
 
 const root = path.resolve(__dirname, '..')
@@ -1255,7 +1282,21 @@ async function main() {
   const hexo = new Hexo(root, { silent: true })
   try {
     await hexo.init()
-    registerMarkerFilters(hexo, defaultPipeline)
+    assert.equal(defaultPipeline.beforePostRender, beforePostRender)
+    assert.equal(defaultPipeline.afterPostRender, afterPostRender)
+    assert.equal(defaultPipeline.projectText, projectText)
+
+    const beforeEntries = hexo.extend.filter
+      .list('before_post_render')
+      .filter(entry => entry === beforePostRender)
+    const afterEntries = hexo.extend.filter
+      .list('after_post_render')
+      .filter(entry => entry === afterPostRender)
+    assert.equal(beforeEntries.length, 1)
+    assert.equal(afterEntries.length, 1)
+    assert.equal(beforeEntries[0].priority, 4)
+    assert.equal(afterEntries[0].priority, 9)
+
     for (const [relativePath, state] of cases) {
       const absolutePath = path.join(root, relativePath)
       const data = frontMatter.parse(fs.readFileSync(absolutePath, 'utf8'))
@@ -1373,7 +1414,7 @@ console.log('marker artifacts: ok')
 - Architecture：新增 `themes/arknights/scripts/markers/` 模块树与两阶段数据流；说明 `pipeline.js` 无注册副作用、`defaultPipeline` 是普通 Node 缓存唯一默认实例。
 - Local Customization Map：用通用 markers 入口替换旧 AI/PJ 两套说明；登记 `markers/register.js` 是 Hexo 主题脚本自动加载的唯一标记注册副作用入口，并保留现有 DOM、Pjax、meta projection 契约。
 - Source Tree：加入 `markers/register.js` 和完整新模块树，删除旧 AI/PJ core/filter 条目，登记 `.temp/marker-*.test.js` 探针用途。
-- Verification：记录七个 Node 探针、显式 `registerMarkerFilters(hexo, pipeline)` 的真实 Hexo 探针、上海时区构建和 artifact check；注明主题 `npm test` 不是门禁。
+- Verification：记录七个 Node 探针、真实 Hexo 在 `init()` 时自动加载 `register.js`、普通 require 导出的默认方法与已注册函数身份一致、before/after 各唯一且 priority 为 4/9、上海时区构建和 artifact check；注明主题 `npm test` 不是门禁，禁止描述为 init 后再次显式注册。
 - Conventions：旧 `[&]` 硬切换、Alert/Spoiler/Terms 独立、失败原样恢复、`register.js` 不重复注册、每任务独立 commit、不 push；说明 `meta-description.js` 与 `register.js` 共享同一 `markers/pipeline.js` 普通缓存实例。
 
 ## 10. 任务依赖与提交序列
@@ -1409,7 +1450,7 @@ console.log('marker artifacts: ok')
 | 5. 严格语法 | 1 | parser 成功/失败矩阵与物理换行断言 |
 | 6. 标记语义 | 2、3、4、6 | AI 四态、PJ 页面/模式/连续网格、DOM 契约与项目页构建产物 |
 | 7. 模块架构 | 1–5 | 固定导出、handler 无 Hexo 注册、`pipeline.js` 无 require 副作用、`register.js` 唯一注册入口、默认 pipeline 单实例与 meta-description 同缓存 |
-| 8. 数据流与优先级 | 4、5、6 | 显式 `registerMarkerFilters(hexo, pipeline)` 的真实 filter priority 4/9、默认 pipeline 与 SEO WeakMap 共享、excerpt/more、more comment、after 10 前物化 |
+| 8. 数据流与优先级 | 4、5、6 | 真实 Hexo `init()` 自动注册、默认 before/after 各唯一且 priority 4/9、默认 pipeline 与 SEO WeakMap 共享、excerpt/more、more comment、after 10 前物化 |
 | 9. Handler 契约 | 2、3、4 | parse 冻结结果、render 字符串、toPlainText、registry 分发断言 |
 | 10. 安全策略 | 1、3、4 | 保护区、token 防碰撞、URL/CSS/HTML 序列化、失败无半成品与无泄漏 |
 | 11. 迁移清单 | 5 | 四文件精确新字符串、旧路径删除、meta-description 源码与运行断言 |
@@ -1425,7 +1466,7 @@ console.log('marker artifacts: ok')
 - [x] 对照规格第 1–15 节逐项建立任务和验证映射。
 - [x] 文件树、导出名、参数顺序和返回结构在接口章节与六个任务中一致。
 - [x] `pipeline.js` 无注册副作用，`defaultPipeline` 只有普通 Node 缓存中的一个默认实例；`register.js` 是唯一自动注册入口，并与 `meta-description.js` 共享该实例的 WeakMap。
-- [x] 每个任务都包含实际 Node assert 代码、RED 命令及原因、GREEN 命令及预期输出；真实 Hexo 探针显式创建/注册 pipeline 并断言 priority 4/9。
+- [x] 每个任务都包含实际 Node assert 代码、RED 命令及原因、GREEN 命令及预期输出；真实 Hexo 探针先 `await hexo.init()` 并依赖 `register.js` 自动注册，断言普通 require 导出的默认方法身份、各唯一条目与 priority 4/9，不再于 init 后显式注册或创建第二套 pipeline。
 - [x] 连续 PJ 网格、显式字段、more 派生、优先级、meta 投影、安全序列化、迁移和构建产物均有断言；raw HTML、fenced code 和 Alert 使用互不混淆的精确断言。
 - [x] 未把测试编写本身当作 GREEN；所有行为实现前均要求先观察 RED。
 - [x] 正式计划只选择 `docs/` 根路径，提交范围排除 `docs/superpowers/`、`.temp/` 和 `public/`。
