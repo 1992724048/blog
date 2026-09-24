@@ -11,7 +11,8 @@ const {
   CARRIER_SYMBOL,
   createRenderCarrier,
   attachCarrierBridge,
-  restoreCarrierBridge
+  restoreCarrierBridge,
+  restoreCarrierBridgeFromData
 } = require('./carrier')
 const { installMarkedExtension } = require('./marked-extension')
 
@@ -24,6 +25,9 @@ const HTML_TEXT_ENTITIES = Object.freeze({
 const MORE_PATTERN = /<!--\s*more\s*-->|<span\b[^>]*\bid=["']more["'][^>]*>\s*<\/span>/i
 const INTERNAL_HANDLER_PATTERN =
   /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-(?:open|close))-|\u0000/u
+const CARRIER_WRAPPER_NAMESPACE_PATTERN = /data-arknights-carrier\b/giu
+const CARRIER_WRAPPER_ATTRIBUTE_PATTERN =
+  /data-arknights-carrier\s*=\s*(?:"([^"]*)"|'([^']*)')/giu
 
 function escapeHtmlText(value) {
   return value.replace(/[&<>]/g, character => HTML_TEXT_ENTITIES[character])
@@ -199,7 +203,18 @@ function prepareOccurrence(occurrence, state, data, field, registry) {
   }
 }
 
+function createCarrierWrapper(token) {
+  return `<span data-arknights-carrier="${token}"></span>`
+}
+
+function countExactText(value, expected) {
+  return value.split(expected).length - 1
+}
+
 function applyOccurrences(value, occurrences, replacements, tokenized) {
+  if (occurrences.length !== replacements.length) {
+    return null
+  }
   let result = value
   for (let index = occurrences.length - 1; index >= 0; index -= 1) {
     const occurrence = occurrences[index]
@@ -208,11 +223,15 @@ function applyOccurrences(value, occurrences, replacements, tokenized) {
       result = result.slice(0, occurrence.start) + replacement + result.slice(occurrence.end)
       continue
     }
-    const wrapper = new RegExp(
-      `<span data-arknights-carrier="${occurrence.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"><\\/span>`,
-      'g'
-    )
-    result = result.replace(wrapper, () => replacement)
+    const wrapper = createCarrierWrapper(occurrence.token)
+    let replacementCount = 0
+    result = result.replace(wrapper, () => {
+      replacementCount += 1
+      return replacement
+    })
+    if (replacementCount !== 1) {
+      return null
+    }
   }
   return result
 }
@@ -359,74 +378,75 @@ function unwrapStandaloneGridSentinels(value, sentinelContext) {
   return output + value.slice(cursor)
 }
 
-function hasIssuedCarrierWrapper(value, store) {
-  return store.issuedTokens().length > 0 && /data-arknights-carrier\s*=/.test(value)
-}
-
-function restoreRemainingTokens(value, store) {
-  let found
+function auditMaterializationInput(value, state, field, actionableOccurrences) {
+  let renderedOccurrences
   try {
-    found = store.findTokens(value)
+    renderedOccurrences = state.store.findOccurrences(value, field)
   } catch {
     return null
   }
-  let result = value
-  for (let index = found.length - 1; index >= 0; index -= 1) {
-    const occurrence = found[index]
-    result = result.slice(0, occurrence.start) +
-      escapeHtmlText(occurrence.record.raw) +
-      result.slice(occurrence.end)
+  if (
+    renderedOccurrences.length !== actionableOccurrences.length ||
+    renderedOccurrences.some((occurrence, index) => (
+      occurrence.id !== actionableOccurrences[index].id
+    ))
+  ) {
+    return null
   }
-  return result
+
+  const wrapperNamespaces = value.match(CARRIER_WRAPPER_NAMESPACE_PATTERN) ?? []
+  if (field === 'excerpt') {
+    return wrapperNamespaces.length === 0 ? renderedOccurrences : null
+  }
+  if (wrapperNamespaces.length !== actionableOccurrences.length) {
+    return null
+  }
+
+  const wrapperTokens = [...value.matchAll(CARRIER_WRAPPER_ATTRIBUTE_PATTERN)]
+    .map(match => match[1] ?? match[2])
+  if (
+    wrapperTokens.length !== actionableOccurrences.length ||
+    wrapperTokens.some((token, index) => token !== actionableOccurrences[index].token) ||
+    actionableOccurrences.some(occurrence => (
+      countExactText(value, createCarrierWrapper(occurrence.token)) !== 1
+    ))
+  ) {
+    return null
+  }
+  return renderedOccurrences
 }
 
 function finalizeMaterializedValue(value, store, sentinelContext) {
-  let restored
   try {
     sentinelContext.assertFullyConsumed(value)
-    if (hasIssuedCarrierWrapper(value, store)) {
+    if (/data-arknights-carrier\b/i.test(value)) {
       return null
     }
-    restored = restoreRemainingTokens(value, store)
-    sentinelContext.assertFullyConsumed(restored)
-    return restored
+    for (const token of store.issuedTokens()) {
+      if (value.includes(token)) {
+        return null
+      }
+    }
+    return value
   } catch {
     return null
   }
 }
 
 function materializeField(value, state, data, field, registry, sentinelContext) {
-  const occurrences = state.store.findOccurrences(value, field)
+  const actionableOccurrences = state.store.getOccurrences().filter(occurrence => (
+    occurrence.field === field &&
+    (occurrence.state === 'pending-markdown' || occurrence.state === 'excerpt-pending')
+  ))
+  const occurrences = auditMaterializationInput(value, state, field, actionableOccurrences)
+  if (occurrences === null) {
+    return null
+  }
 
   const htmlCards = new Map()
   const projectionCards = new Map()
   const replacements = []
-  for (const occurrence of occurrences) {
-    const current = state.carrier.getOccurrence(occurrence.id)
-    if (current !== null && current.state === 'excerpt-pending') {
-      const replacement = prepareOccurrence({
-        ...occurrence,
-        record: state.store.lookup(occurrence.token)
-      }, state, data, field, registry)
-      state.replacements.set(occurrence.id, {
-        success: !replacement.failed,
-        failed: replacement.failed === true
-      })
-      if (replacement.blockProject) {
-        const card = sentinelContext.createCardSentinel(
-          `${replacement.html}\n${replacement.projection}`
-        )
-        htmlCards.set(card.id, replacement.html)
-        projectionCards.set(card.id, replacement.projection)
-        replacement.html = card.sentinel
-        replacement.projection = card.sentinel
-      }
-      replacements.push(replacement)
-      continue
-    }
-    if (current === null || current.state !== 'pending-markdown') {
-      continue
-    }
+  for (const occurrence of actionableOccurrences) {
     const replacement = prepareOccurrence(occurrence, state, data, field, registry)
     state.replacements.set(occurrence.id, {
       success: !replacement.failed,
@@ -447,6 +467,9 @@ function materializeField(value, state, data, field, registry, sentinelContext) 
   const tokenized = field === 'excerpt'
   let html = applyOccurrences(value, occurrences, replacements.map(replacement => replacement.html), tokenized)
   let projection = applyOccurrences(value, occurrences, replacements.map(replacement => replacement.projection), tokenized)
+  if (html === null || projection === null) {
+    return null
+  }
   html = composeCardGroups(html, htmlCards, false, sentinelContext)
   html = unwrapGridParagraphs(html, sentinelContext)
   html = unwrapStandaloneGridSentinels(html, sentinelContext)
@@ -454,7 +477,7 @@ function materializeField(value, state, data, field, registry, sentinelContext) 
   const finalizedHtml = finalizeMaterializedValue(html, state.store, sentinelContext)
   const finalizedProjection = finalizeMaterializedValue(projection, state.store, sentinelContext)
   if (finalizedHtml === null || finalizedProjection === null) {
-    return { html: null, projection: null }
+    return null
   }
   return { html: finalizedHtml, projection: finalizedProjection }
 }
@@ -516,30 +539,7 @@ function createMarkerPipeline(options = {}) {
       renderStates.delete(data)
     }
     projectionStates.delete(data)
-    let dataMarkdownDescriptor
-    try {
-      dataMarkdownDescriptor = Object.getOwnPropertyDescriptor(data, 'markdown')
-    } catch {
-      throw createPipelineError('CARRIER_BRIDGE_READ', 'markdown descriptor could not be read')
-    }
-    if (dataMarkdownDescriptor !== undefined && dataMarkdownDescriptor.value !== null &&
-        typeof dataMarkdownDescriptor.value === 'object') {
-      const staleCarrierDescriptor = Object.getOwnPropertyDescriptor(
-        dataMarkdownDescriptor.value,
-        CARRIER_SYMBOL
-      )
-      const staleCarrier = staleCarrierDescriptor === undefined
-        ? undefined
-        : staleCarrierDescriptor.value
-      if (staleCarrier !== null && typeof staleCarrier === 'object' &&
-          Object.hasOwn(staleCarrier, 'getOccurrence') &&
-          Object.hasOwn(staleCarrier, 'originalField')) {
-        const restored = restoreCarrierBridge(data, staleCarrier)
-        if (restored.restored !== true) {
-          throw createPipelineError('CARRIER_BINDING_ERROR', 'stale markdown bridge could not be repaired')
-        }
-      }
-    }
+    restoreCarrierBridgeFromData(data)
     if (isEncrypted(data)) {
       return data
     }

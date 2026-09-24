@@ -249,6 +249,46 @@ function attachCarrierBridge(data, carrier) {
 
 const bridgeStates = new WeakMap()
 
+function restoreCarrierBridgeFromData(data) {
+  if (data === null || typeof data !== 'object') {
+    throw new TypeError('bridge data must be an object')
+  }
+  const captured = captureMarkdownDescriptor(data)
+  if (!captured.hadOwnProperty) {
+    return Object.freeze({ restored: false })
+  }
+
+  let symbolDescriptor
+  try {
+    symbolDescriptor = Object.getOwnPropertyDescriptor(captured.originalOptions, CARRIER_SYMBOL)
+  } catch {
+    throw createCarrierError('CARRIER_BRIDGE_READ', 'carrier symbol descriptor could not be read')
+  }
+  if (symbolDescriptor === undefined) {
+    return Object.freeze({ restored: false })
+  }
+
+  let hasValue
+  let configurable
+  let staleCarrier
+  try {
+    hasValue = Object.hasOwn(symbolDescriptor, 'value')
+    configurable = symbolDescriptor.configurable
+    staleCarrier = symbolDescriptor.value
+  } catch {
+    throw createCarrierError('CARRIER_BRIDGE_READ', 'carrier symbol descriptor could not be inspected')
+  }
+  if (!hasValue || configurable !== true || staleCarrier === null ||
+      typeof staleCarrier !== 'object') {
+    throw createCarrierError('CARRIER_BRIDGE_DESCRIPTOR', 'carrier symbol descriptor is not bridgeable')
+  }
+  const restored = restoreCarrierBridge(data, staleCarrier)
+  if (restored.restored !== true) {
+    throw createCarrierError('CARRIER_BINDING_ERROR', 'stale markdown bridge could not be repaired')
+  }
+  return restored
+}
+
 function restoreCarrierBridge(data, carrier) {
   const state = bridgeStates.get(data)
   if (state === undefined) {
@@ -285,5 +325,6 @@ module.exports = {
   createRenderCarrier,
   attachCarrierBridge,
   restoreCarrierBridge,
+  restoreCarrierBridgeFromData,
   getCarrierFromOptions
 }

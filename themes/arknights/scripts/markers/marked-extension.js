@@ -25,6 +25,15 @@ const METADATA_PARENT_KEYS = Object.freeze(['field', 'type'])
 const CARRIER_TOKEN_PATTERN = /arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}/g
 const CARRIER_TOKEN_EXACT_PATTERN = /^arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
 const CARRIER_ID_PATTERN = /^o[0-9]+$/
+const HTML_TEXT_ENTITIES = Object.freeze({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;'
+})
+
+function escapeHtmlText(value) {
+  return value.replace(/[&<>]/g, character => HTML_TEXT_ENTITIES[character])
+}
 
 function isObject(value) {
   return value !== null && typeof value === 'object'
@@ -195,16 +204,18 @@ function inspectCarrierVisibility(token) {
   if (token.type === CARRIER_EXTENSION_NAME) {
     return { hasCarrier: true, visible: '' }
   }
-  if (token.type === 'text' || token.type === 'html') {
-    const visible = visibleText(token.text)
+  if (token.type === 'html') {
     return {
-      hasCarrier: typeof token.text === 'string' && visible !== token.text,
-      visible
+      hasCarrier: typeof token.text === 'string' && visibleText(token.text) !== token.text,
+      visible: ''
     }
   }
-  if (token.type === 'link' && typeof token.href === 'string' &&
-      visibleText(token.href) !== token.href) {
-    return { hasCarrier: true, visible: '' }
+  if (isSyntheticLink(token) && typeof token.text === 'string') {
+    const visible = visibleText(token.text)
+    return {
+      hasCarrier: visible !== token.text,
+      visible
+    }
   }
   if (Array.isArray(token.tokens)) {
     return token.tokens.reduce((result, child) => {
@@ -294,7 +305,10 @@ function restoreCarrierTokenFields(token, syntheticLink, fields, carrier) {
         throw createMarkedError('CARRIER_BINDING_ERROR', 'carrier token provenance is missing')
       }
     } else if (fields.text.claims.every(claim => claim.inherited)) {
-      token.text = fields.text.claims[0].snapshot.raw
+      const snapshot = fields.text.claims[0].snapshot
+      token.text = snapshot.context === 'link-label'
+        ? escapeHtmlText(snapshot.raw)
+        : snapshot.raw
     }
     return
   }
