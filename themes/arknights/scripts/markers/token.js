@@ -12,6 +12,24 @@ const MAX_GENERATION_ATTEMPTS = 32
 const TOKEN_PATTERN = /^arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
 const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/
 const ENUM_PATTERN = /^[A-Z][A-Z0-9_-]*$/
+const OCCURRENCE_FIELDS = new Set(['content', 'excerpt'])
+const OCCURRENCE_CONTEXTS = new Set([
+  'text',
+  'image-alt',
+  'link-label',
+  'link-url',
+  'link-title',
+  'raw-html'
+])
+const CONTEXT_STATES = Object.freeze({
+  text: 'pending-markdown',
+  'image-alt': 'raw-preserved',
+  'link-label': 'text-preserved',
+  'link-url': 'raw-preserved',
+  'link-title': 'raw-preserved',
+  'raw-html': 'raw-restored'
+})
+const TERMINAL_STATES = new Set(['consumed', 'failed'])
 
 function isValidMode(mode) {
   return mode === 'block' || mode === 'inline'
@@ -26,6 +44,13 @@ function copyRandomBytes(value, label) {
     throw new TypeError(`${label} must not be empty`)
   }
   return bytes
+}
+
+function createStoreError(code, reason) {
+  const error = new Error(code)
+  error.code = code
+  error.reason = reason
+  return error
 }
 
 function copyParsedArgument(argument) {
@@ -59,6 +84,9 @@ function createTokenStore(options) {
 
   const storeKey = copyRandomBytes(randomBytes(32), 'store key randomBytes')
   const records = new Map()
+  const occurrencesByToken = new Map()
+  const occurrences = new Map()
+  let nextOccurrenceId = 0
 
   function calculateChecksum(nonce, mode, raw) {
     const payload = JSON.stringify([VERSION, nonce, mode, raw])
@@ -220,7 +248,123 @@ function createTokenStore(options) {
     return restored
   }
 
-  return { issue, attachParsed, lookup, decode, findTokens, restore }
+  function freezeOccurrenceSnapshot(occurrence) {
+    return Object.freeze({
+      id: occurrence.id,
+      token: occurrence.token,
+      field: occurrence.field,
+      mode: occurrence.mode,
+      raw: occurrence.raw,
+      context: occurrence.context,
+      state: occurrence.state
+    })
+  }
+
+  function findOccurrences(value, field) {
+    if (typeof value !== 'string' || !OCCURRENCE_FIELDS.has(field)) {
+      throw createStoreError('INVALID_INPUT', 'occurrence value and field must be supported')
+    }
+
+    const found = findTokens(value)
+    const snapshots = []
+    for (const match of found) {
+      let occurrence = occurrencesByToken.get(match.token)
+      if (occurrence === undefined) {
+        occurrence = {
+          id: `o${nextOccurrenceId}`,
+          token: match.token,
+          field,
+          mode: match.record.mode,
+          raw: match.record.raw,
+          context: null,
+          state: field === 'excerpt' ? 'excerpt-pending' : 'issued'
+        }
+        nextOccurrenceId += 1
+        occurrencesByToken.set(match.token, occurrence)
+        occurrences.set(occurrence.id, occurrence)
+      } else if (occurrence.field !== field) {
+        throw createStoreError('CARRIER_BINDING_ERROR', 'an occurrence cannot cross source fields')
+      }
+
+      snapshots.push(Object.freeze({
+        id: occurrence.id,
+        token: match.token,
+        start: match.start,
+        end: match.end,
+        raw: occurrence.raw,
+        mode: occurrence.mode
+      }))
+    }
+    return Object.freeze(snapshots)
+  }
+
+  function bindContext(id, context) {
+    if (typeof id !== 'string' || !occurrences.has(id)) {
+      throw createStoreError('CARRIER_BINDING_ERROR', 'occurrence id is unknown')
+    }
+    if (!OCCURRENCE_CONTEXTS.has(context)) {
+      throw createStoreError('CARRIER_STATE_INVALID', 'context transition is not available')
+    }
+    const occurrence = occurrences.get(id)
+    if (occurrence.context !== null) {
+      throw createStoreError('CARRIER_BINDING_ERROR', 'an occurrence can only be bound once')
+    }
+    if (occurrence.field === 'excerpt' || occurrence.state !== 'issued') {
+      throw createStoreError('CARRIER_STATE_INVALID', 'content occurrence is not bindable')
+    }
+    occurrence.context = context
+    occurrence.state = CONTEXT_STATES[context]
+    return freezeOccurrenceSnapshot(occurrence)
+  }
+
+  function markTerminal(id, state) {
+    if (typeof id !== 'string' || !occurrences.has(id) || !TERMINAL_STATES.has(state)) {
+      throw createStoreError('CARRIER_STATE_INVALID', 'terminal occurrence state is invalid')
+    }
+    const occurrence = occurrences.get(id)
+    const canTerminate = occurrence.state === 'excerpt-pending' ||
+      (occurrence.state === 'pending-markdown' && occurrence.field === 'content')
+    if (!canTerminate) {
+      throw createStoreError('CARRIER_STATE_INVALID', 'occurrence cannot enter the requested terminal state')
+    }
+    occurrence.state = state
+    return freezeOccurrenceSnapshot(occurrence)
+  }
+
+  function getOccurrence(id) {
+    const occurrence = occurrences.get(id)
+    return occurrence === undefined ? null : freezeOccurrenceSnapshot(occurrence)
+  }
+
+  function getOccurrenceByToken(token) {
+    const occurrence = occurrencesByToken.get(token)
+    return occurrence === undefined ? null : freezeOccurrenceSnapshot(occurrence)
+  }
+
+  function getOccurrences() {
+    return Object.freeze(Array.from(occurrences.values(), freezeOccurrenceSnapshot))
+  }
+
+  function issuedTokens() {
+    return Object.freeze(Array.from(records.keys()))
+  }
+
+  return {
+    issue,
+    attachParsed,
+    lookup,
+    decode,
+    findTokens,
+    restore,
+    findOccurrences,
+    bindContext,
+    markConsumed: id => markTerminal(id, 'consumed'),
+    markFailed: id => markTerminal(id, 'failed'),
+    getOccurrence,
+    getOccurrenceByToken,
+    getOccurrences,
+    issuedTokens
+  }
 }
 
 module.exports = { createTokenStore }

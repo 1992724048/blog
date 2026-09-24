@@ -2,8 +2,6 @@
 
 const { randomBytes } = require('node:crypto')
 
-const INTERNAL_SENTINEL_PATTERN =
-  /\u0000?arknights-(?:pj-card|grid-(?:open|close))-[A-Za-z0-9_-]*\u0000?/g
 const SENTINEL_NONCE_BYTES = 24
 const MAX_SENTINEL_GENERATION_ATTEMPTS = 32
 
@@ -84,7 +82,12 @@ function createSentinelContext(occupiedText) {
       `\\u0000arknights-pj-card-${escapeRegExp(namespace)}-(\\d+)\\u0000`,
       'g'
     )
-    return [...value.matchAll(pattern)]
+    return [...value.matchAll(pattern)].map(match => ({
+      id: match[1],
+      sentinel: match[0],
+      start: match.index,
+      end: match.index + match[0].length
+    }))
   }
 
   function findGridSentinels(value) {
@@ -96,7 +99,26 @@ function createSentinelContext(occupiedText) {
       `\\u0000arknights-grid-open-${escapedNamespace}-(\\d+)\\u0000([\\s\\S]*?)\\u0000arknights-grid-close-${escapedNamespace}-\\1\\u0000`,
       'g'
     )
-    return [...value.matchAll(pattern)]
+    return [...value.matchAll(pattern)].map(match => {
+      const contentStart = match[0].indexOf(match[2])
+      return {
+        id: match[1],
+        open: match[0].slice(0, contentStart),
+        close: match[0].slice(contentStart + match[2].length),
+        start: match.index,
+        end: match.index + match[0].length,
+        content: match[2]
+      }
+    })
+  }
+
+  function hasUnconsumed(value) {
+    for (const sentinel of issued) {
+      if (value.includes(sentinel)) {
+        return true
+      }
+    }
+    return false
   }
 
   return {
@@ -104,19 +126,20 @@ function createSentinelContext(occupiedText) {
     createGridSentinels,
     findCardSentinels,
     findGridSentinels,
-    hasIssuedSentinel(value) {
-      for (const sentinel of issued) {
-        if (value.includes(sentinel)) {
-          return true
-        }
+    hasUnconsumed,
+    assertFullyConsumed(value = '') {
+      if (value.includes('\u0000')) {
+        const error = new Error('UNEXPECTED_NUL')
+        error.code = 'UNEXPECTED_NUL'
+        throw error
       }
-      return false
+      if (hasUnconsumed(value)) {
+        const error = new Error('UNCONSUMED_SENTINEL')
+        error.code = 'UNCONSUMED_SENTINEL'
+        throw error
+      }
     }
   }
 }
 
-function stripInternalSentinels(value) {
-  return value.replace(INTERNAL_SENTINEL_PATTERN, '').replace(/\u0000/g, '')
-}
-
-module.exports = { createSentinelContext, stripInternalSentinels }
+module.exports = { createSentinelContext }

@@ -1,7 +1,10 @@
 'use strict'
 
+const { Lexer } = require('marked')
+
 const MARKER_PREFIX = '[#]<'
 const MARKER_NAME_PATTERN = /[A-Za-z][A-Za-z0-9_-]*/y
+const RAW_TEXT_HTML_TAGS = new Set(['pre', 'textarea', 'script', 'style'])
 
 function isLineStart(source, index) {
   return index === 0 || source[index - 1] === '\n' || source[index - 1] === '\r'
@@ -290,7 +293,7 @@ function scanRawHtml(source, start) {
   if (tag === null) {
     return null
   }
-  if (tag.closing || (tag.name !== 'script' && tag.name !== 'style')) {
+  if (tag.closing || !RAW_TEXT_HTML_TAGS.has(tag.name)) {
     return tag.end
   }
 
@@ -307,6 +310,122 @@ function scanRawHtml(source, start) {
     cursor = Math.max(closingStart + 2, closingTag === null ? closingStart + 2 : closingTag.end)
   }
   return source.length
+}
+
+function collectMarkerCandidates(source, boundaryProjection = null, collectAllShellCandidates = false) {
+  const candidates = []
+  let cursor = 0
+
+  while (cursor < source.length) {
+    if (isLineStart(source, cursor)) {
+      const fencedEnd = scanFencedCode(source, cursor)
+      if (fencedEnd !== null) {
+        cursor = fencedEnd
+        continue
+      }
+      const indentedEnd = scanIndentedCode(source, cursor)
+      if (indentedEnd !== null) {
+        cursor = indentedEnd
+        continue
+      }
+    }
+
+    if (source.startsWith(MARKER_PREFIX, cursor)) {
+      const shell = scanMarkerShell(source, cursor)
+      if (shell !== null && shell.end !== null) {
+        candidates.push({ start: cursor, end: shell.end, raw: source.slice(cursor, shell.end) })
+        cursor = shell.end
+        continue
+      }
+    }
+
+    if (source[cursor] === '`') {
+      const inlineEnd = scanInlineCode(source, cursor)
+      if (inlineEnd !== null) {
+        cursor = inlineEnd
+        continue
+      }
+      cursor += countBacktickRun(source, cursor)
+      continue
+    }
+
+    if (source[cursor] === '<' && !collectAllShellCandidates) {
+      const boundarySource = boundaryProjection ?? source
+      const boundaryToken = Lexer.lexInline(boundarySource.slice(cursor), { gfm: true })[0]
+      const isAngleBoundary = boundarySource[cursor] === '<' &&
+        boundaryToken?.type === 'link' &&
+        boundaryToken.raw.startsWith('<')
+      if (!isAngleBoundary) {
+        const rawHtmlEnd = scanRawHtml(source, cursor)
+        if (rawHtmlEnd !== null) {
+          cursor = rawHtmlEnd
+          continue
+        }
+      }
+    }
+
+    cursor += 1
+  }
+
+  return candidates
+}
+
+function createAutolinkBoundaryProjection(source, candidates) {
+  if (candidates.length === 0) {
+    return source
+  }
+  const characters = source.split('')
+  for (const candidate of candidates) {
+    for (let index = candidate.start; index < candidate.end; index += 1) {
+      characters[index] = 'x'
+    }
+  }
+  return characters.join('')
+}
+
+function getUrlTokenEnd(token) {
+  if (
+    token.type !== 'link' ||
+    typeof token.raw !== 'string' ||
+    typeof token.href !== 'string' ||
+    token.text !== token.href
+  ) {
+    return -1
+  }
+  return token.raw.length
+}
+
+function collectAutolinkStarts(source, projection, candidates) {
+  const starts = new Map()
+  if (candidates.length === 0 || projection === source) {
+    return starts
+  }
+
+  const tokens = Lexer.lexInline(projection, { gfm: true })
+  let searchStart = 0
+  for (const token of tokens) {
+    if (token.type !== 'link' || typeof token.raw !== 'string') {
+      continue
+    }
+    const rawStart = projection.indexOf(token.raw, searchStart)
+    if (rawStart === -1) {
+      continue
+    }
+    searchStart = rawStart + token.raw.length
+    const urlEnd = getUrlTokenEnd(token)
+    const containsCandidate = candidates.some(candidate => (
+      candidate.start >= rawStart && candidate.end <= rawStart + urlEnd
+    ))
+    if (!containsCandidate) {
+      continue
+    }
+    if (token.raw.startsWith('<')) {
+      starts.set(rawStart, true)
+    } else {
+      starts.set(rawStart, false)
+    }
+  }
+  return starts
 }
 
 function createSegmentBuilder(source) {
@@ -366,6 +485,11 @@ function scanMarkers(source) {
     throw new TypeError('source must be a string')
   }
 
+  const initialCandidates = collectMarkerCandidates(source, null, true)
+  const projection = createAutolinkBoundaryProjection(source, initialCandidates)
+  const candidates = collectMarkerCandidates(source, projection)
+  const autolinkStarts = collectAutolinkStarts(source, projection, candidates)
+  const candidateByStart = new Map(candidates.map(candidate => [candidate.start, candidate]))
   const builder = createSegmentBuilder(source)
   let cursor = 0
 
@@ -386,16 +510,20 @@ function scanMarkers(source) {
       }
     }
 
-    if (source.startsWith(MARKER_PREFIX, cursor)) {
-      const shell = scanMarkerShell(source, cursor)
-      if (shell !== null && shell.end !== null) {
-        builder.addMarker(cursor, shell.end, findMarkerMode(source, cursor, shell.end))
-        cursor = shell.end
-      } else {
+    const candidate = candidateByStart.get(cursor)
+    if (candidate !== undefined) {
+      builder.addMarker(cursor, candidate.end, findMarkerMode(source, cursor, candidate.end))
+      cursor = candidate.end
+      continue
+    }
+
+    if (autolinkStarts.get(cursor) === false) {
+      const prefix = /(?:ftp|https?):\/\/|www\./i.exec(source.slice(cursor))
+      if (prefix !== null && prefix.index === 0) {
         builder.addText(cursor, cursor + 1)
         cursor += 1
+        continue
       }
-      continue
     }
 
     if (source[cursor] === '`') {
@@ -412,6 +540,11 @@ function scanMarkers(source) {
     }
 
     if (source[cursor] === '<') {
+      if (autolinkStarts.get(cursor) === true) {
+        builder.addText(cursor, cursor + 1)
+        cursor += 1
+        continue
+      }
       const rawHtmlEnd = scanRawHtml(source, cursor)
       if (rawHtmlEnd !== null) {
         builder.addProtected(cursor, rawHtmlEnd, 'raw-html')
