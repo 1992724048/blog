@@ -6,6 +6,8 @@ const { createTokenStore } = require('./token')
 const { createRegistry } = require('./registry')
 const { aiHandler } = require('./handlers/ai')
 const { projectsHandler } = require('./handlers/projects')
+const { restoreRawHtmlTokens } = require('./raw-html')
+const { createSentinelContext, stripInternalSentinels } = require('./sentinel')
 
 const SOURCE_FIELDS = Object.freeze(['content', 'excerpt', 'more'])
 const HTML_TEXT_ENTITIES = Object.freeze({
@@ -13,11 +15,6 @@ const HTML_TEXT_ENTITIES = Object.freeze({
   '<': '&lt;',
   '>': '&gt;'
 })
-const CARD_SENTINEL_PREFIX = '\u0000arknights-pj-card-'
-const CARD_SENTINEL_SUFFIX = '\u0000'
-const GRID_OPEN_PREFIX = '\u0000arknights-grid-open-'
-const GRID_CLOSE_PREFIX = '\u0000arknights-grid-close-'
-const GRID_SENTINEL_SUFFIX = '\u0000'
 const MORE_PATTERN = /<!--\s*more\s*-->|<span\b[^>]*\bid=["']more["'][^>]*>\s*<\/span>/i
 
 function escapeHtmlText(value) {
@@ -30,7 +27,10 @@ function isDataObject(data) {
 
 function isEncrypted(data) {
   try {
-    return Boolean(data.encrypt) || Boolean(data.password)
+    const encrypt = data.encrypt
+    const password = data.password
+    return Boolean(encrypt) ||
+      (password !== undefined && password !== null && password !== '')
   } catch {
     return true
   }
@@ -215,29 +215,21 @@ function isGridSeparator(value) {
   return /^(?:[ \t\n]|<br\b[^>]*>)*$/i.test(normalized)
 }
 
-function findCardSentinels(value) {
-  return [...value.matchAll(/\u0000arknights-pj-card-(\d+)\u0000/g)]
-}
-
-function createCardSentinel(id) {
-  return `${CARD_SENTINEL_PREFIX}${id}${CARD_SENTINEL_SUFFIX}`
-}
-
-function createGridSentinels(id, inner) {
-  return `${GRID_OPEN_PREFIX}${id}${GRID_SENTINEL_SUFFIX}${inner}` +
-    `${GRID_CLOSE_PREFIX}${id}${GRID_SENTINEL_SUFFIX}`
-}
-
-function renderCardGroup(ids, cardContents, projectionOnly) {
-  const contents = ids.map(id => cardContents.get(id) ?? '')
-  if (projectionOnly) {
-    return contents.join('\n')
+function renderCardGroup(ids, cardContents, projectionOnly, sentinelContext) {
+  const contents = ids.map(id => cardContents.get(id))
+  if (contents.some(content => typeof content !== 'string' || content === '')) {
+    return null
   }
-  return createGridSentinels(ids[0], contents.join('\n'))
+  const inner = contents.join('\n')
+  if (projectionOnly) {
+    return inner
+  }
+  const sentinels = sentinelContext.createGridSentinels(ids[0], inner)
+  return `${sentinels.open}${inner}${sentinels.close}`
 }
 
-function composeCardGroups(value, cardContents, projectionOnly) {
-  const matches = findCardSentinels(value)
+function composeCardGroups(value, cardContents, projectionOnly, sentinelContext) {
+  const matches = sentinelContext.findCardSentinels(value)
   if (matches.length === 0) {
     return value
   }
@@ -247,13 +239,19 @@ function composeCardGroups(value, cardContents, projectionOnly) {
   let groupStart = -1
   let groupEnd = -1
   let groupIds = []
+  let failed = false
 
   const flushGroup = () => {
     if (groupStart < 0) {
       return
     }
+    const rendered = renderCardGroup(groupIds, cardContents, projectionOnly, sentinelContext)
+    if (rendered === null) {
+      failed = true
+      return
+    }
     output += value.slice(cursor, groupStart)
-    output += renderCardGroup(groupIds, cardContents, projectionOnly)
+    output += rendered
     cursor = groupEnd
     groupStart = -1
     groupEnd = -1
@@ -285,7 +283,7 @@ function composeCardGroups(value, cardContents, projectionOnly) {
   }
 
   flushGroup()
-  return output + value.slice(cursor)
+  return failed ? value : output + value.slice(cursor)
 }
 
 function removeEdgeBreaks(value) {
@@ -309,11 +307,12 @@ function appendPlainParagraph(output, value) {
   return output + `<p>${plainValue}</p>`
 }
 
-function transformGridParagraph(inner) {
-  const matches = [...inner.matchAll(
-    /\u0000arknights-grid-open-(\d+)\u0000([\s\S]*?)\u0000arknights-grid-close-\1\u0000/g
-  )]
+function transformGridParagraph(inner, sentinelContext) {
+  const matches = sentinelContext.findGridSentinels(inner)
   if (matches.length === 0) {
+    return null
+  }
+  if (matches.some(match => match[2].trim() === '')) {
     return null
   }
 
@@ -327,15 +326,54 @@ function transformGridParagraph(inner) {
   return appendPlainParagraph(output, inner.slice(cursor))
 }
 
-function unwrapGridParagraphs(value) {
+function unwrapGridParagraphs(value, sentinelContext) {
   return value.replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, (paragraph, inner) => {
-    const transformed = transformGridParagraph(inner)
+    const transformed = transformGridParagraph(inner, sentinelContext)
     return transformed === null ? paragraph : transformed
   })
 }
 
+function unwrapStandaloneGridSentinels(value, sentinelContext) {
+  const matches = sentinelContext.findGridSentinels(value)
+  if (matches.length === 0) {
+    return value
+  }
+  if (matches.some(match => match[2].trim() === '')) {
+    return value
+  }
+
+  let output = ''
+  let cursor = 0
+  for (const match of matches) {
+    output += value.slice(cursor, match.index)
+    output += `<div class="projects-grid">\n${match[2]}\n</div>`
+    cursor = match.index + match[0].length
+  }
+  return output + value.slice(cursor)
+}
+
+function restoreMangledTokens(value, tokenInfo) {
+  let result = value
+  for (const token of tokenInfo.keys()) {
+    const mangled = token.replace(/---/g, '\u2014').replace(/--/g, '\u2013')
+    if (mangled !== token) {
+      result = result.split(mangled).join(token)
+    }
+  }
+  return result
+}
+
+function stripOpaqueTokens(value) {
+  return value.replace(/arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}/g, '')
+}
+
 function restoreRemainingTokens(value, store) {
-  const found = store.findTokens(value)
+  let found
+  try {
+    found = store.findTokens(value)
+  } catch {
+    return stripOpaqueTokens(stripInternalSentinels(value))
+  }
   let result = value
   for (let index = found.length - 1; index >= 0; index -= 1) {
     const occurrence = found[index]
@@ -343,46 +381,53 @@ function restoreRemainingTokens(value, store) {
       escapeHtmlText(occurrence.record.raw) +
       result.slice(occurrence.end)
   }
-  return result
+  return stripInternalSentinels(result)
 }
 
-function materializeField(value, state, data, field, registry) {
+function finalizeMaterializedValue(value, sourceValue, store, sentinelContext) {
+  const safeValue = sentinelContext.hasIssuedSentinel(value) ? sourceValue : value
+  return restoreRemainingTokens(safeValue, store)
+}
+
+function materializeField(value, state, data, field, registry, sentinelContext) {
+  let sourceValue
   let occurrences
   try {
-    occurrences = state.store.findTokens(value)
+    sourceValue = restoreMangledTokens(value, state.tokenInfo)
+    sourceValue = restoreRawHtmlTokens(sourceValue, state.store)
+    occurrences = state.store.findTokens(sourceValue)
   } catch {
-    return { html: value, projection: value }
+    const fallback = stripOpaqueTokens(stripInternalSentinels(value))
+    return { html: fallback, projection: fallback }
   }
 
   const htmlCards = new Map()
   const projectionCards = new Map()
   const replacements = []
-  let cardId = 0
   for (const occurrence of occurrences) {
     const replacement = prepareOccurrence(occurrence, state, data, field, registry)
     if (replacement.blockProject) {
-      const id = String(cardId)
-      cardId += 1
-      const sentinel = createCardSentinel(id)
-      htmlCards.set(id, replacement.html)
-      projectionCards.set(id, replacement.projection)
-      replacement.html = sentinel
-      replacement.projection = sentinel
+      const card = sentinelContext.createCardSentinel(
+        `${replacement.html}\n${replacement.projection}`
+      )
+      htmlCards.set(card.id, replacement.html)
+      projectionCards.set(card.id, replacement.projection)
+      replacement.html = card.sentinel
+      replacement.projection = card.sentinel
     }
     replacements.push(replacement)
   }
 
-  let html = applyOccurrences(value, occurrences, replacements.map(replacement => replacement.html))
-  let projection = applyOccurrences(value, occurrences, replacements.map(replacement => replacement.projection))
-  html = restoreRemainingTokens(
-    unwrapGridParagraphs(composeCardGroups(html, htmlCards, false)),
-    state.store
-  )
-  projection = restoreRemainingTokens(
-    composeCardGroups(projection, projectionCards, true),
-    state.store
-  )
-  return { html, projection }
+  let html = applyOccurrences(sourceValue, occurrences, replacements.map(replacement => replacement.html))
+  let projection = applyOccurrences(sourceValue, occurrences, replacements.map(replacement => replacement.projection))
+  html = composeCardGroups(html, htmlCards, false, sentinelContext)
+  html = unwrapGridParagraphs(html, sentinelContext)
+  html = unwrapStandaloneGridSentinels(html, sentinelContext)
+  projection = composeCardGroups(projection, projectionCards, true, sentinelContext)
+  return {
+    html: finalizeMaterializedValue(html, sourceValue, state.store, sentinelContext),
+    projection: finalizeMaterializedValue(projection, sourceValue, state.store, sentinelContext)
+  }
 }
 
 function completeProjection(projection, state) {
@@ -481,6 +526,19 @@ function createMarkerPipeline(options = {}) {
       excerpt: null,
       more: null
     }
+    let occupiedText = ''
+    for (const field of state.fields) {
+      try {
+        const value = data[field]
+        if (typeof value === 'string') {
+          occupiedText += `\u0000${value}`
+        }
+      } catch {
+        continue
+      }
+    }
+    const sentinelContext = createSentinelContext(occupiedText)
+
     for (const field of state.fields) {
       let value
       try {
@@ -492,17 +550,12 @@ function createMarkerPipeline(options = {}) {
         continue
       }
       try {
-        const materialized = materializeField(value, state, data, field, registry)
+        const materialized = materializeField(value, state, data, field, registry, sentinelContext)
         data[field] = materialized.html
         projection[field] = materialized.projection
       } catch {
-        let fallbackValue = value
-        try {
-          fallbackValue = restoreRemainingTokens(value, state.store)
-          data[field] = fallbackValue
-        } catch {
-          data[field] = value
-        }
+        const fallbackValue = restoreRemainingTokens(value, state.store)
+        data[field] = fallbackValue
         projection[field] = fallbackValue
       }
     }
