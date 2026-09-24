@@ -197,37 +197,51 @@ function validateMetadataDescriptor(token) {
   }
 }
 
+function stripCarrierText(value) {
+  return typeof value === 'string' ? value.replace(CARRIER_TOKEN_PATTERN, '') : ''
+}
+
+function hasCarrierText(value) {
+  return typeof value === 'string' && stripCarrierText(value) !== value
+}
+
+function inspectCarrierChildren(token) {
+  return (token.tokens ?? []).reduce((result, child) => {
+    const inspected = inspectCarrierVisibility(child)
+    result.hasCarrier ||= inspected.hasCarrier
+    result.visible += inspected.visible
+    return result
+  }, { hasCarrier: false, visible: '' })
+}
+
 function inspectCarrierVisibility(token) {
-  const visibleText = value => (
-    typeof value === 'string' ? value.replace(CARRIER_TOKEN_PATTERN, '') : ''
-  )
   if (token.type === CARRIER_EXTENSION_NAME) {
     return { hasCarrier: true, visible: '' }
   }
   if (token.type === 'html') {
-    return {
-      hasCarrier: typeof token.text === 'string' && visibleText(token.text) !== token.text,
-      visible: ''
-    }
+    return { hasCarrier: hasCarrierText(token.text), visible: '' }
   }
   if (isSyntheticLink(token) && typeof token.text === 'string') {
-    const visible = visibleText(token.text)
+    const visible = stripCarrierText(token.text)
     return {
       hasCarrier: visible !== token.text,
       visible
     }
   }
-  if (Array.isArray(token.tokens)) {
-    return token.tokens.reduce((result, child) => {
-      const inspected = inspectCarrierVisibility(child)
-      result.hasCarrier ||= inspected.hasCarrier
-      result.visible += inspected.visible
-      return result
-    }, { hasCarrier: false, visible: '' })
+  if (token.type === 'link') {
+    const inspected = inspectCarrierChildren(token)
+    return {
+      hasCarrier: inspected.hasCarrier || hasCarrierText(token.text) ||
+        hasCarrierText(token.href) || hasCarrierText(token.title),
+      visible: inspected.visible
+    }
   }
-  const visible = visibleText(token.text)
+  if (Array.isArray(token.tokens)) {
+    return inspectCarrierChildren(token)
+  }
+  const visible = stripCarrierText(token.text)
   return {
-    hasCarrier: typeof token.text === 'string' && visible !== token.text,
+    hasCarrier: hasCarrierText(token.text),
     visible
   }
 }
