@@ -478,10 +478,10 @@ bgm:
 1. BGM audio 从 `bottom-btn.pug` 移到 `layout.pug` 的 Pjax 替换区域外。
 2. Pjax 当前替换 `title`、`article`、`#aside-block` 等节点；audio 必须位于 `article` 外，且不放入任何 Pjax selector 容器。
 3. 每个最终 HTML 文档最多存在一个 `audio#bgm`，Pjax 导航后复用该实例。
-4. 根级 `bgm.src` 最终值必须精确为 `/audio/bgm.mp3`；`layout.pug` 渲染 audio 的 `src` 属性必须使用 `url_for(theme.bgm.src)`，由该配置值生成 source，固定复用 `themes/arknights/source/audio/bgm.mp3`，不在 Pug 中另行写死音源路径，也不扩展为任意外部音源功能。
-5. `theme.bgm.autoplay=false`，因此不输出 `autoplay` 属性；首击音乐按钮前不得播放。
+4. 根级 `bgm.src` 最终值必须精确为 `/audio/bgm.mp3`；`layout.pug` 渲染 audio 的 `src` 属性必须使用 `url_for(theme.bgm.src)`，由该配置值生成 source，固定复用 `themes/arknights/source/audio/bgm.mp3`，不在 Pug 中另行写死音源路径，也不扩展为任意外部音源功能。专项模板探针必须断言 `layout.pug` 源码包含精确调用 `url_for(theme.bgm.src)`，并用临时 `theme.bgm.src=/audio/bgm-fixture.mp3` fixture 重新渲染，断言输出的 `src` 随配置变为 `url_for('/audio/bgm-fixture.mp3')` 且不同于默认输出；默认实际产物仍单独断言为 `/audio/bgm.mp3`。
+5. `theme.bgm.autoplay=false`，因此唯一 `audio#bgm` 不输出 `autoplay` 属性；首击音乐按钮前不得播放，首次播放必须由该按钮触发。
 6. `theme.bgm.loop=true`，audio 输出 `loop`，并使用 `preload="metadata"`。
-7. audio 不显示原生控件。
+7. 唯一 `audio#bgm` 不含 `controls` 属性，不显示原生控件。
 8. 使用根级默认配置实际构建时，必须同时渲染唯一 `audio#bgm` 和 `.toolbox-bgm[data-action="bgm"]`；首击播放、暂停/继续由控制器处理，播放状态跨 Pjax 保持。
 
 ### 9.2 控制器生命周期
@@ -766,7 +766,8 @@ D 的文档或探针修正可独立提交；若自动化失败，回到 A—C �
 | ProjectTooltip | 同一卡片重复 init/Pjax success | WeakSet 保证每卡一个 listener，无 `_tooltipBound` 属性。 |
 | ProjectTooltip | Pjax 替换卡片 | 新卡片绑定，旧卡片不影响新卡片。 |
 | ProjectTooltip 边界 | 项目 handler、DOM、CSS 快照 | href/src/alt/loading/--card-img/target/rel/.project-name 不变。 |
-| BGM 根配置 | 解析根级 `_config.arknights.yml` | `bgm` 精确等于 `enable:true`、`autoplay:false`、`loop:true`、`bgm.src=/audio/bgm.mp3`；Pug audio source 通过 `url_for(theme.bgm.src)` 消费该值；其它配置不在 C 的变更范围。 |
+| BGM 根配置 | 解析根级 `_config.arknights.yml` | `bgm` 精确等于 `enable:true`、`autoplay:false`、`loop:true`、`bgm.src=/audio/bgm.mp3`；模板源码断言使用 `url_for(theme.bgm.src)`；默认 fixture 输出 `/audio/bgm.mp3`，临时改 source 后输出随配置改变；其它配置不在 C 的变更范围。 |
+| BGM DOM | 默认配置的实际构建文章页与专项模板 fixture | 恰有唯一 `audio#bgm`；唯一 `#bgm` 不含 `controls` 属性且无 `autoplay`；`.toolbox-bgm[data-action="bgm"]` 首次点击前不播放，首次按钮点击才触发播放。 |
 | 工具箱 | 根级默认配置的实际构建文章页 | DOM 顺序严格为标注、分享、收藏、截图、音乐；右列无独立 BGM；页面恰有一个 `audio#bgm` 和一个 `.toolbox-bgm[data-action="bgm"]`。 |
 | 工具箱 | 非文章页 | 无截图按钮；其余可用工具正常。 |
 | BGM 禁用 fixture | 专项测试单独传入 `enable=false` | 无音乐按钮和 audio，其它工具正常；该 fixture 不代表也不得替代默认站点配置。 |
@@ -780,11 +781,21 @@ D 的文档或探针修正可独立提交；若自动化失败，回到 A—C �
 | 截图长图 | 超过 16384 edge 或 33554432 device pixels | 整体等比缩小并显示提示，PNG 高度仍覆盖全文，不裁切。 |
 | 截图文件名 | 中文、空格、保留字符、超长标题 | 文件名安全、无路径分隔符、80 code-unit 上限、带本地时间戳；空标题回退 post。 |
 | 截图 Pjax | 等待字体/图片/canvas 时导航 | 旧 generation 无下载、不恢复新 paginator、不写新按钮状态。 |
-| BGM | 根级默认配置实际构建、首次点击、暂停、继续 | 每页恰有一个 audio；其 source 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`；首击才播放；暂停/继续准确；输出 `loop` 且不输出 `autoplay`；`preload="metadata"`。 |
+| BGM | 根级默认配置实际构建、首次点击、暂停、继续 | 每页恰有一个 audio；其 source 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`；唯一 `audio#bgm` 不含 `controls` 属性且无 `autoplay`；首击才播放；暂停/继续准确；输出 `loop`；`preload="metadata"`。 |
 | BGM | `play()` reject、media error | 状态不伪造；status 报错；重试路径可恢复。 |
 | BGM/Pjax | 播放中切页再切回 | 始终复用同一 audio，播放不中断，按钮按实际 paused 同步。 |
 | 搜索/Pjax | 搜索触发 Pjax、文章/项目/数据往返 | Toolbox、ProjectTooltip、Screenshot、BGM 均重绑一次且无重复事件。 |
 | 版本 | CSS/JS 产物 URL | 最终 `cssVersion=20260952`、`jsVersion=20260949`，无旧独立项目脚本 URL。 |
+
+### 13.1 BGM 模板数据流与专项 fixture
+
+BGM 验收不能只检查默认产物中的最终 `src` 字符串，必须同时证明模板消费配置值：
+
+1. 读取 `themes/arknights/layout/includes/layout.pug`，静态断言模板包含并使用 `url_for(theme.bgm.src)` 生成 `audio#bgm` 的 `src`，且没有在模板中另行写死默认音源路径。
+2. 以默认 fixture `theme.bgm.src=/audio/bgm.mp3` 渲染，记录默认 `audio#bgm` 的 `src`，断言其等于 `url_for('/audio/bgm.mp3')`。
+3. 仅在临时专项 fixture 中将 `theme.bgm.src` 改为 `/audio/bgm-fixture.mp3`，使用同一模板重新渲染；断言输出 `src` 等于 `url_for('/audio/bgm-fixture.mp3')`，且与默认输出不同。
+4. 两种模板输出都断言恰有一个 `audio#bgm`，该元素不含 `controls` 属性且无 `autoplay` 属性；BGM 状态机 fixture 另断言 `.toolbox-bgm[data-action="bgm"]` 首次点击前不会调用 `play()`，首次按钮点击才触发播放。
+5. fixture 只在临时测试数据中覆盖 source，不修改根级配置或默认构建产物；默认站点实际产物仍必须断言 `/audio/bgm.mp3`。
 
 ## 14. 自动化验证门禁
 
@@ -812,7 +823,7 @@ node --check .temp/marker-e2e.test.js
 node --check .temp/marker-artifacts.js
 ```
 
-并运行新增或更新的 `.temp/` 专项探针，覆盖 ProjectTooltip、工具箱五项、截图懒加载/缩放/取消、BGM 状态和 Pjax 生命周期。
+并运行新增或更新的 `.temp/` 专项探针，覆盖 ProjectTooltip、工具箱五项、截图懒加载/缩放/取消、BGM 状态、Pjax 生命周期，以及 `layout.pug` 中 `url_for(theme.bgm.src)` 的模板数据流和临时 source fixture。
 
 ### 14.3 Marker 回归
 
@@ -837,7 +848,8 @@ node .temp/marker-e2e.test.js
 最终只对同一最终状态运行一次完整 Hexo 构建：
 
 ```powershell
-TZ=Asia/Shanghai npm run build
+$env:TZ = 'Asia/Shanghai'
+npm run build
 node .temp/marker-artifacts.js
 ```
 
@@ -849,13 +861,14 @@ artifact 探针必须检查：
 4. `public/projects/index.html` 不再引用 `js/project-tooltip.js`。
 5. `public/js/project-tooltip.js` 不存在。
 6. `public/js/arknights.js` 包含 ProjectTooltip 的新绑定实现。
-7. 根级默认配置的实际文章页产物中恰有一个 `audio#bgm` 和一个 `.toolbox-bgm[data-action="bgm"]`；audio 的 `src` 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`，含 `loop` 与 `preload="metadata"`，不含 `autoplay`。
-8. `public/audio/bgm.mp3` 存在且对应 `bgm.src=/audio/bgm.mp3`；`public/css/arknights.css` 通过 mask 引用 sound.svg，右列没有独立 BGM 按钮。
-9. `public/lib/snapdom/3.1.1/snapdom.min.js` 与 `LICENSE` 存在且版本正确。
-10. `public/search.json` 使用新 AI 状态纯文本，不含旧状态、tooltip、SVG 或内部串。
-11. 项目页、数据页无评论容器，文章页评论契约未被全局关闭。
-12. 产物 URL 使用 `cssVersion=20260952`、`jsVersion=20260949`。
-13. 专项 `enable=false` fixture 的关闭分支可单独通过，但不得影响或替代上述默认站点产物断言。
+7. 根级默认配置的实际文章页产物中恰有一个 `audio#bgm` 和一个 `.toolbox-bgm[data-action="bgm"]`；唯一 `audio#bgm` 不含 `controls` 属性且无 `autoplay`，其 `src` 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`，含 `loop` 与 `preload="metadata"`；首次播放必须由音乐按钮点击触发。
+8. 模板/专项 fixture 探针读取 `themes/arknights/layout/includes/layout.pug` 并断言源码使用 `url_for(theme.bgm.src)`；以临时 `theme.bgm.src=/audio/bgm-fixture.mp3` 渲染时，输出 `src` 必须等于 `url_for('/audio/bgm-fixture.mp3')` 且不同于默认 `/audio/bgm.mp3`；fixture 不修改根级配置，也不替代默认产物断言。
+9. `public/audio/bgm.mp3` 存在且对应 `bgm.src=/audio/bgm.mp3`；`public/css/arknights.css` 通过 mask 引用 sound.svg，右列没有独立 BGM 按钮。
+10. `public/lib/snapdom/3.1.1/snapdom.min.js` 与 `LICENSE` 存在且版本正确。
+11. `public/search.json` 使用新 AI 状态纯文本，不含旧状态、tooltip、SVG 或内部串。
+12. 项目页、数据页无评论容器，文章页评论契约未被全局关闭。
+13. 产物 URL 使用 `cssVersion=20260952`、`jsVersion=20260949`。
+14. 专项 `enable=false` fixture 的关闭分支可单独通过，但不得影响或替代上述默认站点产物断言。
 
 ### 14.5 Git 检查
 
@@ -903,7 +916,7 @@ git status --short
 8. 点击截图后下载真实 PNG；打开 PNG 确认只有正文、不含 paginator。
 9. 使用长文章 fixture 确认出现整体缩小提示，PNG 覆盖全文且未裁切。
 10. 截图期间 Pjax 导航，旧请求不下载、不污染新页面。
-11. 使用根级 `bgm.enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3` 的实际构建，确认 audio source 通过 `url_for(theme.bgm.src)` 解析为 `/audio/bgm.mp3`，并确认首击才播放、暂停/继续、循环、错误重试和 Pjax 跨页持久化正确。
+11. 使用根级 `bgm.enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3` 的实际构建，确认唯一 `audio#bgm` 不含 `controls` 属性且无 `autoplay`，audio source 通过 `url_for(theme.bgm.src)` 解析为 `/audio/bgm.mp3`，并确认首击才播放、暂停/继续、循环、错误重试和 Pjax 跨页持久化正确。
 12. 搜索触发 Pjax，并在文章、项目、数据页往返，所有控制器无重复事件。
 13. 键盘可操作所有工具，status/pressed/busy 能被辅助技术感知。
 14. 开启系统或浏览器 reduce-motion 后，tooltip 与工具箱无位移动画但功能完整。
@@ -952,7 +965,7 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 
 1. A—C 每批独立提交，文件范围与本规格一致。
 2. 主题 TypeScript build、九个 marker 探针、专项 UI 探针和最终 Hexo build 全部退出码 0。
-3. 根级 BGM 四字段与第 9.1 节完全一致，其中 `bgm.src=/audio/bgm.mp3`，模板通过 `url_for(theme.bgm.src)` 消费；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际 audio/音乐按钮唯一性、首击播放、无 autoplay、Pjax 持久化和版本号正确。
+3. 根级 BGM 四字段与第 9.1 节完全一致，其中 `bgm.src=/audio/bgm.mp3`，模板通过 `url_for(theme.bgm.src)` 消费；模板/专项 fixture 证明 source 随 `theme.bgm.src` 改变而改变；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际唯一 audio/音乐按钮、`controls` 属性缺失、无 autoplay、首击播放、Pjax 持久化和版本号正确。
 4. `git diff --check` 通过，工作区不含无关文件。
 5. 真实有头浏览器逐项完成第 15 节验收；在此之前状态只能记录为 pending。
 6. `AGENTS.md`、本文档和正式 marker 设计规格与最终代码一致。
