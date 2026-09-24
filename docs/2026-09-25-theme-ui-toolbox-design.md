@@ -47,7 +47,7 @@
 6. 将工具箱扩展为“标注、分享、收藏、截图、音乐”五项，并删除独立右列 BGM 按钮。
 7. 把截图与 BGM 业务从 `Toolbox` 协调器拆出，保持控制器职责单一、生命周期明确、Pjax 可恢复。
 8. 以本地固定版本 SnapDOM 完成正文截图，支持懒加载、长图整体缩放、取消旧请求和可访问反馈。
-9. 将根级 BGM 默认配置固定为 `enable=true`、`autoplay=false`、`loop=true`、`src=/audio/bgm.mp3`，并使用唯一、跨 Pjax 存活的 audio 元素实现用户手势驱动的播放/暂停。
+9. 将根级 BGM 默认配置固定为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，并由 Pug 通过 `url_for(theme.bgm.src)` 渲染唯一、跨 Pjax 存活的 audio 元素，实现用户手势驱动的播放/暂停。
 10. 建立自动化、构建产物和真实有头浏览器三层验收，并明确外部浏览器验收 pending 时不得声称通过。
 
 ## 3. 非目标与范围边界
@@ -81,6 +81,12 @@ PJ 标记
 → 保持不变的 .project-card / --card-img / img / .project-name
 → arknights.js 内 ProjectTooltip 绑定
 → mousemove 更新 --mx / --my
+
+BGM 四字段（`enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`）
+→ Hexo 合并后的 `theme.bgm`
+→ `layout.pug` 的唯一 `audio#bgm` + `bottom-btn.pug` 的 `.toolbox-bgm[data-action="bgm"]`
+→ audio 的 source 使用 `url_for(theme.bgm.src)`，解析为 `/audio/bgm.mp3`
+→ `autoplay=false` 不输出 `autoplay`，`loop=true` 输出 `loop`；首击音乐按钮才播放
 ```
 
 ### 4.2 浏览器运行时数据流
@@ -472,7 +478,7 @@ bgm:
 1. BGM audio 从 `bottom-btn.pug` 移到 `layout.pug` 的 Pjax 替换区域外。
 2. Pjax 当前替换 `title`、`article`、`#aside-block` 等节点；audio 必须位于 `article` 外，且不放入任何 Pjax selector 容器。
 3. 每个最终 HTML 文档最多存在一个 `audio#bgm`，Pjax 导航后复用该实例。
-4. 根级 `bgm.src` 最终值为 `/audio/bgm.mp3`；Pug 继续使用 `url_for('/audio/bgm.mp3')` 生成 source，固定复用 `themes/arknights/source/audio/bgm.mp3`，不扩展为任意外部音源功能。
+4. 根级 `bgm.src` 最终值必须精确为 `/audio/bgm.mp3`；`layout.pug` 渲染 audio 的 `src` 属性必须使用 `url_for(theme.bgm.src)`，由该配置值生成 source，固定复用 `themes/arknights/source/audio/bgm.mp3`，不在 Pug 中另行写死音源路径，也不扩展为任意外部音源功能。
 5. `theme.bgm.autoplay=false`，因此不输出 `autoplay` 属性；首击音乐按钮前不得播放。
 6. `theme.bgm.loop=true`，audio 输出 `loop`，并使用 `preload="metadata"`。
 7. audio 不显示原生控件。
@@ -629,7 +635,7 @@ B 可独立回滚为恢复 `source/js/project-tooltip.js` 与独立 script 标�
 | 新增 | `themes/arknights/source/js/_src/include/ScreenshotControl.ts` |
 | 修改 | `themes/arknights/source/js/_src/include/BgmControl.ts` |
 | 修改 | `themes/arknights/source/js/_src/include/Toolbox.ts` |
-| 修改 | `_config.arknights.yml`（仅 `bgm.enable`、`bgm.autoplay`、`bgm.loop`、`bgm.src`） |
+| 修改 | `_config.arknights.yml`（仅 `bgm.enable`、`bgm.autoplay`、`bgm.loop`、`bgm.src`；其中 `bgm.src=/audio/bgm.mp3`） |
 | 修改 | `themes/arknights/layout/includes/bottom-btn.pug` |
 | 修改 | `themes/arknights/layout/includes/layout.pug` |
 | 修改 | `themes/arknights/source/css/_page/post/bottom_btn.styl` |
@@ -647,9 +653,12 @@ B 可独立回滚为恢复 `source/js/project-tooltip.js` 与独立 script 标�
 
 ```text
 _config.arknights.yml 的最终 BGM 四字段
-→ Hexo 合并为 theme.bgm
-├→ layout.pug → 唯一、位于 Pjax 替换区外的 audio#bgm
-└→ bottom-btn.pug → .toolbox-bgm[data-action="bgm"]
+（`enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`）
+→ Hexo 合并为 `theme.bgm`
+├→ `layout.pug` → 唯一、位于 Pjax 替换区外的 `audio#bgm`
+│  └→ `src=url_for(theme.bgm.src)` → `/audio/bgm.mp3`
+└→ `bottom-btn.pug` → `.toolbox-bgm[data-action="bgm"]`
+   `autoplay=false` 不输出 `autoplay`，`loop=true` 输出 `loop`；首击音乐按钮才播放
 
 bottom-btn.pug data-action
 → Toolbox 分发
@@ -666,7 +675,7 @@ pjax:send/error/success
 2. C 不修改 ProjectTooltip、PJ handler 或项目卡 CSS/DOM。
 3. C 同时修改工具箱 CSS 和 bundle，完成后 `cssVersion=20260952`、`jsVersion=20260949`。
 4. SnapDOM 通过本地资源接入，不引入 package、tsconfig 或模块依赖。
-5. C 只递增其实际修改的 CSS/JS 缓存版本；配置变更仅限根级 `_config.arknights.yml` 的四个 BGM 字段，不修改其它配置或版本项。
+5. C 只递增其实际修改的 CSS/JS 缓存版本；配置变更仅限根级 `_config.arknights.yml` 的四个 BGM 字段，其中 `bgm.src` 精确为 `/audio/bgm.mp3`，模板只通过 `url_for(theme.bgm.src)` 消费；不修改其它配置或版本项。
 
 #### 回滚边界
 
@@ -757,7 +766,7 @@ D 的文档或探针修正可独立提交；若自动化失败，回到 A—C �
 | ProjectTooltip | 同一卡片重复 init/Pjax success | WeakSet 保证每卡一个 listener，无 `_tooltipBound` 属性。 |
 | ProjectTooltip | Pjax 替换卡片 | 新卡片绑定，旧卡片不影响新卡片。 |
 | ProjectTooltip 边界 | 项目 handler、DOM、CSS 快照 | href/src/alt/loading/--card-img/target/rel/.project-name 不变。 |
-| BGM 根配置 | 解析根级 `_config.arknights.yml` | `bgm` 精确等于 `enable:true`、`autoplay:false`、`loop:true`、`src:/audio/bgm.mp3`；其它配置不在 C 的变更范围。 |
+| BGM 根配置 | 解析根级 `_config.arknights.yml` | `bgm` 精确等于 `enable:true`、`autoplay:false`、`loop:true`、`bgm.src=/audio/bgm.mp3`；Pug audio source 通过 `url_for(theme.bgm.src)` 消费该值；其它配置不在 C 的变更范围。 |
 | 工具箱 | 根级默认配置的实际构建文章页 | DOM 顺序严格为标注、分享、收藏、截图、音乐；右列无独立 BGM；页面恰有一个 `audio#bgm` 和一个 `.toolbox-bgm[data-action="bgm"]`。 |
 | 工具箱 | 非文章页 | 无截图按钮；其余可用工具正常。 |
 | BGM 禁用 fixture | 专项测试单独传入 `enable=false` | 无音乐按钮和 audio，其它工具正常；该 fixture 不代表也不得替代默认站点配置。 |
@@ -771,7 +780,7 @@ D 的文档或探针修正可独立提交；若自动化失败，回到 A—C �
 | 截图长图 | 超过 16384 edge 或 33554432 device pixels | 整体等比缩小并显示提示，PNG 高度仍覆盖全文，不裁切。 |
 | 截图文件名 | 中文、空格、保留字符、超长标题 | 文件名安全、无路径分隔符、80 code-unit 上限、带本地时间戳；空标题回退 post。 |
 | 截图 Pjax | 等待字体/图片/canvas 时导航 | 旧 generation 无下载、不恢复新 paginator、不写新按钮状态。 |
-| BGM | 根级默认配置实际构建、首次点击、暂停、继续 | 每页恰有一个 audio；首击才播放；暂停/继续准确；输出 `loop` 且不输出 `autoplay`；`preload="metadata"`。 |
+| BGM | 根级默认配置实际构建、首次点击、暂停、继续 | 每页恰有一个 audio；其 source 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`；首击才播放；暂停/继续准确；输出 `loop` 且不输出 `autoplay`；`preload="metadata"`。 |
 | BGM | `play()` reject、media error | 状态不伪造；status 报错；重试路径可恢复。 |
 | BGM/Pjax | 播放中切页再切回 | 始终复用同一 audio，播放不中断，按钮按实际 paused 同步。 |
 | 搜索/Pjax | 搜索触发 Pjax、文章/项目/数据往返 | Toolbox、ProjectTooltip、Screenshot、BGM 均重绑一次且无重复事件。 |
@@ -834,14 +843,14 @@ node .temp/marker-artifacts.js
 
 artifact 探针必须检查：
 
-1. 根级 `_config.arknights.yml` 的 `bgm` 精确为 `enable:true`、`autoplay:false`、`loop:true`、`src:/audio/bgm.mp3`；默认站点不是 `enable=false` fixture。
+1. 根级 `_config.arknights.yml` 的 `bgm` 精确为 `enable:true`、`autoplay:false`、`loop:true`、`bgm.src=/audio/bgm.mp3`；默认站点不是 `enable=false` fixture。
 2. 三篇现有 AI 文章分别输出 PASS/PASS/EDIT，并只使用新四态。
 3. 项目页仍为一个 grid、一个 card，href/src/alt/loading/target/rel/--card-img/.project-name 不变。
 4. `public/projects/index.html` 不再引用 `js/project-tooltip.js`。
 5. `public/js/project-tooltip.js` 不存在。
 6. `public/js/arknights.js` 包含 ProjectTooltip 的新绑定实现。
-7. 根级默认配置的实际文章页产物中恰有一个 `audio#bgm` 和一个 `.toolbox-bgm[data-action="bgm"]`；audio 指向 `/audio/bgm.mp3`，含 `loop` 与 `preload="metadata"`，不含 `autoplay`。
-8. `public/audio/bgm.mp3` 存在；`public/css/arknights.css` 通过 mask 引用 sound.svg，右列没有独立 BGM 按钮。
+7. 根级默认配置的实际文章页产物中恰有一个 `audio#bgm` 和一个 `.toolbox-bgm[data-action="bgm"]`；audio 的 `src` 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`，含 `loop` 与 `preload="metadata"`，不含 `autoplay`。
+8. `public/audio/bgm.mp3` 存在且对应 `bgm.src=/audio/bgm.mp3`；`public/css/arknights.css` 通过 mask 引用 sound.svg，右列没有独立 BGM 按钮。
 9. `public/lib/snapdom/3.1.1/snapdom.min.js` 与 `LICENSE` 存在且版本正确。
 10. `public/search.json` 使用新 AI 状态纯文本，不含旧状态、tooltip、SVG 或内部串。
 11. 项目页、数据页无评论容器，文章页评论契约未被全局关闭。
@@ -894,7 +903,7 @@ git status --short
 8. 点击截图后下载真实 PNG；打开 PNG 确认只有正文、不含 paginator。
 9. 使用长文章 fixture 确认出现整体缩小提示，PNG 覆盖全文且未裁切。
 10. 截图期间 Pjax 导航，旧请求不下载、不污染新页面。
-11. 使用根级 `bgm.enable=true`、`autoplay=false`、`loop=true`、`src=/audio/bgm.mp3` 的实际构建，确认首击才播放、暂停/继续、循环、错误重试和 Pjax 跨页持久化正确。
+11. 使用根级 `bgm.enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3` 的实际构建，确认 audio source 通过 `url_for(theme.bgm.src)` 解析为 `/audio/bgm.mp3`，并确认首击才播放、暂停/继续、循环、错误重试和 Pjax 跨页持久化正确。
 12. 搜索触发 Pjax，并在文章、项目、数据页往返，所有控制器无重复事件。
 13. 键盘可操作所有工具，status/pressed/busy 能被辅助技术感知。
 14. 开启系统或浏览器 reduce-motion 后，tooltip 与工具箱无位移动画但功能完整。
@@ -914,6 +923,8 @@ git status --short
 | D 文档与测试 | 不递增版本 |
 
 只修改实际产物对应的版本号。不得因删除独立 ProjectTooltip script 而单独新增缓存机制，也不得修改 CSS 之外的无关版本配置。
+
+BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_for(theme.bgm.src)` 解析；不另增音源路径缓存参数。C 的工具箱 CSS 与 bundle 仍分别按上表递增 `cssVersion` 和 `jsVersion`。
 
 ## 17. 风险与缓解
 
@@ -935,13 +946,13 @@ git status --short
 | audio 随 article 被替换 | 每次 Pjax 重播或出现多个 audio | audio 固定在 Pjax selector 外，控制器只初始化一次。 |
 | play 被浏览器拒绝 | UI 假播放 | 状态只认 audio 事件和 paused，Promise reject 显示失败。 |
 | 状态只靠颜色 | 色觉或辅助技术用户无法判断 | aria-pressed、aria-busy、动态 label 和 role=status 同时提供。 |
-| 启用根级 BGM 配置会改变默认站点行为 | 实际页面显示音乐工具按钮，`preload="metadata"` 可能提前发起音频元数据请求 | 用户已明确授权；C 只改根级 `_config.arknights.yml` 的四个 BGM 字段，并同时验收唯一 audio、首击播放、`autoplay=false`、循环和 Pjax 持久化；文章/项目内容与其它配置不变。 |
+| 启用根级 BGM 配置会改变默认站点行为 | 实际页面显示音乐工具按钮，`preload="metadata"` 可能提前发起音频元数据请求 | 用户已明确授权；C 只改根级 `_config.arknights.yml` 的四个 BGM 字段，其中 `bgm.src` 精确为 `/audio/bgm.mp3`，模板只通过 `url_for(theme.bgm.src)` 消费；并同时验收唯一 audio、首击播放、`autoplay=false`、循环和 Pjax 持久化；文章/项目内容与其它配置不变。 |
 
 ## 18. 完成定义
 
 1. A—C 每批独立提交，文件范围与本规格一致。
 2. 主题 TypeScript build、九个 marker 探针、专项 UI 探针和最终 Hexo build 全部退出码 0。
-3. 根级 BGM 四字段与第 9.1 节完全一致；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际 audio/音乐按钮唯一性、首击播放、无 autoplay、Pjax 持久化和版本号正确。
+3. 根级 BGM 四字段与第 9.1 节完全一致，其中 `bgm.src=/audio/bgm.mp3`，模板通过 `url_for(theme.bgm.src)` 消费；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际 audio/音乐按钮唯一性、首击播放、无 autoplay、Pjax 持久化和版本号正确。
 4. `git diff --check` 通过，工作区不含无关文件。
 5. 真实有头浏览器逐项完成第 15 节验收；在此之前状态只能记录为 pending。
 6. `AGENTS.md`、本文档和正式 marker 设计规格与最终代码一致。
@@ -949,4 +960,4 @@ git status --short
 
 ## 19. 结论
 
-本规格将本轮主题改造收敛为四个有明确边界的批次：先完成标题、评论、AI 协议和视觉清理，再把项目悬停并入 `arknights.js`，随后用独立 `ScreenshotControl` 和长生命周期 `BgmControl` 扩展五项工具箱，最后执行文档、自动化、构建和真实有头浏览器验收。AI 新旧状态不兼容，项目悬停不改变 marker handler 或卡片 DOM/CSS，SnapDOM 固定本地 3.1.1 classic 资源且不进入 package，截图以 Pjax generation 取消旧任务并对长图整体缩放；C 批次按用户授权只把根级 BGM 四字段设为 `enable=true`、`autoplay=false`、`loop=true`、`src=/audio/bgm.mp3`，使实际构建渲染唯一跨 Pjax audio 和工具箱音乐按钮，首击才播放。所有缓存版本、配置与产物断言和无障碍反馈均有确定契约；外部有头浏览器验收未完成时不得声称通过。
+本规格将本轮主题改造收敛为四个有明确边界的批次：先完成标题、评论、AI 协议和视觉清理，再把项目悬停并入 `arknights.js`，随后用独立 `ScreenshotControl` 和长生命周期 `BgmControl` 扩展五项工具箱，最后执行文档、自动化、构建和真实有头浏览器验收。AI 新旧状态不兼容，项目悬停不改变 marker handler 或卡片 DOM/CSS，SnapDOM 固定本地 3.1.1 classic 资源且不进入 package，截图以 Pjax generation 取消旧任务并对长图整体缩放；C 批次按用户授权只把根级 BGM 四字段设为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，并由 Pug 通过 `url_for(theme.bgm.src)` 消费该 source，使实际构建渲染唯一跨 Pjax audio 和工具箱音乐按钮，首击才播放。所有缓存版本、配置与产物断言和无障碍反馈均有确定契约；外部有头浏览器验收未完成时不得声称通过。
