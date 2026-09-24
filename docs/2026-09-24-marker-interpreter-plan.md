@@ -1,10 +1,10 @@
 # 通用标记解释器与 AI/PJ 迁移实施计划
 
-> **执行约束：** 后续实现者按任务依赖和复选框逐项执行；本轮按第六轮架构审查裁决修订规格、计划与 `AGENTS.md`，不派发子 Agent、不修改运行时代码、探针、内容或配置。
+> **执行约束：** 后续实现者按任务依赖和复选框逐项执行；本轮按第七轮架构审查裁决修订规格、计划与 `AGENTS.md`，不派发子 Agent、不修改运行时代码、探针、内容或配置。
 
 **Goal:** 在不改变现有 AI/PJ DOM 契约的前提下，迁移到严格 `[#]<NAME>{...}` 协议，并以每次 `post.render` 的私有 carrier 和实际 Marked token provenance 正确区分完整 raw-text 保护区、实际 block raw HTML、普通 Markdown text、非文本字段和 Markdown 生成块。
 
-**Architecture:** 原始 Markdown 由 lexer 提取候选；当前位置 `<` 先识别 Markdown autolink，再进入 HTML raw-tag 分支，angle autolink/GFM 裸 URL 内的唯一 marker 不被保护误吞；HTML 标签及属性整体受保护，属性 marker 不进入 store。token store 公开 `findOccurrences(value, field)` / `bindContext(id, context)`，管理 occurrence id/context/state 与深度冻结 parent metadata；before priority 4 为一次 render 创建唯一 carrier，并通过非枚举 `data.markdown` options 与共享私有 symbol 桥接到实际 `marked.parse`，accessor/Proxy 失败按原 descriptor 原子回滚。`hexo-renderer-marked` 每次先重置 Marked defaults，再执行本地 `marked:use` priority 0 安装 custom start/tokenizer、`processAllTokens`、`walkTokens` 和 extension renderer。`processAllTokens` 以 child-first canonical ownership 独占 content occurrence 的字段发现、重分类、恢复与审计；synthetic URL link 的 href 是唯一 `link-url` owner，text/child 只复制同一 snapshot；hook 在 finally 删除 carrier symbol。显式 excerpt 不经过 Marked，由 after 9 审计 `excerpt-pending` 并以 DOM+终态证明。link label 按 text-carrier，image alt 采用当前 Hexo `image.text`，link href 与字符串 title raw-preserve；metadata descriptor 和嵌套对象深度冻结。Hexo 顺序为 renderer → `onRenderEnd` → `after_render:html` → after 9；任一前序阶段拒绝都跳过 after 9。`pipeline.js` 无注册副作用，`register.js` 是唯一自动注册入口。
+**Architecture:** lexer 先在原始 Markdown 收集 marker candidate/range，再为 angle/GFM 边界构造逐 UTF-16 code unit 等长替换的 `x` masked projection；projection 只运行锁定 Marked 15 边界规则，最终 segments 始终切自原始 source，autolink 内保持 `text + marker + text`，HTML 标签及属性整体受保护。token store 公开 `findOccurrences(value, field)` / `bindContext(id, context)`，管理 occurrence id/context/state 与深度冻结 parent metadata；before priority 4 为一次 render 创建唯一 carrier，并通过非枚举 `data.markdown` options 与共享私有 symbol 桥接到实际 `marked.parse`，accessor、own unsupported value 与 Proxy 失败按原 descriptor 原子回滚。`hexo-renderer-marked` 每次先重置 Marked defaults，再执行本地 `marked:use` priority 0 安装 custom start/tokenizer、`processAllTokens`、`walkTokens` 和 extension renderer。`processAllTokens` 按 synthetic href 单 owner + 普通 image/link direct-field-first 的 field-aware 顺序独占 content occurrence 的字段发现、重分类、恢复与审计；nested 投影 child 只复制 snapshot，hook 在 finally 删除 carrier symbol。显式 excerpt 不经过 Marked，由 after 9 审计 `excerpt-pending` 并以具体 DOM/恢复文本、统一内部串断言和终态证明。link label 按 text-carrier，image alt 采用当前 Hexo `image.text`，link href 与字符串 title raw-preserve；metadata descriptor 和嵌套对象深度冻结。Hexo 顺序为 renderer → `onRenderEnd` → `after_render:html` → after 9；任一前序阶段拒绝都跳过 after 9。`pipeline.js` 无注册副作用，`register.js` 是唯一自动注册入口。
 
 **Tech Stack:** Hexo 8.1.2、hexo-renderer-marked 7.0.1、Marked 15.0.12、Node.js CommonJS、原生 Node `assert`、Stylus/Pug/主题现有工具链。
 
@@ -16,17 +16,17 @@
 - 严格参数：仅注册枚举和 `null` 可裸写，其它字符串必须双引号；引号内仅 `\\\"`、`\\\\` 两种转义；物理换行无效。
 - AI 支持 block+inline；PJ 只支持 block，且只处理 `type === 'projects'`。
 - `pre`/`textarea`/`script`/`style` 的完整开始标签、raw-text 内容与结束标签由 lexer 保护；普通 block raw HTML 的内部 marker 可签发 token，但只能由本次满足 `token.type === 'html' && token.block === true` 的实际 token 恢复。HTML 开始/结束标签及属性整体作为 protected 原文，属性 marker 不签发 occurrence/metadata。删除 `raw-html.js` 的最终 HTML 标签 allowlist 扫描；普通 inline HTML 标签间文本保持 Markdown text 语义，Markdown `ul`/`ol`/`blockquote`/`table` 中的受支持 marker 正常物化。
-- store 公开 occurrence id/字段发现、context 绑定、深度冻结 snapshot/parent metadata 数组和状态迁移；`processAllTokens` 独占实际 token 树上的 content 字段 dispatcher、重分类、content 审计、字段恢复和 `parent.arknights` 附着。具体 child field 先 canonical bind，严格祖先只能复制已确定 snapshot；Marked 15 synthetic URL link 的唯一 owner 固定为 `link.href -> link-url`，`link.text`/唯一合成 text child 只复制同一 snapshot 且不再次 `findOccurrences`/`bindContext`；只有真正不兼容具体字段或非祖先 sibling 冲突抛 `CARRIER_BINDING_ERROR`。扩展和 renderer 不得拆 token 或重新推断上下文。
-- Task 4 在 lexer 的 `source[cursor] === '<'` 分支中先执行与 Marked 15 inline `autolink` 等价的 `scanMarkdownAutolink`，命中后按 text 推进，未命中才进入 `scanRawHtml`/`scanHtmlTag`。angle autolink 与 GFM 裸 URL 各用“唯一 URL marker + 普通正文同段”源码断言 occurrence=1、protected=false、context=`link-url`；HTML 属性仍 protected 且 occurrence=0。
+- store 公开 occurrence id/字段发现、context 绑定、深度冻结 snapshot/parent metadata 数组和状态迁移；`processAllTokens` 独占实际 token 树上的 content 字段 dispatcher、重分类、content 审计、字段恢复和 owner `arknights` 数组附着。ownership 固定为 synthetic href 单 owner + 普通 image/link direct-field-first：当前 token 先认领 `image.text -> image-alt`、普通 `link.text -> link-label`（`link.tokens` 只是同一 label 的结构投影）、`link.href -> link-url`、字符串 `link.title -> link-title`，再递归 nested children 处理未认领 occurrence；祖先已认领的 child 只复制 frozen snapshot，不重复 bind/附 metadata。普通 text/html child 不得抢走 image-alt/link-label；真正非祖先 sibling direct fields 重复认领同一 id 时抛 `CARRIER_BINDING_ERROR`。扩展和 renderer 不得拆 token 或重新推断上下文。
+- Task 4 的 lexer 固定执行 candidate → masked projection → 原始 source segments 三步：先收集完整 marker range，再把范围内每个 UTF-16 code unit 换成 `x` 保持长度/偏移，只在 projection 上执行 Marked 15.0.12 完整 angle `autolink`、GFM `url` 与 `_backpedal` 边界规则。angle 命中后仍按普通 text 逐 code unit 前进，不能把整条 autolink 吞成单一 text；angle/GFM 都必须输出 `text + marker + text`、唯一 `mode:'inline'` occurrence、零 protected。projection 不进入 data/token/extension，最终由真实 Marked link token 的 `href` provenance 绑定 `link-url`；HTML 属性仍 protected 且 occurrence/metadata=0。
 - link label 是 text-carrier（状态 `text-preserved`）；image alt 唯一采用当前 Hexo `image.text`，link href 与 `typeof token.title === 'string'` 的 title raw-preserve，三者都禁止 wrapper/handler。`image.tokens` 不规范化为另一套 alt；link title 的 null/undefined/其它类型跳过，且不扫描 `link.raw`；HTML 属性只由 lexer 原样保护。
 - before priority 4、after priority 9、本地 `marked:use` priority 0；`register.js` 是唯一自动注册入口，`pipeline.js` 不得读取 `global.hexo` 或在 require 时注册。
-- 每次 `post.render` 只创建一个 carrier；应用不建立 global current carrier。`data.markdown` 临时属性非枚举，options 上共享私有 `CARRIER_SYMBOL` 必须可枚举以经过 renderer 的 `Object.assign`。bridge 先反射捕获原 descriptor/不存在状态，已有 accessor 必须在读取 `.value` 前以 `CARRIER_BRIDGE_DESCRIPTOR` 拒绝；descriptor/spread/define 的 Proxy 异常分别映射 READ/READ/DEFINE，data define 部分写入后抛错也用原 descriptor/不存在状态原子回滚。
+- 每次 `post.render` 只创建一个 carrier；应用不建立 global current carrier。`data.markdown` 临时属性非枚举，options 上共享私有 `CARRIER_SYMBOL` 必须可枚举以经过 renderer 的 `Object.assign`。bridge 先反射捕获原 descriptor/不存在状态：只有无 own property 才以 `{}` 开始；accessor 或 own data value 非受支持 options object（包括 `undefined`）必须在读取 getter/安装 bridge 前以 `CARRIER_BRIDGE_DESCRIPTOR` 拒绝。descriptor/spread/define 的 Proxy 异常分别映射 READ/READ/DEFINE，data define 部分写入后抛错也用原 value 与 `writable/configurable/enumerable` 原子回滚。
 - extension `start`/tokenizer 从 `this.lexer.options` 取本次 carrier；Marked 15 传入 `start(src.slice(1))`，扩展返回 tempSrc 零基索引且不得 `+1`。`processAllTokens` 从 `this.options` 取本次 options，附 metadata 并只审计 content occurrence，finally 删除 symbol；renderer 只经 `this.parser` 委托；`walkTokens` 只接收 token 并做 descriptor/深度冻结的局部结构检查。时序固定为 processAllTokens → walkTokens → parser/renderer。
 - Marked 15 singleton 可能在当前/下一次 parse 前短暂保留 parse options；实现只建立本次 data 的私有 carrier，不建立应用级 current carrier。renderer、`onRenderEnd` 或 `after_render:html` rejection 时 after 都不执行；下一次同 data before 必须修复旧字段/descriptor。已进入 `processAllTokens` 的 parse 必须在 finally 后使 `marked.defaults.hooks.options` 与 renderer options 不再含 symbol。
 - `dompurify: false`（以及当前未配置时的 identity sanitizer 路径）是 carrier bridge 的明确支持边界；其他 sanitizer 配置必须由真实探针证明不会改写精确 wrapper，不能静默降级。
 - heading 中 carrier 不进入 slug；heading-only renderer 必须把原 `token.tokens` 同一引用传给 `this.parser.parseInline(originalTokens)`，让 priority 9 继续物化/恢复。引用身份、连续 heading-only、成功/失败/PJ、`headerIds:false`、空键/`-1` 与后续正常 heading 全部放入真实 `Hexo#post.render`；纯 `new Marked()` 只测扩展基本行为。
 - 连续 PJ 仍由 pipeline 编排，占位符必须来自 carrier 或 collision-safe sentinel；任何未消费 carrier、sentinel、NUL、未知 wrapper 或已知 slug/smartypants 变体都 fail-closed。真实 Hexo `type: 'projects'` 门禁必须覆盖两个连续 PJ 的单网格/双卡片/无额外 `p` wrapper，以及普通文字和空行中断；不以纯 pipeline 的 `new Marked()`/`breaks:false` 假设代替。
-- `processAllTokens` 只审计 `field === 'content'` 的 Marked occurrence；显式 excerpt 保持 `excerpt-pending`，由 after 9 消费/恢复。直接 pipeline 探针用抛异常 `more` getter/setter 与独立读/写计数证明 before/after 及 `projectText` 的 content/excerpt/more 分支均不读写 more；合法/非法显式 excerpt 同时断言最终 DOM/恢复文本和 carrier occurrence=`consumed`/`failed`。
+- `processAllTokens` 只审计 `field === 'content'` 的 Marked occurrence；显式 excerpt 保持 `excerpt-pending`，由 after 9 消费/恢复。直接 pipeline 探针用抛异常 `more` getter/setter 与独立读/写计数证明 before/after 及 `projectText` 的 content/excerpt/more 分支均不读写 more；合法/非法显式 excerpt 复用同一内部串断言（至少含 NUL、`arknights-pj-card-*`、`arknights-grid-*`、完整 marker opaque token、carrier wrapper），并分别断言具体 DOM/恢复文本和 carrier occurrence=`consumed`/`failed`。
 - HTML 属性/raw-text protected 区域由 store/carrier spy 证明没有 occurrence/metadata；正常 content 必须在实际 Marked token 上断言 metadata descriptor/深度冻结。字段级 fallback 以 `carrier.originalField(field)` 为权威，`store.restore` 仅局部 best effort，并测试 token 已变形场景。
 - 同一 Hexo context+pipeline 重复注册不增加条目；同一 context 注册不同 pipeline 明确报重复错误；真实 Hexo 探针断言 before/after/marked:use 各恰好一条，且 `init()` 后不手动注册。
 - `pipeline.js` 在普通 Node 缓存中只创建一个 `defaultPipeline`；Task 5 修改 `meta-description.js` 后从同一模块实例导入 `projectText`，与自动注册实例共享 WeakMap；Task 4 测试显式 excerpt 字段终态与 projection，但不测试 `data.description`，探针创建的自定义 pipeline 不得替换默认实例。
@@ -178,9 +178,18 @@ const scan = scanMarkers(source)
 6. fenced code 支持反引号和波浪线，闭合围栏字符和长度必须合法；缩进 code 按行首 tab 或四空格识别，并持续到首个不再满足缩进的非空行。
 7. inline code 以等长反引号 run 配对；保护区包含定界反引号。未闭合 inline run 仍是普通文本。
 8. `pre`/`textarea`/`script`/`style` 从开始标签到匹配结束标签的完整 raw-text 区域始终是保护区，包括 `x <pre>…` 这类 inline 位置。普通 block HTML 只保护标签/属性并允许签发元素内部 marker；实际 `token.type==='html' && token.block===true` 的后续 provenance 由 Marked 扩展判定。普通 inline HTML 标签本身仍作为 inline `html` token，其间文本保持 Markdown text 语义。
-9. Task 4 在 `source[cursor] === '<'` 时必须先调用私有 `scanMarkdownAutolink(source, start)`，其完整匹配边界与锁定的 Marked 15 inline `autolink` 规则一致。命中时只把该范围作为 text 推进，不调用 `scanRawHtml`/`scanHtmlTag`；未命中才进入 raw HTML 分支。`前文 <https://example.com/[#]<AI>{PASS}> 后文` 与 `前文 https://example.com/[#]<AI>{PASS} 后文` 各必须恰有一枚 inline marker、零 protected segment；angle autolink 源码精确证明 raw-tag 保护没有误吞整段。
-10. HTML 开始/结束标签及属性始终是 `protected/raw-html` 原文，属性 marker 不生成候选、context、id、carrier 或 metadata；`<span data-marker="[#]<AI>{PASS}">正文</span>` 的 Task 4 回归必须保持 marker=0、属性标签 protected。image alt、link label、link href/title 不在 lexer 中生成 context/id，而由 store 与 `processAllTokens` 按实际 Marked 字段识别。候选 `[#]<AI>{...}` 先于 raw-tag 识别，避免其 `<AI>` 被拆成 HTML。
-11. lexer 不调用 parser、registry、handler、carrier 或 token string parser，也不把未知名称提前删除；CRLF 测试只比较分段/保护区结构语义，不比较原始换行字节。
+9. Task 4 在 `scanMarkers(source)` 内固定执行“两阶段三步”，而不是在原始 source 上直接声称 angle autolink 可匹配；第一阶段完成 candidate/range 与 masked boundary，第二阶段从原始 source 发射 segments：
+   1. **Candidate/range：** 先用现有 `scanMarkerShell` 收集全部完整 `{ start, end, raw }`，按起点排序且不得重叠；此步不签发 occurrence，不把 code/HTML attribute 中的最终候选变成 protected。代码、raw-text 与 HTML 属性的保护判定仍使用原始 source。
+   2. **Masked boundary projection：** 将全部 range 一次性写入同一个 projection；单 range 等价于 `source.slice(0, start) + 'x'.repeat(end - start) + source.slice(end)`。范围外不变，范围内按 UTF-16 code unit 一一替换；`projection.length === source.length`、绝对偏移不变，每个 `x` 同时属于 Marked angle `[^\s\x00-\x1f<>]*` 与 GFM URL `[^\s<]*` 的合法 URL-body 类。`x` 是字母数字：与 opaque token 的字母数字前缀及 43 字符 SHA-256 base64url 尾字符同类，不会被 `_backpedal` 当作 URL 末尾标点删除；真实 token 的内部标点也都有后续字符，不改变外边界。`scanMarkdownAutolink(projection, cursor)` 必须在该 projection 上执行锁定 Marked 15.0.12 的完整 `inline.autolink`、GFM `inline.url` 和 `_backpedal` 边界；不能使用会在 `<AI>` 处提前失败的原始 angle regex，也不能把整条 autolink 替换成一个 text sentinel。
+   3. **Original-source emission：** angle 起点在 projection 命中后，只把原始 `<` 交给普通 text 路径并前进一个 code unit；未命中才进入 `scanRawHtml`/`scanHtmlTag`。GFM 边界命中同样不改变普通 marker scanner。segment 的 `raw` 永远来自 `source.slice(start,end)`，projection 不进入返回值、data、Marked token 或 extension。
+10. 固定输入/输出（UTF-16 offset）：
+    - `前文 <https://example.com/[#]<AI>{PASS}> 后文`：candidate=`[24,37)`，projection=`前文 <https://example.com/xxxxxxxxxxxxx> 后文`，segments=`text[0,24) + marker[24,37) + text[37,41)`。
+    - `前文 https://example.com/[#]<AI>{PASS} 后文`：candidate=`[23,36)`，projection=`前文 https://example.com/xxxxxxxxxxxxx 后文`，segments=`text[0,23) + marker[23,36) + text[36,39)`。
+    - 两者必须各有且仅有一枚 `mode:'inline'` marker、零 protected segment；autolink 内普通前后正文仍存在。`x` 只消除 candidate 内部的 angle/URL 终止字符和空白/control，不承担 opaque token 重建；before 仍替换为 store 的完整 token，真实 Marked parse 后由实际 `link.href` provenance 绑定 `link-url`。
+11. HTML 开始/结束标签及属性始终是 `protected/raw-html` 原文；projection 中即使暂含 candidate，`<span data-marker="[#]<AI>{PASS}">正文</span>` 的最终 scan 仍必须 marker=0、属性标签 protected、occurrence/metadata=0。image alt、link label、link href/title 不在 lexer 中生成 context/id，而由 store 与 `processAllTokens` 按实际 Marked 字段识别。
+12. lexer 不调用 parser、registry、handler、carrier 或 token string parser，也不把未知名称提前删除；CRLF 测试只比较分段/保护区结构语义，不比较原始换行字节。
+
+本地 Marked 15.0.12 证据固定为 `node_modules/marked/lib/marked.cjs`：angle regex 在 231 行明确排除 `<`/`>`，GFM URL regex 在 272 行排除 `<`，`url()` 在 1053–1085 行执行 `_backpedal`，`autolink()` 在 1027–1050 行生成 `text===href` 的 synthetic link。实现者必须复制这些已编译边界规则，不得凭记忆另写近似 regex；上述 masked projection 的作用仅是让 candidate 内部临时满足相同 URL-body 类别，外边界仍由这些规则判定。
 
 ### 2.4 `parseMarker(raw, mode)` 精确契约
 
@@ -404,6 +413,10 @@ const carrier = createRenderCarrier({
 `attachCarrierBridge(data, carrier)` 的实现顺序和属性语义固定；以下伪代码中的 `bridgeError(code)` 只能产生固定非敏感 message/reason：
 
 ```js
+function isSupportedMarkdownOptions(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 function captureMarkdownDescriptor(data) {
   let originalDescriptor
   try {
@@ -413,7 +426,7 @@ function captureMarkdownDescriptor(data) {
   }
 
   if (originalDescriptor === undefined) {
-    return { originalDescriptor, originalOptions: undefined }
+    return { originalDescriptor, hadOwnProperty: false, originalOptions: null }
   }
   if (!Object.hasOwn(originalDescriptor, 'value')) {
     throw bridgeError('CARRIER_BRIDGE_DESCRIPTOR')
@@ -421,16 +434,25 @@ function captureMarkdownDescriptor(data) {
   if (originalDescriptor.configurable !== true) {
     throw bridgeError('CARRIER_BRIDGE_DESCRIPTOR')
   }
-  return { originalDescriptor, originalOptions: originalDescriptor.value }
+
+  const originalOptions = originalDescriptor.value
+  let supportedOptions
+  try {
+    supportedOptions = isSupportedMarkdownOptions(originalOptions)
+  } catch {
+    throw bridgeError('CARRIER_BRIDGE_DESCRIPTOR')
+  }
+  if (!supportedOptions) {
+    throw bridgeError('CARRIER_BRIDGE_DESCRIPTOR')
+  }
+  return { originalDescriptor, hadOwnProperty: true, originalOptions }
 }
 
 function attachCarrierBridge(data, carrier) {
-  const { originalDescriptor, originalOptions } = captureMarkdownDescriptor(data)
+  const { originalDescriptor, hadOwnProperty, originalOptions } = captureMarkdownDescriptor(data)
   let markdownOptions
   try {
-    markdownOptions = originalOptions && typeof originalOptions === 'object'
-      ? { ...originalOptions }
-      : {}
+    markdownOptions = hadOwnProperty ? { ...originalOptions } : {}
   } catch {
     throw bridgeError('CARRIER_BRIDGE_READ')
   }
@@ -455,7 +477,7 @@ function attachCarrierBridge(data, carrier) {
     })
   } catch {
     try {
-      if (originalDescriptor === undefined) {
+      if (!hadOwnProperty) {
         const deleted = Reflect.deleteProperty(data, 'markdown')
         if (!deleted && Object.getOwnPropertyDescriptor(data, 'markdown') !== undefined) {
           throw new Error('bridge rollback failed')
@@ -473,12 +495,12 @@ function attachCarrierBridge(data, carrier) {
 }
 ```
 
-`attachCarrierBridge` 返回 `{ originalDescriptor, temporaryOptions, carrierId }`。descriptor 反射失败与 options spread/属性读取失败抛 `CARRIER_BRIDGE_READ`；accessor、不可重新定义 descriptor 或回滚失败抛 `CARRIER_BRIDGE_DESCRIPTOR`；symbol/data define 失败抛 `CARRIER_BRIDGE_DEFINE`。data define 的 catch 必须覆盖“Proxy trap 已部分写入后才抛错”，回滚只能使用捕获的原 descriptor/不存在状态，不能读取当前 `data.markdown`。pipeline 仍在写入字段前完成 bridge，因此任何失败都不得留下 carrier/token 状态。`restoreCarrierBridge(data, carrier)` 返回 `{ restored: true }`，按保存的 descriptor 精确恢复：入口无属性则 delete，有属性则恢复原 value 引用与 `writable/configurable/enumerable`；找不到本次临时 bridge 时返回 `{ restored: false }`，不修改其它 data 字段。`getCarrierFromOptions(options, expectedCarrier)` 要求 expected carrier：options 非对象、缺少 symbol、symbol 值缺失或与 expectedCarrier 非同一引用均返回 `null`，不抛异常；旧 options 中同 symbol 的其它 carrier 不能冒充本次 carrier。carrier/pipeline/extension/sentinel 的稳定错误码集合固定为 `CARRIER_BINDING_ERROR`、`CARRIER_STATE_INVALID`、`CARRIER_AUDIT_FAILED`、`CARRIER_BRIDGE_READ`、`CARRIER_BRIDGE_DEFINE`、`CARRIER_BRIDGE_DESCRIPTOR`、`INVALID_MARKED_USE`、`INVALID_PIPELINE_OPTIONS`、`DUPLICATE_MARKER_PIPELINE`、`SENTINEL_GENERATION_EXHAUSTED`、`UNCONSUMED_SENTINEL`、`UNEXPECTED_NUL`；抛出的 `Error` 使用固定非敏感 message，并只额外暴露不含内部串的 `code`/`reason`。
+`attachCarrierBridge` 返回 `{ originalDescriptor, temporaryOptions, carrierId }`。无 own `markdown` 才允许从 `{}` 开始；own data descriptor 的 `value: undefined`、`null`、primitive、function、array 或其它非受支持 object 与 accessor、`configurable:false` 一样，在安装 bridge 前抛 `CARRIER_BRIDGE_DESCRIPTOR`，绝不能静默转成 `{}`。descriptor 反射失败与 options spread/属性读取失败抛 `CARRIER_BRIDGE_READ`；symbol/data define 失败抛 `CARRIER_BRIDGE_DEFINE`。data define 的 catch 必须覆盖“Proxy trap 已部分写入后才抛错”，回滚只能使用捕获的原 descriptor/不存在状态，不能读取当前 `data.markdown`；有属性时精确恢复原 value 引用与 `writable/configurable/enumerable`，无属性时删除临时字段。pipeline 仍在写入字段前完成 bridge，因此任何失败都不得留下 carrier/token 状态。`restoreCarrierBridge(data, carrier)` 返回 `{ restored: true }`，按保存的 descriptor 精确恢复；找不到本次临时 bridge 时返回 `{ restored: false }`，不修改其它 data 字段。`getCarrierFromOptions(options, expectedCarrier)` 要求 expected carrier：options 非对象、缺少 symbol、symbol 值缺失或与 expectedCarrier 非同一引用均返回 `null`，不抛异常；旧 options 中同 symbol 的其它 carrier 不能冒充本次 carrier。carrier/pipeline/extension/sentinel 的稳定错误码集合固定为 `CARRIER_BINDING_ERROR`、`CARRIER_STATE_INVALID`、`CARRIER_AUDIT_FAILED`、`CARRIER_BRIDGE_READ`、`CARRIER_BRIDGE_DEFINE`、`CARRIER_BRIDGE_DESCRIPTOR`、`INVALID_MARKED_USE`、`INVALID_PIPELINE_OPTIONS`、`DUPLICATE_MARKER_PIPELINE`、`SENTINEL_GENERATION_EXHAUSTED`、`UNCONSUMED_SENTINEL`、`UNEXPECTED_NUL`；抛出的 `Error` 使用固定非敏感 message，并只额外暴露不含内部串的 `code`/`reason`。
 
 约束：
 
 1. `data.markdown` 临时属性必须非枚举；options 上的 symbol 必须可枚举。renderer 在 `Object.assign({ headerIds: true }, markedCfg, options, …)` 中只复制可枚举 symbol，因此两项缺一即架构失败。
-2. 不直接修改用户原有 options 对象；浅复制其自有可枚举配置。已有 accessor 必须在读取 `.value` 前拒绝且 getter/setter 调用数为 0；descriptor Proxy、spread Proxy 和 data define Proxy 分别覆盖 READ/READ/DEFINE，所有失败后的原 descriptor 深比较必须相等。
+2. 不直接修改用户原有 options 对象；浅复制其自有可枚举配置。无 own property 才从 `{}` 开始；own accessor 与 own unsupported value（包括 `value: undefined`）必须在 getter/setter 计数仍为 0 时拒绝。descriptor Proxy、spread Proxy 和 data define Proxy 分别覆盖 READ/READ/DEFINE，所有失败后的原 descriptor 深比较与 value 引用必须相等。
 3. 正常 after 的所有 parse/handler/grid/projection 失败路径可在 `finally` 调用 `restoreCarrierBridge`；renderer、`onRenderEnd` 或任一 `after_render:html` filter 拒绝时 Hexo 都不会执行 after，不能承诺该调用。Hexo 源码顺序是 renderer → `Post.render` 的 `onRenderEnd` → `after_render:html` → after 9；成功时中间阶段对 content 的改写会成为 after 9 输入，拒绝时下一次同 data before 必须先根据 carrier snapshot 恢复旧字段和 descriptor、删除旧 WeakMap 状态。
 4. 每次成功 before 只创建一个 render carrier，生命周期限定为该 data 的一次 `post.render`。同一 data 再次 before 时，先恢复并删除上次 bridge/WeakMap 状态。
 5. content carrier 通过 options symbol 到达实际 Marked parse；显式 excerpt 不经过该 parse，登记为 `excerpt-pending`，只能写回 excerpt，不能伪造 content provenance。`more` 永不进入 carrier。
@@ -525,7 +547,7 @@ function attachCarrierBridge(data, carrier) {
 | callback | `this` 可用内容 | 参数/返回 |
 | --- | --- | --- |
 | `findCarrierStart` / `tokenizeCarrier` | `{ lexer }`；carrier 从 `this.lexer.options[CARRIER_SYMBOL]` 读取 | start 实际收到 `src.slice(1)`，返回 tempSrc 零基 `number` 或 `undefined`，不得 `+1`；tokenizer 收到完整 src，返回 Marked `Token` 或 `undefined` |
-| `recordCarrierProvenance` | Hooks 实例；carrier 从 `this.options[CARRIER_SYMBOL]` 读取 | `(tokens) -> sameTokenArray`；独占 content 字段 child-first ownership、synthetic URL href 单 owner、发现/重分类/恢复/content 审计/metadata 附着，并在 finally 删除 symbol |
+| `recordCarrierProvenance` | Hooks 实例；carrier 从 `this.options[CARRIER_SYMBOL]` 读取 | `(tokens) -> sameTokenArray`；独占 content 字段 synthetic href 单 owner、普通 image/link direct-field-first ownership、nested 未认领 occurrence、发现/重分类/恢复/content 审计/metadata 附着，并在 finally 删除 symbol |
 | `auditCarrierToken` | 只以当前 token 为输入；不读取/依赖 options、carrier/store 或完整 occurrence 集合 | `(token) -> void`；只检查 `arknights` descriptor、数组/元素/嵌套 parent 深度冻结和 parent/heading 局部一致性 |
 | `renderImageContext` / `renderLinkContext` / `renderHtmlContext` | `{ parser }`；只能消费 metadata 并经 `this.parser.renderer.image/link/html` 委托 | `(token) -> string`；无 metadata 时直接委托，不重新查找/拆分 occurrence |
 | `renderHeadingWithCarrier` | `{ parser }`；普通 heading 经 `this.parser.renderer.heading` 委托 | `(token) -> string`；heading-only 以原 `token.tokens` 调用 `this.parser.parseInline`，异常向上抛出 |
@@ -534,21 +556,21 @@ function attachCarrierBridge(data, carrier) {
 
 1. `hexo-renderer-marked/lib/renderer.js` 每次调用先把 `marked.defaults.extensions/tokenizer/renderer/hooks/walkTokens` 设为 null。
 2. 随后 `execFilterSync('marked:use', marked.use, …)`。本地注册函数每次调用 `installMarkedExtension(markedUse)`，所以扩展对每次 renderer 调用都重新安装。
-3. 实际 parse 顺序固定为：custom `start`/tokenizer 生成 token → `hooks.processAllTokens(tokens)` → `walkTokens(tokens, callback)` → parser/renderer。start/tokenizer 只定位完整 token；`processAllTokens` 以 child-first canonical ownership 独占 content 字段发现/context 重分类、content 审计、字段恢复和 metadata 附着；`walkTokens` 不读取 options、carrier/store、完整集合或最终 wrapper，只做 descriptor/深度冻结的 token-local 结构检查。
+3. 实际 parse 顺序固定为：custom `start`/tokenizer 生成 token → `hooks.processAllTokens(tokens)` → `walkTokens(tokens, callback)` → parser/renderer。start/tokenizer 只定位完整 token；`processAllTokens` 按 synthetic href 单 owner、普通 image/link direct-field-first 的 field-aware 顺序独占 content 字段发现/context 重分类、content 审计、字段恢复和 owner metadata 附着；`walkTokens` 不读取 options、carrier/store、完整集合或最终 wrapper，只做 descriptor/深度冻结的 token-local 结构检查。
 4. 实际 parse options 经 `Object.assign` 保留可枚举 `CARRIER_SYMBOL`。`processAllTokens` 在 finally 从当前 parse options 副本 `this.options` 删除该 symbol；删除后 `marked.defaults.hooks.options` 和 renderer options 即使仍指向同一 options 对象，也不再含 carrier。该操作不修改原始 `data.markdown` temporary options，后者仍由正常 after/同 data before 恢复。没有该 symbol 时 start/tokenizer/hook/walkTokens/renderer 全部 no-op。
 
 carrier token 与上下文：
 
 - custom tokenizer 只在 `this.lexer.options` 提供的本次 store 中匹配当前位置的完整 token，不以宽松 token-looking 正则消费用户文本，也不自行拆 token。start 在 `src.slice(1)` 上用完整 token 查找返回零基索引；Marked 内部负责 `+1`。
-- `processAllTokens` 以 child-first 方式决定具体字段 owner。Marked 15 synthetic URL link 先用结构判定：`token.type==='link' && !Object.hasOwn(token,'title') && token.text===token.href && Array.isArray(token.tokens) && token.tokens.length===1 && child.type==='text' && child.raw===child.text && child.text===token.text`；命中后只扫描 `link.href` 并唯一绑定 `link-url`，`link.text`/child 为派生投影，不调用 `findOccurrences`/`bindContext`。其余字段语义顺序为：`image.text -> image-alt`；普通 `link.tokens/text -> link-label`；`link.href -> link-url`；`typeof token.title === 'string' -> link-title`；`token.type==='html' && token.block===true -> raw-html`。更深 child 先绑定；严格祖先只复制已确定的冻结 snapshot。同一 id 只有被真正不兼容具体字段或非祖先 sibling 路径绑定时才抛 `CARRIER_BINDING_ERROR`；synthetic href/text/child 投影不重复 bind。所有 `findOccurrences` 的 field 必须是 `content`；禁止扫描 `link.raw`。
-- 每个 child/parent token 的 `token.arknights` 通过 `Object.defineProperty` 附加，descriptor 固定 `{ enumerable:false, configurable:false, writable:false }`；数组、元素与嵌套 `parent` 深度冻结。元素固定为 `{ id, token, field, mode, raw, context, state, parent: { type, field }, headingOnly }`；`parent.type` 必须是实际 Marked token 的非空类型，parent field 只允许 `text/alt/href/title`，非 heading 祖先的 `headingOnly` 为 `null`。同一父 token 的多个 occurrence 全部保留。
+- `processAllTokens` 固定执行 field-aware direct-field-first。Marked 15 synthetic URL link 先用结构判定：`token.type==='link' && !Object.hasOwn(token,'title') && token.text===token.href && Array.isArray(token.tokens) && token.tokens.length===1 && child.type==='text' && child.raw===child.text && child.text===token.text`；命中后只扫描 `link.href` 并唯一绑定 `link-url`，`link.text`/child 为派生投影，不调用 `findOccurrences`/`bindContext`、不附 metadata。非 synthetic token 先按 `image.text -> image-alt`、普通 `link.text -> link-label`（`link.tokens` 是同一 label 的结构投影，不第二次认领）、`link.href -> link-url`、字符串 `link.title -> link-title` 认领当前直接字段；再按源码顺序递归 nested `token.tokens`，只处理尚未被祖先/容器认领的 occurrence。已认领 child 只复制 frozen snapshot 恢复字段，不重复 `bindContext`、不附独立 metadata；普通 text/html child 不能抢走 image-alt/link-label。真正非祖先 sibling direct fields 共享同一 id 时第二次绑定抛 `CARRIER_BINDING_ERROR`；synthetic href/text/child 投影不重复 bind。所有 `findOccurrences` 的 field 必须是 `content`；禁止扫描 `link.raw`。
+- 每个 canonical owner token 的 `token.arknights` 通过 `Object.defineProperty` 附加，descriptor 固定 `{ enumerable:false, configurable:false, writable:false }`；数组、元素与嵌套 `parent` 深度冻结。元素固定为 `{ id, token, field, mode, raw, context, state, parent: { type, field }, headingOnly }`；`parent.type` 必须是实际 Marked token 的非空类型，parent field 只允许 `text/alt/href/title`，非 heading 祖先的 `headingOnly` 为 `null`。同一 owner 的多个 occurrence 按直接字段/源码顺序全部保留；synthetic child、祖先已认领的 nested child 与普通投影 child 不附独立 metadata。
 - 普通 Markdown `text` 上下文的 extension renderer 仅消费 `pending-markdown` metadata，输出精确形状：`<span data-arknights-carrier="ESCAPED_TOKEN"></span>`。wrapper 不含 heading 可见文本；Hexo `stripHTML` 不把 data 属性值纳入 slug。
-- `image-alt` 固定采用当前 Hexo `image.text`：只从该字段发现并恢复 occurrence，状态变为 `raw-preserved`；若同一 occurrence 已由更深 child（例如 image 内嵌 link label）拥有，image 祖先只复制该 snapshot、按 child 语义恢复自己的字段值，不把 context 改回 `image-alt`，也不重复迁移。`image.tokens` 只参与 canonical ownership 追踪，不规范化 child emphasis。renderer 只委托 `this.parser.renderer.image(token)`。最终验收断言 `<img alt>` 的当前 Hexo 语义，不能一边委托 renderer 一边要求 child-normalized alt。
-- `link-label` 固定为 text-carrier：`link.tokens/text` 发现直接 label occurrence 并把需显示的 carrier child 变为普通 text；嵌套 image/link 保持 child canonical 结构，祖先不扁平化。link renderer 只委托 `this.parser.renderer.link(token)`，最终验收断言 `<a>` 可见 label，不要求 Markdown 原文。
-- `link-url`、`link-title` 固定为 `raw-preserve`：分别从 `link.href` 与字符串 title 发现并恢复全部 occurrence；`title` 为 null/undefined/其它类型时跳过，禁止扫描 `link.raw`。标准 link 仍按具体 label/href/title owner 处理；angle autolink/GFM 绝对 URL 裸 token 的 href/text/child 同一字符串只产生一个 `link-url` snapshot、一个 `parent.field==='href'` metadata，child 无 metadata，终态 `raw-preserved`。两类 synthetic 源码各恰有一枚 marker 并与普通正文同段，最终同时断言 DOM href/label、occurrence/context/state/metadata，不能以最终 HTML 单独证明 provenance。
+- `image-alt` 固定采用当前 Hexo `image.text`：在进入 `image.tokens` 前先认领当前 image 直接 alt 中未被外层容器认领的 occurrence，状态变为 `raw-preserved`；若 marker 位于外层 image alt，nested link child 只复制该 snapshot 恢复字段，不重复迁移、不附 metadata，也不把 context 改回 `link-label`。`image.tokens` 只参与结构追踪，不规范化 child emphasis。renderer 只委托 `this.parser.renderer.image(token)`。最终验收断言 `<img alt>` 的当前 Hexo 语义，不能一边委托 renderer 一边要求 child-normalized alt。
+- `link-label` 固定为 text-carrier：把 `link.text` 与 `link.tokens` 视为同一直接 label，只由 `link.text` 首次认领并把需显示的 carrier projection 变为普通 text，状态为 `text-preserved`；随后 nested image/link 只处理未认领 occurrence，祖先已认领 child 只复制 snapshot、不重复 bind/附 metadata。link renderer 只委托 `this.parser.renderer.link(token)`，最终验收断言 `<a>` 可见 label，不要求 Markdown 原文。
+- `link-url`、`link-title` 固定为 `raw-preserve`：分别从 `link.href` 与字符串 title 恢复尚未认领的 occurrence；`title` 为 null/undefined/其它类型时跳过，禁止扫描 `link.raw`。标准 link 的直接 label/href/title 按固定字段顺序认领；angle autolink/GFM 绝对 URL 裸 token 的 href/text/child 同一字符串只产生一个 `link-url` snapshot、一个 `parent.field==='href'` metadata，child 无 metadata，终态 `raw-preserved`。两类 synthetic 源码各恰有一枚 marker 并与普通正文同段；扩展测试断言 `mode:'inline'`、唯一 content occurrence/bind、metadata.id=occurrence.id，最终 DOM 只能作为补充证据。
 - HTML 属性不进入上述 dispatcher：lexer 已将标签和属性作为 protected 原文。store/carrier spy 必须证明 protected marker 不签发 occurrence、不附 metadata；正常 content 则在实际 token 上断言 metadata。`pre/textarea/script/style` 同理，不能只靠最终字符串无 badge 推断。
 - `raw-html` 只在 `token.type==='html' && token.block===true` 时从 token `text` 恢复并标记 `raw-restored`；`pre/textarea/script/style` 的完整 raw-text 已由 lexer 保护，通常没有待分类 occurrence。普通 inline `html` token 不触发 raw 恢复。若 open/close html 之间有空行，实际 token 为 open html + paragraph + close html，则中间按 paragraph 解释，禁止根据标签名猜成整段 raw。
-- `processAllTokens` 不读取最终 HTML；它只审计 `field==='content'` 的 Marked occurrence，唯一 binding 与 field/context/state 必须一致。synthetic URL link 的 parent metadata 恰有一项且 `context==='link-url'`、`state==='raw-preserved'`、`parent.field==='href'`，唯一 child 没有 `arknights` descriptor；普通 link/image 继续允许多 metadata。显式 excerpt 保持 `excerpt-pending`，不参与“未分类”审计。`walkTokens` 只验证 descriptor/深度冻结/局部结构；hook 在 finally 删除 symbol，删除前 metadata 不保留 carrier 引用。
+- `processAllTokens` 不读取最终 HTML；它只审计 `field==='content'` 的 Marked occurrence，唯一 binding 与 field/context/state 必须一致。synthetic URL link 的 parent metadata 恰有一项且 `context==='link-url'`、`state==='raw-preserved'`、`parent.field==='href'`，metadata.id 必须等于 occurrence.id，唯一 child 没有 `arknights` descriptor；普通 link/image owner 允许多 metadata，nested 投影 child 不附 metadata。显式 excerpt 保持 `excerpt-pending`，不参与“未分类”审计。`walkTokens` 只验证 descriptor/深度冻结/局部结构；hook 在 finally 删除 symbol，删除前 metadata 不保留 carrier 引用。
 - 只有 `pending-markdown` 普通 text occurrence 才能输出 wrapper 并进入 priority 9；raw-restored、text-preserved、raw-preserved occurrence 不调用 parser/registry/handler。Markdown list/table/blockquote/heading 宿主不改变来源判断，inline PJ 仍按 `UNSUPPORTED_MODE` 处理。
 
 heading 契约：
@@ -665,7 +687,7 @@ before 阶段：
 
 after 阶段：
 
-1. 只处理当前 carrier 记录的字段。content 只消费普通 text 的 `pending-markdown`；`raw-restored`、`text-preserved`、`raw-preserved` 只核对次数。显式 excerpt 不经过 `processAllTokens`，在本阶段单独审计 `excerpt-pending` 并消费或恢复，结束态必须为 `consumed`/`failed`；before→after 9 之间字段只含完整 opaque token，不生成 `data-arknights-carrier` wrapper。纯 pipeline 探针在 before 后从 `data.markdown[CARRIER_SYMBOL]` 捕获 carrier/occurrence id；合法 `[#]<AI>{NOTREVIEW, "独立摘要"}` 必须令 `data.excerpt` 以具体 `.ai-badge--notreview` DOM 开头且 occurrence=`consumed`，非法状态必须恢复为具体转义 marker 且 occurrence=`failed`，两者都断言无 wrapper/token/sentinel/NUL。
+1. 只处理当前 carrier 记录的字段。content 只消费普通 text 的 `pending-markdown`；`raw-restored`、`text-preserved`、`raw-preserved` 只核对次数。显式 excerpt 不经过 `processAllTokens`，在本阶段单独审计 `excerpt-pending` 并消费或恢复，结束态必须为 `consumed`/`failed`；before→after 9 之间字段只含完整 opaque token，不生成 `data-arknights-carrier` wrapper。纯 pipeline 探针在 before 后从 `data.markdown[CARRIER_SYMBOL]` 捕获 carrier/occurrence id；合法 `[#]<AI>{NOTREVIEW, "独立摘要"}` 必须令 `data.excerpt` 以具体 `.ai-badge--notreview` DOM 开头且 occurrence=`consumed`，非法状态必须恢复为具体转义 marker 且 occurrence=`failed`，两者复用同一内部串断言并覆盖 NUL、`arknights-pj-card-*`、`arknights-grid-*`、完整 marker opaque token 与 wrapper。
 2. 对 pending occurrence 执行 `decode -> parseMarker -> registry.dispatch -> handler.render`。parse/dispatch/render/投影任一失败都整枚恢复 raw，不调用后续 handler。
 3. AI/inline 原位替换；block PJ 先生成安全 card sentinel，再按字段内物理连续性合并 `.projects-grid`，只解除项目网格自己的 Markdown wrapper。
 4. 所有 wrapper/token/sentinel 替换后执行内部串审计。完整 token 仍可精确定位时局部恢复；无法定位或 token 已变形时，以 `carrier.originalField(field)` 的入口原值为权威回退整个 affected field，再以 HTML 文本上下文安全序列化。`store.restore(value)` 仅作局部 best effort，禁止把它作为 fallback 唯一来源或宽松 strip。CRLF 只比较结构和语义。
@@ -1068,7 +1090,7 @@ console.log('PJ handler: ok')
 
 - Create: `themes/arknights/scripts/markers/carrier.js`（当前不存在；本次实现）
 - Create: `themes/arknights/scripts/markers/marked-extension.js`（当前不存在；本次实现）
-- Modify: `themes/arknights/scripts/markers/lexer.js`（Task 1 基线上的增量：完整保护 `pre`/`textarea`/`script`/`style` raw-text；`scanMarkdownAutolink` 必须先于 raw-tag；不重建 Task 1）
+- Modify: `themes/arknights/scripts/markers/lexer.js`（Task 1 基线上的增量：完整保护 `pre`/`textarea`/`script`/`style` raw-text；实现 candidate → 等长 `x` masked projection → Marked 15 angle/GFM boundary → original-source segments；不重建 Task 1）
 - Modify: `themes/arknights/scripts/markers/token.js`（Task 1 基线上的增量：store-owned occurrence API；不重建 Task 1）
 - Modify: `themes/arknights/scripts/markers/sentinel.js`（从旧宽松 strip 改为精确 context API）
 - Modify: `themes/arknights/scripts/markers/pipeline.js`（从旧 raw-html/slug 猜测改为 carrier bridge）
@@ -1087,26 +1109,26 @@ console.log('PJ handler: ok')
 ### Interfaces
 
 - Consumes: 当前 runtime baseline 中 Task 1–3 已存在的 `scanMarkers`、`parseMarker`、`createTokenStore`、`createRegistry`、`aiHandler`、`projectsHandler`；第 2.7–2.10 节固定 carrier/extension/sentinel/registration 契约。Task 4 只对 lexer/token 做已列明的增量，不重建 Task 1。
-- Produces: 每次 post.render 唯一 carrier、store-owned occurrence、非枚举 `data.markdown` + 可枚举私有 symbol bridge、descriptor 失败原子回滚、lexer autolink-before-raw-tag 分支、只依据实际 Marked token 的 raw/pending provenance、冻结 parent metadata 数组、synthetic URL link 单 `link-url` owner、非文本上下文规则、heading-only 保留 children 且不污染 `_headingId`、连续 PJ、content/显式 excerpt projection 和 fail-closed；`registerMarkerFilters(hexoContext, pipeline)` 幂等注册 before 4、after 9、marked:use 0。
+- Produces: 每次 post.render 唯一 carrier、store-owned occurrence、非枚举 `data.markdown` + 可枚举私有 symbol bridge、own unsupported value/accessor/Proxy 失败原子回滚、lexer candidate + masked projection + original-source segment 两阶段 autolink、只依据实际 Marked token 的 raw/pending provenance、冻结 owner metadata 数组、synthetic URL link 单 `link-url` owner、普通 image/link direct-field-first、非文本上下文规则、heading-only 保留 children 且不污染 `_headingId`、连续 PJ、content/显式 excerpt projection 和 fail-closed；`registerMarkerFilters(hexoContext, pipeline)` 幂等注册 before 4、after 9、marked:use 0。
 - Registration: 真实 Hexo 只在 `await hexo.init()` 时由 `register.js` 自动注册；init 后不手动注册。
 - Lifecycle: renderer、`onRenderEnd` 或 `after_render:html` rejection 不执行 after；应用不建 global current carrier，但 Marked singleton 可短暂保留 parse options。已进入 processAllTokens 的 parse 在 finally 清 symbol；下一次同 data before 修复字段和 descriptor，错误必须向上抛出。
 
 ### 实施步骤
 
 - [ ] 以当前 `00b723a` runtime baseline 为输入，先阅读旧 `pipeline.js`/`raw-html.js`/`sentinel.js` 与锁定的 renderer/Marked 源码；不重复创建 Task 1–3 文件，不重复其 RED。
-- [ ] 创建/扩展 `.temp/marker-carrier.test.js`，先覆盖 `CARRIER_SYMBOL` 非 `Symbol.for`、入口有无 `data.markdown` 的 descriptor、options symbol 可枚举、`getCarrierFromOptions(options, expectedCarrier)` 对旧/伪 carrier 返回 null、`createRenderCarrier` 不接收 id/occurrences、`findOccurrences(value, field)` 精确返回 `{ id, token, start, end, raw, mode }`、`bindContext(id, context)` 的深度冻结 snapshot/状态迁移、`originalField(field)` 权威值及重复 before 修复旧状态；bridge 另覆盖 configurable accessor（getter/setter 零调用且 `CARRIER_BRIDGE_DESCRIPTOR`）、descriptor/spread throwing Proxy（`CARRIER_BRIDGE_READ`）、data define trap 先写入再抛错（`CARRIER_BRIDGE_DEFINE`），每个失败后深比较原 value 引用与 `writable/configurable/enumerable`。
+- [ ] 创建/扩展 `.temp/marker-carrier.test.js`，先覆盖 `CARRIER_SYMBOL` 非 `Symbol.for`、入口有无 `data.markdown` 的 descriptor、options symbol 可枚举、`getCarrierFromOptions(options, expectedCarrier)` 对旧/伪 carrier 返回 null、`createRenderCarrier` 不接收 id/occurrences、`findOccurrences(value, field)` 精确返回 `{ id, token, start, end, raw, mode }`、`bindContext(id, context)` 的深度冻结 snapshot/状态迁移、`originalField(field)` 权威值及重复 before 修复旧状态；bridge 必须单列 own data descriptor `value: undefined` 与其它 unsupported value，断言 `CARRIER_BRIDGE_DESCRIPTOR` 且绝不改成 `{}`。另覆盖 configurable accessor（getter/setter 零调用）、descriptor/spread throwing Proxy（`CARRIER_BRIDGE_READ`）、data define trap 先写入再抛错（`CARRIER_BRIDGE_DEFINE`），每个失败后深比较原 value 引用与 `writable/configurable/enumerable`。
 - [ ] 在真实 Hexo carrier 测试中覆盖 renderer、`onRenderEnd` 和 `after_render:html` rejection：断言 after filter 均不执行、应用无 global current carrier、再次 before 修复字段/descriptor；在 hook 已进入的成功或拒绝路径断言 `marked.defaults.hooks.options` 与 renderer options 不再含 `CARRIER_SYMBOL`。另覆盖 lexer/hook 前拒绝和下一次 parse 覆盖旧 options 的短暂引用，不作绝对零强引用断言。
 - [ ] 运行 `node .temp/marker-carrier.test.js`；新文件/新行为断言缺失时允许出现 `MODULE_NOT_FOUND`，但只作为 Task 4 首次 RED；不得回退或重做 Task 1–3 的 RED。
 - [ ] 只实现 `carrier.js` 导出与上述 descriptor/绑定/清理契约，确认 carrier 探针从加载错误推进到行为断言，再补齐绿测。
 - [ ] 创建/扩展 `.temp/marked-extension.test.js`，用独立 `new Marked()` 实例通过传入的 `marked.use` 安装扩展；只断言扩展基本行为、无 bridge no-op、start/tokenizer 的 `this.lexer.options`、`src.slice(1)` 零基索引、hook 的 `this.options`、renderer 的 `this.parser` 委托，以及 token-local metadata descriptor/深度冻结。即使 Marked 暴露实例引用，walkTokens 也不读取 options/carrier/store/完整集合。Hexo heading、当前 Hexo image alt 和最终 HTML 语义不在此纯测试验收。
-- [ ] 扩展 `.temp/marker-core.test.js` 的 lexer 增量断言：`x <pre>/<textarea>/<script>/<style> …` 在 inline 位置也保护完整 raw-text，未闭合到 EOF；无空行打断的源 block raw `<ol>`/`<blockquote>` 内部 marker 仍签发，供满足 `type==='html' && block===true` 的实际 token 恢复。另行断言 `前文 <https://example.com/[#]<AI>{PASS}> 后文` 与 `前文 https://example.com/[#]<AI>{PASS} 后文` 各只有一枚 inline marker、零 protected segment；`<span data-marker="[#]<AI>{PASS}">正文</span>` 仍零 marker 且属性标签 protected。保留 Task 1 其它断言，不重建 lexer。
+- [ ] 扩展 `.temp/marker-core.test.js` 的 lexer 增量断言：`x <pre>/<textarea>/<script>/<style> …` 在 inline 位置也保护完整 raw-text，未闭合到 EOF；无空行打断的源 block raw `<ol>`/`<blockquote>` 内部 marker 仍签发，供满足 `type==='html' && block===true` 的实际 token 恢复。autolink 用例先断言 candidate=`[24,37)`/`[23,36)`、masked projection 等长且等于规格给出的 `x` 串，再断言 angle/GFM segments 精确为 `text + marker + text`、各一枚 `mode:'inline'` marker、零 protected；`<span data-marker="[#]<AI>{PASS}">正文</span>` 仍零 marker 且属性标签 protected。保留 Task 1 其它断言，不重建 lexer。
 - [ ] 加入 HTML 属性 marker 原样 protected、raw-text、普通 Markdown text、实际 block `html`、open/close html 间空行形成 paragraph、普通 inline `<span>`/`<a>`/`<em>` 混合文本对照；证明 processAllTokens 只恢复实际 block html，属性无 occurrence，inline 标签间 marker 可物化。
-- [ ] 纯扩展测试加入 image `image.text` 恢复、普通 link label、字符串 title、null/undefined title、link label 内嵌 image alt 与 image alt 内嵌 link label 的双向 canonical ownership；断言具体 child field 先拥有、祖先只复制同一冻结 snapshot、不兼容 sibling/conflict 稳定抛 `CARRIER_BINDING_ERROR`。另对 angle autolink/GFM 绝对 URL 裸 token 断言 synthetic 结构、occurrence=1、只调用一次 `bindContext(id,'link-url')`、parent metadata=`{type:'link',field:'href'}`/终态 `raw-preserved`、唯一 child 无 metadata；不扫描 `link.raw`，不调用非字符串 title 的 `findOccurrences`。只断言 token 字段/状态/metadata 和无 wrapper，不断言当前 Hexo 最终 alt/label。
+- [ ] 纯扩展测试加入 image `image.text` 恢复、普通 link label、字符串 title、null/undefined title，以及“外层 link 内嵌 image”和“外层 image 内嵌 link”双向 fixture；断言外层直接字段先拥有：前者的唯一 bind/context/state/parent 为 `link-label`/`text-preserved`/field=`text`，后者为 `image-alt`/`raw-preserved`/field=`alt`，对应 nested projection child 只复制 snapshot、无 metadata。再用实际 `new Marked().parse` 生成 angle/GFM 两组非祖先 sibling synthetic link、两个普通 link href、两个 image alt，让每组共享同一 store occurrence id，分别断言已安装的 `processAllTokens` 抛 `CARRIER_BINDING_ERROR`，不得直接调用私有 owner helper。另对 angle/GFM 断言 synthetic 结构、`mode:'inline'`、content occurrence=1、只调用一次 `bindContext(id,'link-url')`、metadata.id=occurrence.id、parent=`{type:'link',field:'href'}`/终态 `raw-preserved`、唯一 child 无 metadata；不扫描 `link.raw`，不调用非字符串 title 的 `findOccurrences`。纯测试只断言 token 字段/状态/metadata 和无 wrapper，不断言当前 Hexo 最终 alt/label。
 - [ ] 纯扩展测试加入 store/carrier spy：HTML 属性与 `pre/textarea/script/style` protected marker 不产生 `findOccurrences`/metadata；正常 content 的实际 Marked token 产生 metadata。heading、PJ 连续网格和最终 DOM 断言全部移到真实 `Hexo#post.render`。
 - [ ] 加入跨 store/跨字段/重复/未知 carrier、metadata 缺失、renderer 抛错、html token 计数不一致的 fail-closed 断言；不使用最终 HTML 标签 allowlist。
 - [ ] 运行 `node .temp/marked-extension.test.js`；首次新文件 RED 可为 `MODULE_NOT_FOUND`，随后只补 Task 4 行为，不重做已完成任务。
-- [ ] 在 Task 1 token store 上增量实现公开 `findOccurrences`/`bindContext`、深度冻结 snapshot/parent metadata 与状态迁移；实现 custom `start`/tokenizer、由 `processAllTokens` 独占的 child-first canonical ownership、content 发现/重分类/审计/metadata、finally symbol 清理、token-local `walkTokens`、image/link 安全 adapter 与委托式 renderer；扩展不拆 token，不复用 `raw-html.js`，不复制完整 Markdown grammar。
-- [ ] 创建/扩展 `.temp/marker-pipeline.test.js`，覆盖 `createMarkerPipeline()`/`createMarkerPipeline({})` 默认依赖、bridge 安装失败原子回滚、加密不安装 bridge、content provenance、入口显式 excerpt、processAllTokens 只接收 content occurrence。合法/非法显式 excerpt 在 before 后捕获 carrier，after 后分别断言具体 badge DOM/恢复文本、occurrence=`consumed`/`failed` 与零内部串；抛异常 `more` getter/setter 配独立读/写计数，明确调用 before/after/projectText 三个分支后计数仍为 0；另覆盖前序 render rejection 后同 data before 修复。
+- [ ] 在 Task 1 token store 上增量实现公开 `findOccurrences`/`bindContext`、深度冻结 snapshot/owner metadata 与状态迁移；实现 custom `start`/tokenizer、由 `processAllTokens` 独占的 synthetic href 单 owner + 普通 image/link direct-field-first ownership、nested 未认领递归、content 发现/重分类/审计/metadata、finally symbol 清理、token-local `walkTokens`、image/link 安全 adapter 与委托式 renderer；扩展不拆 token，不复用 `raw-html.js`，不复制完整 Markdown grammar。
+- [ ] 创建/扩展 `.temp/marker-pipeline.test.js`，覆盖 `createMarkerPipeline()`/`createMarkerPipeline({})` 默认依赖、bridge 安装失败原子回滚、加密不安装 bridge、content provenance、入口显式 excerpt、processAllTokens 只接收 content occurrence。合法/非法显式 excerpt 在 before 后捕获 carrier，after 后分别断言具体 badge DOM/恢复文本与 occurrence=`consumed`/`failed`，并对两者调用同一 `INTERNAL_FIELD` 断言（NUL、`arknights-pj-card-*`、`arknights-grid-*`、完整 marker opaque token、wrapper）；抛异常 `more` getter/setter 配独立读/写计数，明确调用 before/after/projectText 三个分支后计数仍为 0；另覆盖前序 render rejection 后同 data before 修复。
 - [ ] 加入无显式 excerpt 时 `projectText(data,'excerpt')` 只从保存的 content projection 按 `<!-- more -->` 派生、无分隔符回退完整 content projection、`projectText(data,'more') === null` 的断言；使用抛异常 `data.more` getter/setter 与独立读/写计数直接证明 pipeline before/after/projectText 均不触碰，最后断言计数为 0。Task 4 不读取或断言 `data.description`，也不修改 meta-description filter。
 - [ ] 加入 parser/handler/render/projection 任一失败整枚恢复、生成内容不递归、未消费 wrapper/token/sentinel/NUL/slug 变体时 affected field 安全回退的断言；CRLF 只断言结构/语义。
 - [ ] 将 sentinel 入口改为 `createCardSentinel`、`createGridSentinels`、`findCardSentinels`、`findGridSentinels`、`hasUnconsumed`、`assertFullyConsumed`；只识别本次签发值，碰撞最多 32 次，缺 grid close/错配/跨字段/残留 NUL 都失败，删除宽松 `stripInternalSentinels`。
@@ -1118,9 +1140,9 @@ console.log('PJ handler: ok')
 - [ ] 创建/扩展 `.temp/marker-hexo-integration.test.js`：导入普通 require 的默认导出，先 `await hexo.init()`，依赖 `register.js` 自动注册；init 后不调用 `registerMarkerFilters`、不创建第二套 pipeline。
 - [ ] 真实 Hexo 注册断言：before/after/marked:use 三类各恰好一条，priority 分别 4/9/0，两个默认方法与 `defaultPipeline` 同一引用；再次 `await hexo.init()` 后仍各一条。
 - [ ] 真实 Hexo raw/inline 矩阵：`x <pre>/<textarea>/<script>/<style> …`、无空行打断的源 block raw `<ol>`/`<blockquote>`/`<table>`、open/close html 间有空行后实际 paragraph、Markdown `-`/`1.`/blockquote/GFM table 与普通 inline HTML 混合对照；证明 raw-text/属性不签发、block raw 只由 `type==='html' && block===true` 恢复、Markdown 载体正常物化。
-- [ ] 真实 Hexo 非文本矩阵：采用当前 Hexo `image.text` alt，测试 child emphasis、多 occurrence、普通 link label/href/title、null/undefined title、link label 内嵌 image alt 及反向嵌套。angle autolink/GFM 裸 URL 另用各自唯一 marker + 普通正文同段，store/carrier spy 断言源码 occurrence=1/non-protected、唯一 `link-url` bind 和 metadata/state；最终同时断言 `<img alt>`、`<a href>`、title/label、无 wrapper/handler，证明 DOM 不是唯一依据。用同一 spy 证明 HTML 属性/raw-text protected 无 occurrence/metadata，正常 content 有真实 token metadata。
+- [ ] 真实 Hexo 非文本矩阵：采用当前 Hexo `image.text` alt，测试 child emphasis、多 occurrence、普通 link label/href/title、null/undefined title、外层 link 内嵌 image 与外层 image 内嵌 link，并断言最终 `<img alt>`/`<a href,title,label>`；纯扩展测试负责外层 direct field 的 context/state/parent 与 nested child 无 metadata。angle/GFM 另用各自唯一 marker + 普通正文同段，先断言等长 projection 与原始 `text + marker + text` segments；纯扩展实际 Marked 测试断言 occurrence mode=inline、唯一 bind 与 metadata.id 相等，真实 Hexo 再断言唯一 `link-url` owner metadata 的 state/parent；最终同时断言无 wrapper/handler，证明 DOM 不是唯一依据。用同一 spy 证明 HTML 属性/raw-text protected 无 occurrence/metadata，正常 content 有真实 owner token metadata。
 - [ ] 真实 Hexo heading 矩阵：前/后/两侧、至少两个连续 heading-only、成功/失败 marker、PJ inline 不支持、`headerIds:false` 和后续正常 heading；test-only spy 确认原 children 同一引用经 parseInline，priority 9 完成物化/恢复，比较 `hN` 的 `id`/`href`/headerlink 和共享 `_headingId` 无空键/`-1`。纯 `new Marked()` 不作此门禁。
-- [ ] 真实 Hexo 字段矩阵：合法/非法显式 excerpt、无显式 excerpt 的 `<!-- more -->` 派生和无分隔符回退；`processAllTokens` spy 断言只审计 content。用 test-only priority 8 after filter 在 priority 9 前捕获显式 excerpt 的 carrier/token，render 后断言最终字段具体 DOM/恢复文本、occurrence=`consumed`/`failed` 与无内部串；直接 pipeline 另用抛异常 `more` getter/setter 与计数证明 before/after/projectText 不读不写。Task 4 不直接断言 `data.description`，不修改 meta-description filter。
+- [ ] 真实 Hexo 字段矩阵：合法/非法显式 excerpt、无显式 excerpt 的 `<!-- more -->` 派生和无分隔符回退；`processAllTokens` spy 断言只审计 content。用 test-only priority 8 after filter 在 priority 9 前捕获显式 excerpt 的 carrier/token，render 后断言最终字段具体 DOM/恢复文本与 occurrence=`consumed`/`failed`，两条路径复用同一 `INTERNAL_FIELD` 断言；直接 pipeline 另用抛异常 `more` getter/setter 与计数证明 before/after/projectText 不读不写。Task 4 不直接断言 `data.description`，不修改 meta-description filter。
 - [ ] 真实 Hexo 项目页连续性矩阵：`type: 'projects'` 的两个连续 PJ 断言恰好一个 `.projects-grid`、两个直接 `.project-card`、无额外 `p` wrapper；普通文字和空行分别中断为两个 grid。不得只依赖纯 pipeline 的 `new Marked()`/`breaks:false` 假设。
 - [ ] 真实 Hexo 增加中间阶段边界探针：成功 `after_render:html` 只做不破坏 wrapper 的变换，确认 after 9 仍消费；`onRenderEnd`/中间 filter 拒绝时 after 9 不执行，下一次同 data before 修复字段/descriptor。探针只用于说明 Hexo 支持边界，不把中间过滤器当作 marker 消费阶段。
 - [ ] 用 `Promise.all` 并发渲染两篇 carrier nonce/marker 不同的文档，再在重复 init 后重复一次；断言无串文、无重复物化、无未消费内部串，正常路径 `data.markdown` descriptor 均恢复。
@@ -1224,6 +1246,19 @@ assert.throws(
 assert.equal(accessorReads, 0)
 assert.equal(accessorWrites, 0)
 assert.deepEqual(Object.getOwnPropertyDescriptor(accessorData, 'markdown'), accessorDescriptor)
+
+const undefinedMarkdownData = { content: '[#]<AI>{PASS}', markdown: undefined }
+const undefinedMarkdownDescriptor = Object.getOwnPropertyDescriptor(undefinedMarkdownData, 'markdown')
+assert.equal(Object.hasOwn(undefinedMarkdownDescriptor, 'value'), true)
+assert.equal(undefinedMarkdownDescriptor.value, undefined)
+assert.throws(
+  () => attachCarrierBridge(undefinedMarkdownData, createBridgeCarrier(undefinedMarkdownData)),
+  error => error?.code === 'CARRIER_BRIDGE_DESCRIPTOR'
+)
+assert.deepEqual(
+  Object.getOwnPropertyDescriptor(undefinedMarkdownData, 'markdown'),
+  undefinedMarkdownDescriptor
+)
 
 const descriptorTarget = { content: '[#]<AI>{PASS}', markdown: { breaks: true } }
 const descriptorOriginal = Object.getOwnPropertyDescriptor(descriptorTarget, 'markdown')
@@ -1365,7 +1400,7 @@ const createObservedExcerptPipeline = () => {
   return { observedPipeline, excerptOccurrences }
 }
 
-const INTERNAL_FIELD = /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-)|\u0000/
+const INTERNAL_FIELD = /data-arknights-carrier|arknights-marker-v1:(?:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43})?|arknights-pj-card-|arknights-grid-|\u0000/u
 const validExcerptProbe = createObservedExcerptPipeline()
 const validExcerpt = {
   content: '正文',
@@ -1416,7 +1451,12 @@ const assert = require('node:assert/strict')
 const { Marked } = require('marked')
 const { scanMarkers } = require('../themes/arknights/scripts/markers/lexer')
 const { createTokenStore } = require('../themes/arknights/scripts/markers/token')
-const { CARRIER_SYMBOL } = require('../themes/arknights/scripts/markers/carrier')
+const {
+  CARRIER_SYMBOL,
+  createRenderCarrier,
+  attachCarrierBridge,
+  restoreCarrierBridge
+} = require('../themes/arknights/scripts/markers/carrier')
 const { installMarkedExtension } = require('../themes/arknights/scripts/markers/marked-extension')
 const { createMarkerPipeline } = require('../themes/arknights/scripts/markers/pipeline')
 
@@ -1491,9 +1531,11 @@ assert.match(inlineData.content, /ai-badge--pass/)
 assert.doesNotMatch(inlineData.content, /data-arknights-carrier|arknights-marker-v1:/)
 
 const linkTokens = []
+const imageTokens = []
 marked.use({
   walkTokens(token) {
     if (token.type === 'link') linkTokens.push(token)
+    if (token.type === 'image') imageTokens.push(token)
   }
 })
 
@@ -1521,41 +1563,75 @@ const createObservedUrlPipeline = () => {
 }
 
 const urlMarker = '[#]<AI>{PASS}'
-for (const source of [
-  `前文 <https://example.com/${urlMarker}> 后文`,
-  `前文 https://example.com/${urlMarker} 后文`
-]) {
+const autolinkCases = [
+  {
+    source: `前文 <https://example.com/${urlMarker}> 后文`,
+    range: [24, 37],
+    projection: '前文 <https://example.com/xxxxxxxxxxxxx> 后文',
+    segments: [
+      ['text', 0, 24],
+      ['marker', 24, 37],
+      ['text', 37, 41]
+    ]
+  },
+  {
+    source: `前文 https://example.com/${urlMarker} 后文`,
+    range: [23, 36],
+    projection: '前文 https://example.com/xxxxxxxxxxxxx 后文',
+    segments: [
+      ['text', 0, 23],
+      ['marker', 23, 36],
+      ['text', 36, 39]
+    ]
+  }
+]
+for (const { source, range, projection, segments } of autolinkCases) {
+  const [start, end] = range
+  const expectedProjection = source.slice(0, start) + 'x'.repeat(end - start) + source.slice(end)
+  assert.equal(expectedProjection, projection)
+  assert.equal(projection.length, source.length)
+
   const scan = scanMarkers(source)
   assert.equal(scan.markers.length, 1)
+  assert.equal(scan.markers[0].mode, 'inline')
+  assert.deepEqual(
+    scan.segments.map(({ kind, start: segmentStart, end: segmentEnd }) => [kind, segmentStart, segmentEnd]),
+    segments
+  )
   assert.equal(scan.segments.some(segment => segment.kind === 'protected'), false)
+  assert.equal(scan.segments.some(segment => segment.reason === 'raw-html'), false)
 
   const probe = createObservedUrlPipeline()
   const data = { content: source, type: 'post' }
   probe.observedPipeline.beforePostRender(data)
   const carrier = data.markdown[CARRIER_SYMBOL]
-  const ids = new Set(probe.occurrences.map(occurrence => occurrence.id))
-  assert.equal(ids.size, 1)
-  const occurrence = probe.occurrences.find(item => item.raw === urlMarker)
-  assert.ok(occurrence)
+  const contentOccurrences = probe.occurrences.filter(item => item.raw === urlMarker)
+  assert.equal(contentOccurrences.length, 1)
+  const occurrence = contentOccurrences[0]
+  assert.equal(occurrence.mode, 'inline')
+  assert.equal(new Set(contentOccurrences.map(item => item.id)).size, 1)
 
   linkTokens.length = 0
   data.content = marked.parse(data.content, data.markdown)
   probe.observedPipeline.afterPostRender(data)
 
-  assert.deepEqual(
-    probe.bindings.filter(binding => binding.id === occurrence.id),
-    [{ id: occurrence.id, context: 'link-url' }]
-  )
+  assert.equal(probe.bindings.length, 1)
+  assert.deepEqual(probe.bindings, [{ id: occurrence.id, context: 'link-url' }])
   const snapshot = carrier.getOccurrence(occurrence.id)
   assert.equal(snapshot.context, 'link-url')
   assert.equal(snapshot.state, 'raw-preserved')
   const linkToken = linkTokens.find(token => token.text === token.href && token.text.includes('arknights-marker-v1:'))
   assert.ok(linkToken)
   assert.equal(linkToken.arknights.length, 1)
+  assert.equal(linkToken.arknights[0].id, occurrence.id)
+  assert.equal(linkToken.arknights[0].context, 'link-url')
+  assert.equal(linkToken.arknights[0].state, 'raw-preserved')
   assert.deepEqual(linkToken.arknights[0].parent, { type: 'link', field: 'href' })
   assert.equal(Object.hasOwn(linkToken.tokens[0], 'arknights'), false)
   const renderedHref = data.content.match(/<a href="([^"]+)">/)[1]
   assert.equal(decodeURI(renderedHref), `https://example.com/${urlMarker}`)
+  assert.ok(data.content.includes('前文'))
+  assert.ok(data.content.includes('后文'))
   assert.doesNotMatch(data.content, /data-arknights-carrier|arknights-marker-v1:|ai-badge--/)
 }
 
@@ -1588,10 +1664,81 @@ const nestedData = {
   ].join('\n\n'),
   type: 'post'
 }
-pipeline.beforePostRender(nestedData)
+const nestedProbe = createObservedUrlPipeline()
+linkTokens.length = 0
+imageTokens.length = 0
+nestedProbe.observedPipeline.beforePostRender(nestedData)
 nestedData.content = marked.parse(nestedData.content, nestedData.markdown)
-pipeline.afterPostRender(nestedData)
+nestedProbe.observedPipeline.afterPostRender(nestedData)
+
+const outerLink = linkTokens.find(token => token.href === 'https://outer.example')
+const nestedImage = imageTokens.find(token => token.href === 'inner.png')
+const outerImage = imageTokens.find(token => token.href === 'outer.png')
+const outerLinkMetadata = outerLink.arknights
+const outerImageMetadata = outerImage.arknights
+assert.deepEqual(
+  outerLinkMetadata.map(({ context, state, parent }) => ({ context, state, parent })),
+  [
+    { context: 'link-label', state: 'text-preserved', parent: { type: 'link', field: 'text' } },
+    { context: 'link-title', state: 'raw-preserved', parent: { type: 'link', field: 'title' } }
+  ]
+)
+assert.equal(outerImageMetadata.length, 2)
+assert.ok(outerImageMetadata.every(({ context, state, parent }) => (
+  context === 'image-alt' &&
+  state === 'raw-preserved' &&
+  parent.type === 'image' &&
+  parent.field === 'alt'
+)))
+assert.equal(Object.hasOwn(nestedImage, 'arknights'), false)
+const nestedLink = outerImage.tokens.find(token => token.type === 'link')
+assert.equal(Object.hasOwn(nestedLink, 'arknights'), false)
+assert.equal(nestedProbe.bindings.length, 4)
+for (const metadata of [...outerLinkMetadata, ...outerImageMetadata]) {
+  assert.deepEqual(
+    nestedProbe.bindings.filter(binding => binding.id === metadata.id),
+    [{ id: metadata.id, context: metadata.context }]
+  )
+}
 assert.doesNotMatch(nestedData.content, /data-arknights-carrier|arknights-marker-v1:|ai-badge--|project-card/)
+
+const assertSharedSiblingBindingFails = sourceTemplate => {
+  const sharedStore = createTokenStore({ occupiedText: '' })
+  const sharedToken = sharedStore.issue({ raw: '[#]<AI>{PASS}', mode: 'inline' })
+  const content = sourceTemplate.replaceAll('SHARED_TOKEN', sharedToken)
+  const sharedOccurrences = sharedStore.findOccurrences(content, 'content')
+  assert.equal(sharedOccurrences.length, 2)
+  assert.equal(new Set(sharedOccurrences.map(occurrence => occurrence.id)).size, 1)
+
+  const duplicateData = { content, type: 'post' }
+  const duplicateCarrier = createRenderCarrier({
+    data: duplicateData,
+    store: sharedStore,
+    fields: [{ field: 'content', explicit: false, originalValue: content }]
+  })
+  attachCarrierBridge(duplicateData, duplicateCarrier)
+  try {
+    assert.throws(
+      () => marked.parse(duplicateData.content, duplicateData.markdown),
+      error => error?.code === 'CARRIER_BINDING_ERROR'
+    )
+  } finally {
+    restoreCarrierBridge(duplicateData, duplicateCarrier)
+  }
+}
+
+assertSharedSiblingBindingFails(
+  '[左](https://example.com/SHARED_TOKEN) [右](https://example.com/SHARED_TOKEN)'
+)
+assertSharedSiblingBindingFails(
+  '<https://example.com/SHARED_TOKEN> <https://example.com/SHARED_TOKEN>'
+)
+assertSharedSiblingBindingFails(
+  'https://example.com/SHARED_TOKEN https://example.com/SHARED_TOKEN'
+)
+assertSharedSiblingBindingFails(
+  '![SHARED_TOKEN 左](a.png) ![SHARED_TOKEN 右](b.png)'
+)
 
 const attributeData = {
   content: '<span data-marker="属性 [#]<AI>{NOTREVIEW}">正文</span>',
@@ -1604,9 +1751,12 @@ assert.ok(attributeScan.segments.some(segment => (
   segment.reason === 'raw-html' &&
   segment.raw.includes('data-marker="属性 [#]<AI>{NOTREVIEW}"')
 )))
-pipeline.beforePostRender(attributeData)
+const attributeProbe = createObservedUrlPipeline()
+attributeProbe.observedPipeline.beforePostRender(attributeData)
 attributeData.content = marked.parse(attributeData.content, attributeData.markdown)
-pipeline.afterPostRender(attributeData)
+attributeProbe.observedPipeline.afterPostRender(attributeData)
+assert.equal(attributeProbe.occurrences.length, 0)
+assert.equal(attributeProbe.bindings.length, 0)
 assert.match(attributeData.content, /data-marker="属性 \[#\]&lt;AI&gt;\{NOTREVIEW\}"/)
 assert.doesNotMatch(attributeData.content, /data-arknights-carrier|arknights-marker-v1:|ai-badge--/)
 
@@ -1636,7 +1786,7 @@ const {
   projectText
 } = require('../themes/arknights/scripts/markers/pipeline')
 
-const INTERNAL = /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-)|\u0000/
+const INTERNAL = /data-arknights-carrier|arknights-marker-v1:(?:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43})?|arknights-pj-card-|arknights-grid-|\u0000/u
 const headingAnchor = html => ({
   id: html.match(/<h[1-6] id="([^"]*)"/)?.[1] ?? null,
   href: html.match(/<a href="([^"]*)" class="headerlink"/)?.[1] ?? null
@@ -1747,12 +1897,31 @@ async function main() {
     }
     assert.doesNotMatch(inline.content, INTERNAL)
 
-    for (const [index, source] of [
-      '前文 <https://example.com/[#]<AI>{PASS}> 后文',
-      '前文 https://example.com/[#]<AI>{PASS} 后文'
-    ].entries()) {
+    const autolinkCases = [
+      {
+        source: '前文 <https://example.com/[#]<AI>{PASS}> 后文',
+        range: [24, 37],
+        projection: '前文 <https://example.com/xxxxxxxxxxxxx> 后文',
+        segments: [['text', 0, 24], ['marker', 24, 37], ['text', 37, 41]]
+      },
+      {
+        source: '前文 https://example.com/[#]<AI>{PASS} 后文',
+        range: [23, 36],
+        projection: '前文 https://example.com/xxxxxxxxxxxxx 后文',
+        segments: [['text', 0, 23], ['marker', 23, 36], ['text', 36, 39]]
+      }
+    ]
+    for (const [index, { source, range, projection, segments }] of autolinkCases.entries()) {
+      const [start, end] = range
+      assert.equal(source.slice(0, start) + 'x'.repeat(end - start) + source.slice(end), projection)
+      assert.equal(projection.length, source.length)
       const sourceScan = scanMarkers(source)
       assert.equal(sourceScan.markers.length, 1)
+      assert.equal(sourceScan.markers[0].mode, 'inline')
+      assert.deepEqual(
+        sourceScan.segments.map(({ kind, start: segmentStart, end: segmentEnd }) => [kind, segmentStart, segmentEnd]),
+        segments
+      )
       assert.equal(sourceScan.segments.some(segment => segment.kind === 'protected'), false)
       syntheticLinkTokens.length = 0
       const rendered = await render(hexo, `synthetic-url-${index}`, { content: source })
@@ -1972,7 +2141,7 @@ main().catch(error => {
 })
 ```
 
-> 显式 `excerpt` 的纯 pipeline 与真实 Hexo 断言都直接检查字段结果：合法 AI 为具体 `.ai-badge--notreview` DOM 且 carrier occurrence=`consumed`，非法 AI 为具体转义 marker 且 occurrence=`failed`，并断言无 wrapper/token/sentinel/NUL；`projectText` 只补充 projection，不替代字段/状态证据。无显式 excerpt 时，另由保存的 content projection 按 `<!-- more -->` 派生 `projectText(data,'excerpt')`，无分隔符回退 content。`data.more` 永不作为输入或投影，并由抛异常 getter/setter 加读/写计数直接证明。raw/Markdown 对照、当前 Hexo 非文本 DOM、heading、连续 PJ、重复 init 和并发渲染必须经真实 `Hexo#post.render`；纯 `new Marked()` 只测扩展基本行为，期望 after 生成内容的纯测试才使用带 extension 的 parse 或完整 metadata fixture，不得手工拼接 `<p>`。Task 4 不修改/测试 meta description。
+> 显式 `excerpt` 的纯 pipeline 与真实 Hexo 断言都直接检查字段结果：合法 AI 为具体 `.ai-badge--notreview` DOM 且 carrier occurrence=`consumed`，非法 AI 为具体转义 marker 且 occurrence=`failed`；两条路径复用同一内部串断言，至少覆盖 NUL、`arknights-pj-card-*`、`arknights-grid-*`、完整 marker opaque token 与 wrapper。`projectText` 只补充 projection，不替代字段/状态证据。无显式 excerpt 时，另由保存的 content projection 按 `<!-- more -->` 派生 `projectText(data,'excerpt')`，无分隔符回退 content。`data.more` 永不作为输入或投影，并由抛异常 getter/setter 加读/写计数直接证明。raw/Markdown 对照、当前 Hexo 非文本 DOM、heading、连续 PJ、重复 init 和并发渲染必须经真实 `Hexo#post.render`；纯 `new Marked()` 只测扩展基本行为、field-aware ownership 与实际 Marked sibling duplicate fixture，期望 after 生成内容的纯测试才使用带 extension 的 parse 或完整 metadata fixture，不得手工拼接 `<p>`。Task 4 不修改/测试 meta description。
 
 ---
 
@@ -2124,7 +2293,7 @@ async function main() {
     assert.match(renderedProject.content, /--card-img:/)
     assert.doesNotMatch(
       renderedProject.content,
-      /\[#\]|arknights-marker-v1:|data-arknights-carrier|arknights-(?:pj-card|grid-)|\u0000/
+      /\[#\]|arknights-marker-v1:|data-arknights-carrier|arknights-pj-card-|arknights-grid-|\u0000/
     )
 
     console.log('marker migration: ok')
@@ -2165,16 +2334,16 @@ main().catch(error => {
 
 ### 实施步骤
 
-- [ ] 修改 `AGENTS.md` 的 Architecture：按最终实现精确记录 markers 模块树、严格协议、store-owned occurrence、每次 post.render 私有 carrier、非枚举 `data.markdown` + 可枚举私有 symbol、实际 Marked token provenance、冻结 parent metadata、raw-text/inline 语义、before 4/after 9/marked:use 0、heading-only 保留 children 且不污染 `_headingId`、Marked singleton 短暂 options 引用、正常/异常生命周期、DOMPurify=false/identity 边界和 fail-closed；同时记录 `pipeline.js` 无注册副作用、`register.js` 唯一自动入口、`defaultPipeline` 单实例。
+- [ ] 修改 `AGENTS.md` 的 Architecture：按最终实现精确记录 markers 模块树、严格协议、store-owned occurrence、每次 post.render 私有 carrier、非枚举 `data.markdown` + 可枚举私有 symbol、实际 Marked token provenance、冻结 owner metadata、raw-text/inline 语义、before 4/after 9/marked:use 0、heading-only 保留 children 且不污染 `_headingId`、Marked singleton 短暂 options 引用、正常/异常生命周期、DOMPurify=false/identity 边界和 fail-closed；同时记录 `pipeline.js` 无注册副作用、`register.js` 唯一自动入口、`defaultPipeline` 单实例。
 - [ ] 修改 `AGENTS.md` 的 Local Customization Map：用最终通用 markers 入口替换旧 AI/PJ 两套说明，登记 `carrier.js`/`marked-extension.js`/`sentinel.js` 职责和 `markers/register.js` 唯一注册副作用入口，并保留 DOM/Pjax/projection 契约；Task 5 前不得把旧路径写成已删除。
 - [ ] 修改 `AGENTS.md` 的 Source Tree：加入最终存在的 `markers/register.js`、`carrier.js`、`marked-extension.js`、`sentinel.js` 和完整新模块树，删除旧 AI/PJ core/filter 与 `raw-html.js` 条目，登记 `.temp/marker-*.test.js` 探针。
-- [ ] 修改 `AGENTS.md` 的 Verification：记录真实 Hexo 自动加载与 priority、renderer/`onRenderEnd`/`after_render:html` 边界、raw-text/属性/block raw/Markdown 对照、store/carrier spy、当前 Hexo `image.text`、angle autolink/GFM 裸 URL 的 occurrence=1/non-protected 与 synthetic `link-url` 单 owner、嵌套 ownership、bridge accessor/Proxy descriptor 精确恢复、content/excerpt DOM+`consumed`/`failed` 分阶段审计、抛异常 more getter/setter 零计数、fallback、真实 heading/PJ 门禁、Marked options symbol 清理、projection/meta description、上海时区构建和 artifact check；不得记录成 init 后再次显式注册。
+- [ ] 修改 `AGENTS.md` 的 Verification：记录真实 Hexo 自动加载与 priority、renderer/`onRenderEnd`/`after_render:html` 边界、raw-text/属性/block raw/Markdown 对照、store/carrier spy、angle/GFM candidate + 等长 masked projection + `text/marker/text`、synthetic `link-url` 单 owner、普通 image/link direct-field-first、真实 Marked sibling duplicate `CARRIER_BINDING_ERROR`、bridge own `value: undefined`/accessor/Proxy descriptor 精确恢复、content/excerpt DOM+`consumed`/`failed` 分阶段审计与统一内部串断言、抛异常 more getter/setter 零计数、fallback、真实 heading/PJ 门禁、Marked options symbol 清理、projection/meta description、上海时区构建和 artifact check；不得记录成 init 后再次显式注册。
 - [ ] 修改 `AGENTS.md` 的 Conventions：记录旧语法硬切换、最终 HTML 标签不是 raw 来源事实、carrier/sentinel 必须清零、`data.more` 由 Hexo 派生、独立语法范围、注册幂等、每任务独立 commit 和不 push。
 - [ ] 明确写入 `AGENTS.md`：`meta-description.js` 与 `register.js` 从同一 `markers/pipeline.js` 普通缓存实例取得 `projectText`/默认 pipeline；Alert/Spoiler/Terms 独立；预期不改 CSS/TS/project-tooltip；如未来修改则递增相应缓存版本。Task 6 完成前保留“旧路径待删除”的实施状态，不得提前写成已上线事实。
 - [ ] 创建 `.temp/marker-e2e.test.js`，导入普通 require 的默认导出；先 `await hexo.init()` 并依赖 `register.js` 自动注册，禁止 init 后手动注册或创建第二套 pipeline。断言默认方法身份以及 before 4/after 9/marked:use 0 各唯一，再读取三篇 AI 文章和项目页逐个真实 render。
-- [ ] E2E 断言三篇 AI 分别为 PASS/PASS/EDIT，四态 tooltip 行数、文案和 DOM 契约正确，无旧标记、carrier、token、sentinel 或 NUL；加入当前 Hexo `image.text`、普通 link label/href/title、null/undefined title、嵌套 link/image ownership，以及 angle autolink/GFM 裸 URL 的 lexer occurrence=1/non-protected、唯一 `link-url` bind、synthetic child 无 metadata、真实 `<a>` href/label。store/carrier spy 还证明 protected 区域无 metadata，两个连续 heading-only 与成功/失败/PJ 的真实 Hexo 引用身份/`_headingId`、bridge accessor/Proxy 原子回滚及 renderer/`onRenderEnd`/`after_render:html` rejection 后同 data 重试清理。
+- [ ] E2E 断言三篇 AI 分别为 PASS/PASS/EDIT，四态 tooltip 行数、文案和 DOM 契约正确，无旧标记、carrier、token、sentinel 或 NUL；加入当前 Hexo `image.text`、普通 link label/href/title、null/undefined title、外层 link/image direct-field-first ownership，以及 angle/GFM 的等长 masked projection、`text + marker + text`、mode=inline、唯一 `link-url` owner、state/parent、synthetic child 无 metadata，与真实 `<a>` href/label。纯扩展门禁另断言 metadata.id=occurrence.id，并以实际 Marked angle/GFM synthetic link、普通 link/image sibling fixtures 断言重复绑定错误。store/carrier spy 还证明 protected 区域无 metadata，两个连续 heading-only 与成功/失败/PJ 的真实 Hexo 引用身份/`_headingId`、bridge own unsupported value/accessor/Proxy 原子回滚及 renderer/`onRenderEnd`/`after_render:html` rejection 后同 data 重试清理。
 - [ ] E2E 断言项目页为 projects 类型、`.projects-grid > .project-card`、URL/图片、懒加载、target/rel/name/style 完整。
-- [ ] E2E 断言显式 excerpt 只由 after 9 消费自身：合法输入直接断言具体 `.ai-badge--notreview` DOM 与 carrier occurrence=`consumed`，非法输入断言具体转义 marker 与 `failed`，不使用可由任一单词单独满足的宽泛 alternation。无显式 excerpt 时 `projectText(data,'excerpt')` 从已保存 content projection 按 `<!-- more -->` 派生，Hexo priority 10 覆盖 `data.more`。pipeline 不读写 more 由独立抛异常 getter/setter 及读/写计数探针证明；meta description 只含 `PASS 摘要说明`；Alert/Spoiler/Terms 保持独立。
+- [ ] E2E 断言显式 excerpt 只由 after 9 消费自身：合法输入直接断言具体 `.ai-badge--notreview` DOM 与 carrier occurrence=`consumed`，非法输入断言具体转义 marker 与 `failed`；两条路径必须调用同一个 `INTERNAL_FIELD` 断言，至少覆盖 NUL、`arknights-pj-card-*`、`arknights-grid-*`、完整 marker opaque token 与 carrier wrapper，不使用可由任一单词单独满足的宽泛 alternation。无显式 excerpt 时 `projectText(data,'excerpt')` 从已保存 content projection 按 `<!-- more -->` 派生，Hexo priority 10 覆盖 `data.more`。pipeline 不读写 more 由独立抛异常 getter/setter 及读/写计数探针证明；meta description 只含 `PASS 摘要说明`；Alert/Spoiler/Terms 保持独立。
 - [ ] 运行 `node .temp/marker-e2e.test.js`；GREEN 预期输出 `marker end-to-end: ok`。
 - [ ] 运行最终状态全部九个探针：`marker-core`、`marker-registry-ai`、`marker-projects`、`marker-carrier`、`marked-extension`、`marker-pipeline`、`marker-hexo-integration`、`marker-migration`、`marker-e2e`，逐个记录 `ok` 输出与退出码 0。
 - [ ] 创建 `.temp/marker-artifacts.js`，固定检查两篇 PASS、一个 EDIT、项目页、search.json 和 project-tooltip.js。
@@ -2207,6 +2376,7 @@ const {
 } = require('../themes/arknights/scripts/markers/pipeline')
 
 const root = path.resolve(__dirname, '..')
+const INTERNAL_FIELD = /data-arknights-carrier|arknights-marker-v1:(?:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43})?|arknights-pj-card-|arknights-grid-|\u0000/u
 const cases = [
   ['source/_posts/ai-programming-journey.md', 'pass'],
   ['source/_posts/xorstr-string-encryption.md', 'pass'],
@@ -2271,10 +2441,8 @@ async function main() {
       assert.match(rendered.content, new RegExp(`class="ai-badge ai-badge--${state}"`))
       assert.equal((rendered.content.match(/class="ai-badge__tip-row"/g) || []).length, 4)
       assert.match(rendered.content, /class="ai-badge__svg"/)
-      assert.doesNotMatch(
-        rendered.content,
-        /\[&\]AI\||\[#\]<AI>|data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-)|\u0000/
-      )
+      assert.doesNotMatch(rendered.content, /\[&\]AI\||\[#\]<AI>/)
+      assert.doesNotMatch(rendered.content, INTERNAL_FIELD)
     }
 
     const projectPath = path.join(root, 'source/projects/index.md')
@@ -2291,10 +2459,7 @@ async function main() {
     assert.match(project.content, /--card-img:/)
     assert.match(project.content, /loading="lazy"/)
     assert.match(project.content, /class="project-name"/)
-    assert.doesNotMatch(
-      project.content,
-      /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-)|\u0000/
-    )
+    assert.doesNotMatch(project.content, INTERNAL_FIELD)
 
     const independent = await hexo.post.render('independent-probe.md', {
       content: [
@@ -2330,12 +2495,31 @@ async function main() {
     assert.match(nonText.content, /<a href="\/null-title">无标题<\/a>/)
     assert.doesNotMatch(nonText.content, /data-arknights-carrier|arknights-marker-v1:|ai-badge--|project-card/)
 
-    for (const [index, source] of [
-      '前文 <https://example.com/[#]<AI>{PASS}> 后文',
-      '前文 https://example.com/[#]<AI>{PASS} 后文'
-    ].entries()) {
+    const autolinkCases = [
+      {
+        source: '前文 <https://example.com/[#]<AI>{PASS}> 后文',
+        range: [24, 37],
+        projection: '前文 <https://example.com/xxxxxxxxxxxxx> 后文',
+        segments: [['text', 0, 24], ['marker', 24, 37], ['text', 37, 41]]
+      },
+      {
+        source: '前文 https://example.com/[#]<AI>{PASS} 后文',
+        range: [23, 36],
+        projection: '前文 https://example.com/xxxxxxxxxxxxx 后文',
+        segments: [['text', 0, 23], ['marker', 23, 36], ['text', 36, 39]]
+      }
+    ]
+    for (const [index, { source, range, projection, segments }] of autolinkCases.entries()) {
+      const [start, end] = range
+      assert.equal(source.slice(0, start) + 'x'.repeat(end - start) + source.slice(end), projection)
+      assert.equal(projection.length, source.length)
       const sourceScan = scanMarkers(source)
       assert.equal(sourceScan.markers.length, 1)
+      assert.equal(sourceScan.markers[0].mode, 'inline')
+      assert.deepEqual(
+        sourceScan.segments.map(({ kind, start: segmentStart, end: segmentEnd }) => [kind, segmentStart, segmentEnd]),
+        segments
+      )
       assert.equal(sourceScan.segments.some(segment => segment.kind === 'protected'), false)
       syntheticLinkTokens.length = 0
       const rendered = await hexo.post.render(`synthetic-url-${index}.md`, {
@@ -2372,7 +2556,8 @@ async function main() {
     })
     assert.match(fields.excerpt, /^<span class="ai-badge ai-badge--notreview">/)
     assert.match(fields.excerpt, /<span class="ai-badge__text">显式<\/span>/)
-    assert.doesNotMatch(fields.excerpt, /data-arknights-carrier|arknights-marker-v1:|ai-badge-(?:pass|edit|ignore)/)
+    assert.doesNotMatch(fields.excerpt, INTERNAL_FIELD)
+    assert.doesNotMatch(fields.excerpt, /ai-badge-(?:pass|edit|ignore)/)
     const explicitOccurrence = explicitExcerptCarrier.getOccurrenceByToken(explicitExcerptToken)
     assert.equal(explicitOccurrence.field, 'excerpt')
     assert.equal(explicitOccurrence.state, 'consumed')
@@ -2386,7 +2571,8 @@ async function main() {
       path: 'invalid-excerpt-probe.md'
     })
     assert.equal(invalidFields.excerpt, '[#]&lt;AI&gt;{UNKNOWN}')
-    assert.doesNotMatch(invalidFields.excerpt, /data-arknights-carrier|arknights-marker-v1:|ai-badge--/)
+    assert.doesNotMatch(invalidFields.excerpt, INTERNAL_FIELD)
+    assert.doesNotMatch(invalidFields.excerpt, /ai-badge--/)
     const invalidOccurrence = invalidExcerptCarrier.getOccurrenceByToken(invalidExcerptToken)
     assert.equal(invalidOccurrence.field, 'excerpt')
     assert.equal(invalidOccurrence.state, 'failed')
@@ -2435,7 +2621,7 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '..')
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
 const count = (source, value) => source.split(value).length - 1
-const INTERNAL = /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-)|\u0000/
+const INTERNAL = /data-arknights-carrier|arknights-marker-v1:(?:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43})?|arknights-pj-card-|arknights-grid-|\u0000/u
 const articleFiles = [
   'public/2026/08/14/ai-programming-journey/index.html',
   'public/2026/08/14/xorstr-string-encryption/index.html',
@@ -2482,10 +2668,10 @@ console.log('marker artifacts: ok')
 
 ### AGENTS.md 必须同步的具体口径
 
-- Architecture：最终同步 markers 模块树与两阶段数据流；记录 store occurrence/context/state、每次 post.render 私有 carrier、非枚举 `data.markdown` + 可枚举 symbol、accessor/Proxy descriptor 原子回滚、lexer autolink-before-raw-tag、Marked defaults reset、本地 `marked:use`、实际 token provenance、普通 child-first ownership、synthetic URL link 单 `link-url` owner、深度冻结 metadata descriptor、当前 Hexo `image.text`、link href/字符串 title、content/excerpt 分阶段审计、renderer/`onRenderEnd`/`after_render:html` 边界、originalField fallback、DOMPurify 边界与 fail-closed。
+- Architecture：最终同步 markers 模块树与两阶段数据流；记录 store occurrence/context/state、每次 post.render 私有 carrier、非枚举 `data.markdown` + 可枚举 symbol、own unsupported value/accessor/Proxy descriptor 原子回滚、lexer candidate + masked projection + original-source segments、Marked defaults reset、本地 `marked:use`、实际 token provenance、普通 image/link direct-field-first ownership、synthetic URL link 单 `link-url` owner、深度冻结 owner metadata descriptor、当前 Hexo `image.text`、link href/字符串 title、content/excerpt 分阶段审计、renderer/`onRenderEnd`/`after_render:html` 边界、originalField fallback、DOMPurify 边界与 fail-closed。
 - Local Customization Map：最终用通用 markers 入口替换旧 AI/PJ 两套说明；登记 `carrier.js`、`marked-extension.js`、精确 sentinel 和 `register.js` 唯一自动注册入口，保留 DOM/Pjax/meta projection 契约；在 Task 5 前明确旧路径仍存在。
 - Source Tree：加入最终完整 markers 模块树，删除旧 AI/PJ core/filter 和 `raw-html.js` 条目，登记九个 `.temp/marker-*.test.js`/`marked-extension.test.js` 探针用途。
-- Verification：记录真实 Hexo 自动注册与 priority、raw/protected/正常 token spy、angle autolink/GFM 裸 URL 的 occurrence=1/non-protected 与 synthetic 单 owner/metadata、当前 Hexo image/link renderer 语义、嵌套 ownership、bridge accessor/Proxy 原子回滚、content/excerpt DOM+状态审计、抛异常 more getter/setter 零计数、originalField fallback、连续 PJ、真实 heading 引用身份与 `_headingId`、renderer/onRenderEnd/after_render 边界、projection/meta description、上海时区构建和 artifact check；注明主题 `npm test` 不是门禁。
+- Verification：记录真实 Hexo 自动注册与 priority、raw/protected/正常 token spy、angle/GFM candidate + 等长 masked projection + `text/marker/text`、synthetic 单 owner/metadata、普通 image/link direct-field-first 与 nested projection、实际 Marked 三类 sibling duplicate binding error、bridge own unsupported value/accessor/Proxy 原子回滚、content/excerpt DOM+状态审计与统一内部串断言、抛异常 more getter/setter 零计数、originalField fallback、连续 PJ、真实 heading 引用身份与 `_headingId`、renderer/onRenderEnd/after_render 边界、projection/meta description、上海时区构建和 artifact check；注明主题 `npm test` 不是门禁。
 - Conventions：旧 `[&]` 硬切换、最终 HTML 标签不是 raw 来源事实、carrier/sentinel/NUL 必须清零、`data.more` 由 Hexo 派生且 pipeline 不读写、Alert/Spoiler/Terms 独立、失败原文恢复/字段安全回退、每任务独立 commit、不 push；说明 meta-description 与 register 共享默认 pipeline。
 
 ## 10. 任务依赖与提交序列
@@ -2520,12 +2706,12 @@ console.log('marker artifacts: ok')
 | 4. 参数与错误原则 | 1–4 | enum/null/quoted、转义、trim、未知名称、handler 失败与整枚恢复 |
 | 5. 严格语法 | 1 | parser 成功/失败矩阵与物理换行断言 |
 | 6. 标记语义 | 2–4、6 | AI 四态；PJ 页面/模式/连续网格；raw 与 Markdown block 中受支持 marker 的 DOM 契约 |
-| 7. 模块架构 | 1–5 | 固定导出；handler 无 carrier；lexer autolink-before-raw-tag；synthetic link 单 `link-url` owner；扩展不直接修改全局 Marked 单例且应用无 current carrier；bridge accessor/Proxy 原子回滚；Marked options 短暂引用有清理门禁；唯一注册入口与默认实例 |
+| 7. 模块架构 | 1–5 | 固定导出；handler 无 carrier；lexer candidate/masked projection/original segments；synthetic link 单 `link-url` owner；普通 image/link direct-field-first；扩展不直接修改全局 Marked 单例且应用无 current carrier；bridge own unsupported value/accessor/Proxy 原子回滚；Marked options 短暂引用有清理门禁；唯一注册入口与默认实例 |
 | 8. 数据流与优先级 | 4–6 | 真实 Hexo defaults reset；marked:use 0；before 4/after 9；descriptor 精确恢复；content/显式 excerpt 分阶段审计，显式字段 DOM+`consumed`/`failed`；Hexo priority 10 派生并覆盖 more；throwing-more 计数为 0；projection 派生/回退 |
 | 9. Handler 契约 | 2–4 | raw-restored/text-preserved/raw-preserved 与 HTML 属性均不 dispatch；普通 text pending 与显式 excerpt-pending 才 parse/render；handler 零内部串；registry 分发与投影 |
 | 10. 安全策略 | 1、3、4、6 | bridge descriptor 隔离/回滚、token/sentinel 防碰撞、heading slug、无内部串/NUL、URL/CSS/HTML 序列化、字段安全回退 |
 | 11. 迁移清单 | 5 | 四文件精确新字符串、旧 filters 与 raw-html 删除、meta-description 源码与运行断言 |
-| 12. 验证矩阵 | 1–6 | 九个 Node 探针、autolink lexer/synthetic ownership、bridge 异常矩阵、显式 excerpt DOM+状态、more getter/setter 零计数、真实 Hexo raw/生成块/heading/重复 init/并发矩阵、完整构建、artifact check、浏览器手测 |
+| 12. 验证矩阵 | 1–6 | 九个 Node 探针、autolink masked projection/synthetic ownership、direct-field-first nested fixture、实际 Marked sibling duplicate binding error、bridge 异常矩阵、显式 excerpt DOM+状态/统一内部串断言、more getter/setter 零计数、真实 Hexo raw/生成块/heading/重复 init/并发矩阵、完整构建、artifact check、浏览器手测 |
 | 13. 实施交付边界 | 1–6 | 每任务独立 commit；最终 status 干净；无 push；生成目录不入库 |
 | 14. 风险与缓解 | 1、3–6 | 保护区、provenance、heading、bridge、defaults 并发、碰撞、注册、URL/CSS、网格、投影回归 |
 | 15. 结论 | 1–6 | 最终架构、协议、DOM、安全和独立语法边界分别由对应任务门禁验证 |
@@ -2536,13 +2722,13 @@ console.log('marker artifacts: ok')
 
 > 以下项目用于每次文档或实现变更后的重复语义核对。本轮只运行文档门禁，Task 4 runtime gate、真实 Hexo 探针、构建和浏览器验收均未运行。
 
-- [ ] lexer 在 raw tag 前识别 Markdown autolink；angle autolink/GFM 裸 URL 各为 occurrence=1、protected=0，HTML 属性仍 occurrence=0/protected。
+- [ ] lexer 先收集 candidate/range，再构造逐 UTF-16 code unit 等长 `x` projection；angle/GFM 最终原始 segments 均为 `text + marker + text`，各为 mode=inline occurrence=1、protected=0，HTML 属性仍 occurrence=0/protected；projection 不进入 data/token/extension。
 - [ ] link label 是 text-carrier；image alt 唯一采用当前 Hexo `image.text`；link href 与字符串 title raw-preserve；synthetic URL link 唯一 `link-url` owner，text/child 只复制 snapshot，child 无 metadata；null/undefined title 跳过，不扫描 `link.raw`。
-- [ ] 公开 store API、metadata descriptor/深度冻结、普通 child-first ownership、synthetic 单 owner、祖先 snapshot 复制与 `CARRIER_BINDING_ERROR` 冲突规则一致；扩展不拆 token。
-- [ ] bridge 在读取 descriptor.value 前拒绝 accessor，descriptor/spread/define Proxy 错误码正确，define 部分写入后原 descriptor 精确恢复。
-- [ ] `processAllTokens` 只审计 content；explicit excerpt 由 after 9 审计并直接断言 DOM/恢复文本与 `consumed`/`failed`；`data.more` 由抛异常 getter/setter 和读/写计数证明 pipeline 不读不写。
+- [ ] 公开 store API、owner metadata descriptor/深度冻结、普通 image/link direct-field-first、synthetic 单 owner、nested projection snapshot 复制与 `CARRIER_BINDING_ERROR` 冲突规则一致；扩展不拆 token。
+- [ ] bridge 只有无 own property 才从 `{}` 开始；own accessor/`value: undefined`/其它 unsupported value 在 getter/改写前拒绝，descriptor/spread/define Proxy 错误码正确，define 部分写入后原 value 与 descriptor 精确恢复。
+- [ ] `processAllTokens` 只审计 content；explicit excerpt 由 after 9 审计并直接断言 DOM/恢复文本与 `consumed`/`failed`，两条路径复用覆盖 NUL/card/grid/opaque token/wrapper 的同一内部串断言；`data.more` 由抛异常 getter/setter 和读/写计数证明 pipeline 不读不写。
 - [ ] block raw 只认 `type==='html' && block===true`；raw-text、空行拆分 paragraph、inline HTML 与 Markdown 生成块有对照。
-- [ ] 纯 `new Marked()` 只测扩展基本行为；当前 Hexo image/link、heading、连续 PJ 和完整 DOM 均由真实 `Hexo#post.render` 验收。
+- [ ] 纯 `new Marked()` 只测扩展基本行为、field-aware ownership 和实际 Marked sibling duplicate fixture；当前 Hexo image/link、heading、连续 PJ、after 契约和完整 DOM 均由真实 `Hexo#post.render` 验收。
 - [ ] 两个连续 PJ 为单网格/双卡片/无额外 p wrapper，普通文字和空行中断；不依赖纯 pipeline `breaks:false` 假设。
 - [ ] `carrier.originalField(field)` 是 fallback 权威，`store.restore` 仅 best effort；token 已变形测试存在。
 - [ ] heading-only 同一引用、连续 heading-only、失败/PJ、`headerIds:false`、空键/`-1` 与后续 heading 只在真实 Hexo 门禁。
@@ -2555,17 +2741,17 @@ console.log('marker artifacts: ok')
 
 出现以下任一情况时，不继续扩大修改范围，先按主控失败/阻塞格式上报：
 
-1. lexer 无法在不解析渲染后 HTML 的前提下保护未闭合边界或 `pre`/`textarea`/`script`/`style` 完整 raw-text；或 angle autolink/GFM 裸 URL 的唯一 marker 仍被 raw-tag 分支保护/吞掉。
+1. lexer 无法在不解析渲染后 HTML 的前提下保护未闭合边界或 `pre`/`textarea`/`script`/`style` 完整 raw-text；candidate/masked projection 不能保持等长偏移，projection 进入最终 data/token，或 angle/GFM 原始 segments 不是 `text + marker + text`、唯一 marker 被保护/吞掉。
 2. token 或 sentinel 在最多 32 次生成后仍与占用文本/handler 输出碰撞。
-3. 非枚举 `data.markdown` + 可枚举私有 symbol 不能把 carrier 传到实际 Marked options，accessor/Proxy 失败不能映射稳定 bridge error 或精确恢复原 descriptor，expected carrier 身份校验失败，`processAllTokens` finally 无法删除 symbol，或 renderer/`onRenderEnd`/`after_render:html` 拒绝后同 data 重试无法恢复 descriptor。
+3. 非枚举 `data.markdown` + 可枚举私有 symbol 不能把 carrier 传到实际 Marked options；own accessor/unsupported value 被静默转成 `{}`，descriptor/spread/define Proxy 不能映射稳定 bridge error 或精确恢复原 descriptor，expected carrier 身份校验失败，`processAllTokens` finally 无法删除 symbol，或 renderer/`onRenderEnd`/`after_render:html` 拒绝后同 data 重试无法恢复 descriptor。
 4. 当前锁定 Marked 版本无法通过 `this.lexer.options` tokenizer/start（`src.slice(1)` 索引）、`this.options` hook、token-local `walkTokens` 与 `this.parser` renderer 区分实际 block `html`、普通 inline HTML 和 image/link 字段，且方案需要复制完整 Markdown grammar 或拆 token。
-5. 嵌套 link/image 不能落实 child-first canonical ownership，或 synthetic autolink/裸 URL 不能落实 href 单 `link-url` owner；祖先/投影重绑定、扁平化或真正 sibling 冲突不能稳定返回 `CARRIER_BINDING_ERROR`；或 link title 无法按 `typeof === 'string'` 扫描。
+5. 嵌套 link/image 不能落实 direct-field-first canonical ownership，或 synthetic autolink/裸 URL 不能落实 href 单 `link-url` owner；普通 text child 抢走 direct field、投影 child 重复绑定/附 metadata、真正非祖先 sibling 冲突不能稳定返回 `CARRIER_BINDING_ERROR`，或 link title 无法按 `typeof === 'string'` 扫描。
 6. 当前 Hexo `image.text` 与最终 `<img alt>` 语义无法同时满足，或扩展委托 renderer 后又改变 child-normalized alt；link 测试仍依赖最终 Markdown 原文。
 7. heading carrier 仍进入 slug，heading-only 无法保留原 children 并让 priority 9 物化/恢复、无法保持无 id/headerlink 与共享 `_headingId` 无空键/`-1`，或出现跨文章串扰。
 8. 同一 context+pipeline 不能保持注册幂等，或不同 pipeline 未明确报重复错误。
 9. 真实 Hexo/Marked 对连续 block PJ 的稳定 HTML 结构与探针假设不一致，或 token 已变形时 `carrier.originalField(field)` 无法作为 fallback 权威。
 10. 实现需要改动 CSS、TypeScript、project-tooltip 或缓存版本才能满足规格。
 11. `dompurify: false`/未配置的 identity 路径之外，实际 sanitizer 配置改写 carrier wrapper 且没有可验证的安全替代。
-12. 删除旧路径后 Alert、Spoiler、Terms、搜索、excerpt 或 Hexo 派生 more 发生回退；显式 excerpt 无法同时证明具体 DOM/恢复文本与 `consumed`/`failed`，或 throwing-more 计数证明 pipeline 曾读写 `data.more`。
+12. 删除旧路径后 Alert、Spoiler、Terms、搜索、excerpt 或 Hexo 派生 more 发生回退；显式 excerpt 无法同时证明具体 DOM/恢复文本、统一内部串清零与 `consumed`/`failed`，或 throwing-more 计数证明 pipeline 曾读写 `data.more`。
 13. 完整构建、artifact check 或真实浏览器验收失败。
 14. 工作区出现与本实施无关的用户变更；不得覆盖、暂存或提交这些变更。
