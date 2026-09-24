@@ -479,10 +479,11 @@ for (const segment of scan.segments) {
 for (let index = 1; index < scan.segments.length; index += 1) {
   assert.equal(scan.segments[index - 1].end, scan.segments[index].start)
 }
+const inlineMarkerStart = source.indexOf('[#]', source.indexOf('inline [#]'))
 assert.deepEqual(scan.markers, [
   {
-    start: source.indexOf('inline [#]'),
-    end: source.indexOf('inline [#]') + '[#]<AI>{PASS, "ok"}'.length,
+    start: inlineMarkerStart,
+    end: inlineMarkerStart + '[#]<AI>{PASS, "ok"}'.length,
     raw: '[#]<AI>{PASS, "ok"}',
     mode: 'inline'
   },
