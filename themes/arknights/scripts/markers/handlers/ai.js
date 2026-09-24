@@ -43,7 +43,7 @@ function readOwnDataValue(object, key) {
 
 function readArgumentFields(args, index) {
   try {
-    const argument = args[index]
+    const argument = readOwnDataValue(args, index)
     if (argument === null || typeof argument !== 'object' || Array.isArray(argument)) {
       return null
     }
