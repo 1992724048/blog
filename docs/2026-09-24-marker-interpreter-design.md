@@ -160,6 +160,7 @@ themes/arknights/scripts/markers/
 - 对原始 Markdown 做词法扫描，而不是对渲染后的 HTML 做正则替换。
 - 识别独立行 block 和普通文本中的 inline 候选标记，并把源码范围、模式和原始文本交给 parser。
 - 跳过 fenced code、缩进代码、行内代码、script、style 和 raw HTML；被跳过区域不提取 token。
+- 扫描到 `[#]<...>{...}` 候选时，候选外壳中的 `<AI>`/`<PJ>` 不得先被当作 raw HTML；只有候选外部的 HTML 区域才按 raw HTML 规则跳过。
 - 识别代码围栏和 HTML 区域时必须覆盖开始、结束和未闭合边界，不能因为保护区域不完整而把后续正文当作代码。
 - lexer 只提取候选，不执行 AI/PJ 业务校验，不选择 handler，不生成最终 DOM。
 - 保留 Markdown 的其它内容、换行、缩进、列表、表格和 HTML 结构；token 替换不得破坏 `<!-- more -->` 等 Hexo/Marked 语义标记。
@@ -206,15 +207,15 @@ themes/arknights/scripts/markers/
 
 - 作为唯一 Hexo 适配层，负责加载 registry、调用 lexer/parser/handler、恢复错误原文和注册过滤器。
 - 在渲染前后分别接入 `before_post_render` 与 `after_post_render`。
-- 对同一标记只进行一次词法提取和一次业务解释；不把生成内容再次送回 lexer。
+- 对每个独立输入字段中的同一次标记出现只进行一次词法提取和一次业务解释；由 `data.content` 正常派生的 `excerpt`/`more` 不作为额外输入，生成内容也不再次送回 lexer。
 - 提供 meta description 使用的通用纯文本投影入口，投影结果来自对应 handler 的 `toPlainText`，不让 SEO 过滤器自行识别旧字符串或复制 AI 专用 HTML 清理逻辑。
 - 纯文本投影和内部节点上下文只存在于构建期数据对象或模块私有上下文中，不序列化到输出。
 
 ## 8. 数据流与过滤器优先级
 
 ```text
-原始 Markdown
-→ before_post_render priority 4：词法提取，原地修改 data.content
+原始 Markdown 与显式独立 excerpt/more
+→ before_post_render priority 4：词法提取，修改 data.content 及显式独立字段
 → Hexo/Marked
 → after_post_render priority 9：解析 token、registry、handler
 → priority 10：excerpt/terms/lightgallery 等
@@ -224,14 +225,15 @@ themes/arknights/scripts/markers/
 具体规则：
 
 1. `before_post_render` 使用优先级 4，在现有 PJ 编码和正文 Markdown 渲染之前提取 AI/PJ 候选。
-2. before 阶段只修改 `data.content`，不在原始字段上重复扫描 `excerpt` 或 `more`。
-3. `after_post_render` 使用优先级 9。Markdown 渲染完成后，pipeline 解析 token，交给 registry 和 handler 输出 HTML。
-4. after 阶段处理 `data.content` 后交回 Hexo，让 Hexo 按正常流程派生 `excerpt` 和 `more`；不通过复制或替换正常派生字段来实现 AI/PJ 解释。
-5. 新 pipeline 不依赖同优先级注册顺序，也不依赖 Hexo 私有 `PostRenderEscape` 行为。
-6. 现有 Terms、lightgallery 等优先级 10 过滤器在 marker 输出之后处理生成内容；Alert、Spoiler 仍按其独立实现运行。
-7. `meta-description.js` 在优先级 20 或更高位置调用 pipeline 的通用纯文本投影，再执行既有的 HTML 清理、空白归一化和长度限制。
-8. 加密文档沿用现有加密责任边界：已加密或带密码的数据不解释 marker，marker 解释不会把 token 带入加密内容。
-9. AI/PJ 输出完成后再交给后续过滤器，避免后续过滤器重新扫描临时 token 或旧标记。
+2. 普通文章路径在 before 阶段只修改 `data.content`，不单独扫描正常由正文派生的 `excerpt` 或 `more`。
+3. 兼容显式独立字段：若过滤器入口处 frontmatter 显式提供了独立 `excerpt` 或 `more`，且该字段自身包含 marker，则将其记录为独立输入，在 before 阶段按与 `data.content` 相同的 lexer 提取，并在 after 阶段按相同的 parser/registry/handler 流程解释一次，结果写回同一字段。由 `data.content` 正常派生的 `excerpt`/`more` 不适用此例外。
+4. `after_post_render` 使用优先级 9。Markdown 渲染完成后，pipeline 解析从 `data.content` 及已记录的显式独立字段中提取的 token，交给 registry 和 handler 输出 HTML。
+5. after 阶段处理 `data.content` 后交回 Hexo，让 Hexo 按正常流程派生 `excerpt` 和 `more`；不通过复制或替换正常派生字段来实现 AI/PJ 解释。
+6. 新 pipeline 不依赖同优先级注册顺序，也不依赖 Hexo 私有 `PostRenderEscape` 行为。
+7. 现有 Terms、lightgallery 等优先级 10 过滤器在 marker 输出之后处理生成内容；Alert、Spoiler 仍按其独立实现运行。
+8. `meta-description.js` 在优先级 20 或更高位置调用 pipeline 的通用纯文本投影，再执行既有的 HTML 清理、空白归一化和长度限制。
+9. 加密文档沿用现有加密责任边界：已加密或带密码的数据不解释 marker，marker 解释不会把 token 带入加密内容。
+10. AI/PJ 输出完成后再交给后续过滤器，避免后续过滤器重新扫描临时 token 或旧标记。
 
 ## 9. Handler 契约
 
@@ -264,7 +266,7 @@ themes/arknights/scripts/markers/
 ### 9.3 `toPlainText(node)`
 
 - 只返回纯文本，不返回 HTML、tooltip、SVG、属性或 CSS。
-- AI 只返回用户提供的可选文案；没有文案时返回空文本，不返回状态图例和 SVG。
+- AI 返回状态值（`PASS`、`EDIT`、`IGNORE` 或 `NOTREVIEW`）与用户提供的可选文案；有文案时两者以一个空格分隔，没有文案时只返回状态值。结果不包含 tooltip、机器人 SVG 或四态图例。
 - PJ 只返回项目名称，不返回链接、图片路径、卡片属性或 CSS URL。
 - meta description 只能通过 pipeline 的通用投影入口使用该结果，不得重新引入旧标记正则或 AI 专用 DOM 清理分支。
 
@@ -344,7 +346,7 @@ Alert、Spoiler、Terms 及其 core 文件不在迁移范围内，不因 markers
 | AI handler | 四个状态、可选文案、1–40 字符限制、tooltip 嵌套、文案转义 | `.ai-badge`、四态类、tooltip 和可选 `.ai-badge__text` 均保持契约 |
 | PJ handler | 三字段、页面类型、block 限制、连续 block、非法字段 | 生成无额外段落包装的连续 `.projects-grid > .project-card`，非法内容原样保留 |
 | PJ 安全 | `javascript:`、`data:`、`vbscript:`、协议相对地址、CSS 注入、引号和反斜杠 | 危险 URL 或 CSS 不能进入 href、src 或 `--card-img` |
-| Hexo 集成 | 真实 `post.render`、优先级 4/9/10/20+、excerpt 和 `<!-- more -->` | 正常派生 excerpt/more，输出顺序不依赖同优先级注册顺序 |
+| Hexo 集成 | 真实 `post.render`、优先级 4/9/10/20+、正常派生与显式独立的 excerpt/more、`<!-- more -->` | 正常派生字段不重复扫描；显式独立字段中的 marker 各处理一次；输出顺序不依赖同优先级注册顺序 |
 | Hexo 集成 | 代码块和 raw HTML 中的 marker、迁移后内容 | 可解释正文无临时 token 和旧 `[&]` 标记；受保护区域保持原文 |
 | 构建回归 | `TZ=Asia/Shanghai npm run build` | 文章页、项目页和 `search.json` 均生成成功，标记输出和项目网格正确 |
 | 静态探针 | Node `assert` 探针覆盖 parser、lexer、handler 和错误路径 | 合法、非法、转义、碰撞和连续 PJ 均有可重复断言 |
