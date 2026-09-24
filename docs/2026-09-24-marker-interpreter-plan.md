@@ -540,6 +540,7 @@ const firstStore = createTokenStore({
 })
 const firstRaw = '[#]<AI>{PASS, "原文"}'
 const firstToken = firstStore.issue({ raw: firstRaw, mode: 'block' })
+const secondRaw = '[#]<PJ>{"名称","https://example.com","/a.png"}'
 const secondStore = createTokenStore({
   occupiedText: `user ${firstToken} text`,
   randomBytes: () => Buffer.alloc(24, ++randomByte)
