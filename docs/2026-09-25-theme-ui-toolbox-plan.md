@@ -1284,10 +1284,19 @@ for (const timeoutCase of [
   }
   if (timeoutCase.name === 'script') {
     await timeoutControl.capture()
-    assert.equal(timeoutCase.harness.state.scriptCount, 1)
-    assert.equal(timeoutCase.harness.timers.pending(), 0)
+    assert.equal(timeoutCase.harness.state.scriptCount, 1, timeoutCase.name)
+    assert.equal(timeoutCase.harness.state.downloadCount, 0, timeoutCase.name)
+    assert.equal(timeoutCase.harness.button.disabled, false, timeoutCase.name)
+    assert.equal(timeoutCase.harness.button.getAttribute('aria-busy'), 'false', timeoutCase.name)
+    assert.equal(
+      timeoutCase.harness.status.textContent,
+      timeoutCase.harness.button.dataset.labelFailed,
+      timeoutCase.name
+    )
+    assert.equal(timeoutCase.harness.status.hidden, false, timeoutCase.name)
+    assert.equal(timeoutCase.harness.timers.pending(), 0, timeoutCase.name)
   }
-  assert.equal(timeoutCase.harness.timers.pending(), 0)
+  assert.equal(timeoutCase.harness.timers.pending(), 0, timeoutCase.name)
 }
 
 const errorCanvas = deferred()
@@ -1380,9 +1389,9 @@ main().catch(error => {
 | fonts 不支持 | `fontsMode='missing'`，图片预先 complete | 继续到一次 `toCanvas`，下载 1 |
 | fonts 15 秒超时 | `fontsMode='pending'`，调用已展示的 `timers.advance(15000)` | 不调用 `toCanvas`、下载 0、busy=false、status=`labelFailed` |
 | image 15 秒超时 | 字体 resolved、图片保持 incomplete，调用已展示的 `timers.advance(15000)` | 不调用 `toCanvas`、图片 `loading` 恢复 `lazy`、分页器恢复、下载 0 |
-| script 加载超时 | `scriptMode='pending'`，首次调用已展示的 `timers.advance(15000)` | 首次失败后直接 `await capture()` 复用 cached rejected Promise；`scriptCount=1`、`pending()=0`、不新增 script/timer、下载 0 |
+| script 加载超时 | `scriptMode='pending'`，首次使用同一 `timeoutCase.harness.timers.advance(15000)` | 首次失败后直接 `await timeoutControl.capture()` 复用 cached rejected Promise；再次断言 `scriptCount=1`、下载 0、`disabled=false`、`aria-busy=false`、完整 `labelFailed` status、`hidden=false`、`pending()=0`，不新增 script/timer |
 
-`installFakeTimers()` 是本文件展示的最小、无外部依赖测试实现；测试必须使用它，不得再引用未声明的 Sinon fake timer，也不得让 15 秒真实等待拖慢门禁。script 超时首轮 settle 后，第二次 capture 必须直接取得同一失败路径，不能等待 `pending() > 0` 或推进不存在的第二个 timer；每个 timeout fixture 在最终 `await capture()` 后还要断言 `timers.pending() === 0`。
+`installFakeTimers()` 是本文件展示的最小、无外部依赖测试实现；测试必须使用它，不得再引用未声明的 Sinon fake timer，也不得让 15 秒真实等待拖慢门禁。三个 timeout fixture 统一使用循环内已定义的 `timeoutCase.harness` 与首次调用中的 `timers.advance(15000)`；script 超时首轮 settle 后，第二次 `await timeoutControl.capture()` 必须直接取得同一失败路径，不能等待 `pending() > 0` 或推进不存在的第二个 timer。第二次 await 后仍须完整重断言 `scriptCount=1`、下载 0、`disabled=false`、`aria-busy=false`、完整失败 status、`status.hidden=false` 与 `timers.pending()=0`；每个 timeout fixture 最终都断言 `timers.pending()=0`。
 
 文件名分支至少建立三组输入：`#post-title.textContent='  A<>:"/\\|?*\\u0001B...  .  '` 断言 80 code-unit 上限与非法字符清除；删除标题节点并设 `document.title='Site | Fallback Title'` 断言使用站点标题；标题和 document title 都为空时断言前缀为 `post`。固定 mock `Date` 为本地 `2026-09-25T14:30:52`，三组文件名均以 `-20260925-143052.png` 结尾。
 
@@ -1475,6 +1484,7 @@ await pendingPlay
 assert.equal(button.getAttribute('aria-busy'), 'false')
 assert.equal(button.getAttribute('aria-pressed'), 'true')
 assert.equal(button.getAttribute('aria-label'), button.dataset.labelPause)
+assert.equal(button.getAttribute('title'), button.dataset.labelPause)
 assert.equal(status.textContent, button.dataset.labelPlayingStatus)
 assert.equal(status.hidden, false)
 
@@ -1482,6 +1492,7 @@ await window.bgmControl.toggle()
 assert.equal(paused, true)
 assert.equal(button.getAttribute('aria-pressed'), 'false')
 assert.equal(button.getAttribute('aria-label'), button.dataset.labelPlay)
+assert.equal(button.getAttribute('title'), button.dataset.labelPlay)
 assert.equal(status.textContent, button.dataset.labelPausedStatus)
 assert.equal(status.hidden, false)
 
@@ -1492,19 +1503,34 @@ await rejectedPlay
 assert.equal(button.getAttribute('aria-busy'), 'false')
 assert.equal(button.getAttribute('aria-pressed'), 'false')
 assert.equal(button.getAttribute('aria-label'), button.dataset.labelPlay)
+assert.equal(button.getAttribute('title'), button.dataset.labelPlay)
 assert.equal(status.textContent, button.dataset.labelFailedStatus)
 assert.equal(status.hidden, false)
 
 const mediaEvent = new window.Event('error')
 mediaError = mediaEvent
 audio.dispatchEvent(mediaEvent)
+assert.equal(button.disabled, false)
+assert.equal(button.getAttribute('aria-busy'), 'false')
+assert.equal(button.getAttribute('aria-pressed'), 'false')
+assert.equal(button.getAttribute('aria-label'), button.dataset.labelError)
+assert.equal(button.getAttribute('title'), button.dataset.labelError)
+assert.equal(status.textContent, button.dataset.labelFailedStatus)
+assert.equal(status.hidden, false)
+
 playDeferred = deferred()
 const retryPlay = window.bgmControl.toggle()
 assert.deepEqual(calls.slice(-2), ['load', 'play'])
+assert.equal(button.getAttribute('aria-busy'), 'true')
 paused = false
 playDeferred.resolve()
 await retryPlay
+assert.equal(button.getAttribute('aria-busy'), 'false')
 assert.equal(button.getAttribute('aria-pressed'), 'true')
+assert.equal(button.getAttribute('aria-label'), button.dataset.labelPause)
+assert.equal(button.getAttribute('title'), button.dataset.labelPause)
+assert.equal(status.textContent, button.dataset.labelPlayingStatus)
+assert.equal(status.hidden, false)
 
 const callsBeforePjax = [...calls]
 const audioBeforePjax = audio
@@ -1512,10 +1538,16 @@ const oldButton = button
 const newButton = oldButton.cloneNode(true)
 oldButton.replaceWith(newButton)
 document.dispatchEvent(new window.Event('pjax:success'))
-assert.equal(audio, audioBeforePjax)
+const audioAfterPjax = document.querySelector('#bgm')
+assert.ok(audioAfterPjax !== null)
+assert.equal(audioAfterPjax, audioBeforePjax)
+assert.equal(audioBeforePjax.isConnected, true)
+assert.equal(audioAfterPjax.isConnected, true)
+assert.equal(document.querySelectorAll('#bgm').length, 1)
 assert.deepEqual(calls, callsBeforePjax)
 assert.equal(newButton.getAttribute('aria-pressed'), 'true')
 assert.equal(newButton.getAttribute('aria-label'), newButton.dataset.labelPause)
+assert.equal(newButton.getAttribute('title'), newButton.dataset.labelPause)
 
 paused = true
 const endedStatusSentinel = 'existing status'
@@ -1524,6 +1556,7 @@ status.removeAttribute('hidden')
 audio.dispatchEvent(new window.Event('ended'))
 assert.equal(newButton.getAttribute('aria-pressed'), 'false')
 assert.equal(newButton.getAttribute('aria-label'), newButton.dataset.labelPlay)
+assert.equal(newButton.getAttribute('title'), newButton.dataset.labelPlay)
 assert.equal(status.textContent, endedStatusSentinel)
 assert.equal(status.hidden, false)
 
@@ -1842,8 +1875,8 @@ git diff --cached --check
 
 - [ ] **4.1（4 分钟）写 vendor RED。** 创建 vendor 探针；先因两个文件不存在失败，锁定 hash、MIT 文本与 `window.snapdom.toCanvas`。
 - [ ] **4.2（3 分钟）落盘官方资源。** 从 npm 3.1.1 tarball 复制 `dist/snapdom.js` 为 `snapdom.min.js`、复制根 LICENSE；不编辑内容，运行 vendor GREEN。
-- [ ] **4.3（5 分钟）写截图 RED。** 创建 `theme-ui-screenshot.test.js`，按上述独立 harness 写全资源等待、单例、执行期 `button.disabled === true`、edge/pixel 两种超预算缩放、paginator、文件名、blob/error，以及 `pjax:error` 恢复旧分页器、`pjax:send` 断开 parent 后不恢复且旧任务不写新页共享 status 两组取消断言。script 超时的第二次 capture 直接 await cached rejection，断言无第二个 script/timer。
-- [ ] **4.4（5 分钟）写 BGM RED。** 创建 `theme-ui-bgm.test.js`，覆盖 play resolve/reject、成功播放/暂停/失败后的完整 status 文案与 `hidden === false`、pause/continue、media error/load、ended、Pjax、Pug source fixture 和唯一 audio 属性。
+- [ ] **4.3（5 分钟）写截图 RED。** 创建 `theme-ui-screenshot.test.js`，按上述独立 harness 写全资源等待、单例、执行期 `button.disabled === true`、edge/pixel 两种超预算缩放、paginator、文件名、blob/error，以及 `pjax:error` 恢复旧分页器、`pjax:send` 断开 parent 后不恢复且旧任务不写新页共享 status 两组取消断言。script 超时的第二次 `await timeoutControl.capture()` 直接取得 cached rejection；使用同一 `timeoutCase.harness` 的已定义 15 秒 fake time，断言无第二个 script/timer，并再次完整验证按钮可用、busy 结束、失败 status 可见及下载为 0。
+- [ ] **4.4（5 分钟）写 BGM RED。** 创建 `theme-ui-bgm.test.js`，覆盖 play resolve/reject、成功播放/暂停/失败后的完整 status 文案、label/title 同步与 `hidden === false`、pause/continue、media error 后失败 label/title/status 与可重试、retry resolve 后 playing/busy/pressed 完整状态、ended、Pjax、Pug source fixture 和唯一 audio 属性。Pjax 导航后必须重新 `document.querySelector('#bgm')`，比较导航前后 identity，断言两者 connected 且全局 `querySelectorAll('#bgm').length === 1`。
 - [ ] **4.5（4 分钟）写 Toolbox RED。** 创建 `theme-ui-toolbox.test.js`，覆盖 toggle+五 action 的 document 分发、点击 SVG 后一次只调用一次、Pjax 替换后单次绑定、分享与收藏保存/取消的完整 status，以及 toggle/五项均无内联 onclick。
 - [ ] **4.6（3 分钟）写根配置 RED。** 在 BGM 探针解析 `_config.arknights.yml`，断言四个字段精确值；失败应只显示 `enable false`/`autoplay true` 差异。
 - [ ] **4.7（3 分钟）实现全局类型与 ScreenshotControl 骨架。** 先在 `include/environment.d.ts` 声明 `Window.snapdom`、`SnapDomGlobal` 和 `SnapDomToCanvasOptions`，再建立常量、generation、Promise 单例、script load/timeout/global shape 校验和 current DOM 查询；禁止局部重复声明或 `any` 逃逸。
@@ -2300,8 +2333,8 @@ console.table({
 | 5.5 footer | A2 | 桌面 calc、移动源码不变 | D 769/768 对比 |
 | 6 ProjectTooltip | B | WeakSet、重复扫描、Pjax 新节点 | D hover/Pjax |
 | 7 工具箱五项 | A2、C、D | Pug DOM、toggle+五 action 单次委托、无 inline onclick、data-action 几何 | D 顺序/键盘/几何 |
-| 8 SnapDOM/截图 | C | vendor hash、Promise、edge/pixel 缩放、paginator 条件恢复、`pjax:error`/`send` 取消、文件名 | D 真实 PNG/原位长文/Pjax |
-| 9 BGM | C、D | 根配置、enable=true/false 完整模板、唯一 audio/按钮、媒体状态机 | D 播放/循环/错误/Pjax |
+| 8 SnapDOM/截图 | C | vendor hash、Promise、edge/pixel 缩放、paginator 条件恢复、`pjax:error`/`send` 取消、timeout cached rejection 重入 UI 状态、文件名 | D 真实 PNG/原位长文/Pjax |
+| 9 BGM | C、D | 根配置、enable=true/false 完整模板、唯一 audio/按钮、播放/暂停/失败 label+title+status、media error/retry 完整状态、Pjax 导航后重新查询 identity/connected/唯一性 | D 播放/循环/错误/Pjax |
 | 10 ARIA/reduced | A2、C、D | 初始 pressed/busy/label/title/hidden、tooltip 开/关、absolute status 与底缘几何 | D 键盘/辅助技术/动效 |
 | 14 缓存/产物 | B、C、D | 版本 URL、artifact 全部断言 | 部署后另行抽查，本轮不 push |
 | 15 有头浏览器 | D | 不替代 | 明确 pending 后执行 |
@@ -2321,7 +2354,7 @@ console.table({
 - [ ] 每个已发现缺陷均由责任任务追加独立 Conventional Commit，未 amend、rebase 或重写既有任务提交。
 - [ ] 主题 TypeScript build 只在 B、C 执行，`package.json`、lockfile、tsconfig 无差异。
 - [ ] 九个 marker 探针、专项 Node/DOM/Pug/CSS 探针均在最终状态退出码 0。
-- [ ] 根级 BGM 四字段和 `url_for(theme.bgm.src)` 默认/临时 source fixture 均通过，enable=true/false 完整模板门禁均覆盖。
+- [ ] 根级 BGM 四字段和 `url_for(theme.bgm.src)` 默认/临时 source fixture 均通过，enable=true/false 完整模板门禁均覆盖；media error/retry 状态和 Pjax 后重新查询的 audio identity/connected/唯一性断言通过。
 - [ ] 真实长文验收记录原位 fixture 路由、PNG 尺寸及首尾标记覆盖证据，未使用重复 ID 的 `#post-content` clone。
 - [ ] `public/` 不含独立 ProjectTooltip；bundle、SnapDOM、audio、工具箱、搜索和版本断言通过。
 - [ ] `git diff --check` 通过，`.temp/`、`public/`、日志和本地报告未提交。
