@@ -49,6 +49,23 @@ btn:
   search: Search
   color: Highlight color
 
+toolbox:
+  screenshot: "Screenshot This Post"
+  screenshotPreparing: "Preparing screenshot"
+  screenshotScaled: "The article is long; the screenshot will be scaled down"
+  screenshotSuccess: "Screenshot downloaded"
+  screenshotScaledSuccess: "Screenshot scaled and downloaded"
+  screenshotFailed: "Screenshot failed; try again"
+  bgmPlay: "Play background music"
+  bgmPause: "Pause background music"
+  bgmError: "Background music failed to load; click to retry"
+  bgmPlayingStatus: "Background music started"
+  bgmPausedStatus: "Background music paused"
+  bgmFailedStatus: "Background music failed to load; click to retry"
+  shareCopied: "Article link copied"
+  favoriteSavedStatus: "Article saved"
+  favoriteRemovedStatus: "Article removed from favorites"
+
 menu:
   archive:
     plural: Archives

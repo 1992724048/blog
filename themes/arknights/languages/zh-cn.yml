@@ -49,6 +49,23 @@ btn:
   search: 搜索
   color: 标注颜色
 
+toolbox:
+  screenshot: "截图本文"
+  screenshotPreparing: "正在准备截图"
+  screenshotScaled: "文章较长，截图将整体缩小"
+  screenshotSuccess: "截图已下载"
+  screenshotScaledSuccess: "截图已整体缩小并下载"
+  screenshotFailed: "截图失败，请重试"
+  bgmPlay: "播放背景音乐"
+  bgmPause: "暂停背景音乐"
+  bgmError: "背景音乐加载失败，点击重试"
+  bgmPlayingStatus: "背景音乐已开始播放"
+  bgmPausedStatus: "背景音乐已暂停"
+  bgmFailedStatus: "背景音乐加载失败，点击重试"
+  shareCopied: "文章链接已复制"
+  favoriteSavedStatus: "文章已收藏"
+  favoriteRemovedStatus: "已取消收藏"
+
 menu:
   archive:
     plural: 文章

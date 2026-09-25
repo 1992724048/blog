@@ -94,11 +94,10 @@
     &:nth-child(3)
       transform translate(0, -50%) rotate(-45deg) scaleX(1.2)
 
-// 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 切换由 JS 侧 toolbox.toggle() 负责）
-// 独立锚定 .bottom-btn 左下角，与右列共用 --btn-inset 底部基线（桌面 sticky / ≤768 fixed 同锚）；
+// 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 由后续 document 委托接线）
+// 独立锚定 .bottom-btn 左下角，与右列共用 --btn-inset 底部基线（桌面 sticky / ≤768px fixed 同锚）；
 // .toolbox 高度 = 唯一常规子项 .toolbox-toggle（40px），故 toggle 底缘 = 基线 = #color-mode 底缘
-// 扇形几何：以工具箱按钮为原点，半径 66px、角度 0° / 22.5° / 45° 向右上张开（各断点均在视口内；与右侧按钮列净空充足）
-// 层叠规则：扇形容量 3 个；第 4 个起沿原点层叠成堆（不展开），随工具数量可扩展
+// 扇形几何：以工具箱按钮为原点，五项按 66px 半径、0° / 22.5° / 45° / 67.5° / 90° 向右上张开
 .bottom-btn .toolbox
   position absolute
   // 视觉左间距 = 底部基线（8px）：补偿 .bottom-btn 所处 article 的左偏移（--toolbox-shift，各断点见下）
@@ -142,28 +141,32 @@
   pointer-events none
   transform translate(0, 0)
   transition transform .24s cubic-bezier(.2, .8, .3, 1.1), opacity .18s ease-out, visibility 0s linear .24s, background-color .2s, color .2s, box-shadow .2s
-.bottom-btn .toolbox-item:nth-child(1)
+.bottom-btn [data-action=annotate]
   --fan-x 66px
   --fan-y 0px
   --pull-x 10px
   --pull-y 0px
-.bottom-btn .toolbox-item:nth-child(2)
+.bottom-btn [data-action=share]
   --fan-x 61px
   --fan-y -25px
   --pull-x 9px
   --pull-y -4px
-.bottom-btn .toolbox-item:nth-child(3)
+.bottom-btn [data-action=favorite]
   --fan-x 47px
   --fan-y -47px
   --pull-x 7px
   --pull-y -7px
-.bottom-btn .toolbox-item:nth-child(4)
-  --fan-x 4px
-  --fan-y -4px
-.bottom-btn .toolbox-item:nth-child(n+5)
-  --fan-x 8px
-  --fan-y -8px
-// 展开态（含层叠项）：轻微投影明确层级（深浅主题通用黑系阴影，克制）；悬停抽出态略强（见下）
+.bottom-btn [data-action=screenshot]
+  --fan-x 25px
+  --fan-y -61px
+  --pull-x 4px
+  --pull-y -9px
+.bottom-btn [data-action=bgm]
+  --fan-x 0px
+  --fan-y -66px
+  --pull-x 0px
+  --pull-y -10px
+// 展开态：轻微投影明确层级（深浅主题通用黑系阴影，克制）；悬停抽出态略强（见下）
 .bottom-btn .toolbox-open .toolbox-item
   opacity 1
   visibility visible
@@ -171,8 +174,25 @@
   transition-delay 0s
   transform translate(var(--fan-x), var(--fan-y))
   box-shadow 0 2px 8px rgba(0, 0, 0, .25)
+.bottom-btn .toolbox-status
+  position absolute
+  left 0
+  bottom calc(100% + 8px)
+  z-index 4
+  width max-content
+  max-width min(40vw, 320px)
+  padding 6px 8px
+  background-color var(--theme-bg-light)
+  color var(--theme-text-rev)
+  font-size 12px
+  line-height 1.4
+  white-space normal
+  pointer-events none
+.bottom-btn .toolbox-status[hidden]
+  display none
 @media ( min-width 769px )
-  .bottom-btn .toolbox-open .toolbox-item:hover
+  .bottom-btn .toolbox-open .toolbox-item:hover,
+  .bottom-btn .toolbox-open .toolbox-item:focus-visible
     z-index 5
     box-shadow 0 4px 10px rgba(0, 0, 0, .35)
     transform translate(calc(var(--fan-x) + var(--pull-x)), calc(var(--fan-y) + var(--pull-y))) scale(1.08)
