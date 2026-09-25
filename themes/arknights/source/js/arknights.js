@@ -1610,6 +1610,27 @@ class MonacoEditor {
 }
 ;
 new MonacoEditor();
+class ProjectTooltip {
+    boundCards = new WeakSet();
+    bindCards = () => {
+        document.querySelectorAll('.project-card').forEach(card => {
+            if (this.boundCards.has(card)) {
+                return;
+            }
+            this.boundCards.add(card);
+            card.addEventListener('mousemove', (event) => this.onMousemove(event, card));
+        });
+    };
+    onMousemove = (event, card) => {
+        card.style.setProperty('--mx', String(event.clientX));
+        card.style.setProperty('--my', String(event.clientY));
+    };
+    constructor() {
+        this.bindCards();
+        document.addEventListener('pjax:success', this.bindCards);
+    }
+}
+var projectTooltip = new ProjectTooltip();
 class Scroll {
     scrolling = 0;
     getingtop = false;
