@@ -1,39 +1,39 @@
 # 主题 UI 清理、项目悬停合并与工具箱扩展规格
 
-- 文档状态：设计已确认，尚未实施；自动化与真实有头浏览器验收均不得在实施前声称通过。
+- 文档状态：A1、A2、B、C 已实施并完成自动化源码门禁；D 活文档、全量自动化、完整构建、artifact、geometry、nav 与 HTTP smoke 已完成；真实有头浏览器验收 pending，未完成前不得声称通过。
 - 文档日期：2026-09-25
 - 适用仓库：遂沫'Blog（Hexo 8.1.2，主题 `themes/arknights`）
-- 文档目的：固定页面清理、AI 状态硬切换、导航与侧栏视觉契约、项目卡片悬停脚本合并、工具箱五项化、截图与背景音乐控制器，以及后续四批实施和验收边界。
-- 本次文档修订边界：只修改本文档；不修改 runtime、`source/`、`AGENTS.md`、任何配置或既有设计文档，不执行构建，不执行 `git push`。
-- 实施配置授权：用户已明确授权 C 批次 Modify 根级 `_config.arknights.yml`，且只允许修改 `bgm.enable`、`bgm.autoplay`、`bgm.loop`、`bgm.src` 四个字段；不修改 `_config.yml`、主题默认 `themes/arknights/_config.yml` 或其它配置。
+- 文档目的：固定页面清理、AI 状态硬切换、导航与侧栏视觉契约、项目卡片悬停脚本合并、工具箱五项化、截图与背景音乐控制器，以及四批实施和验收边界。
+- 本次文档修订边界：只同步本文档的最终实施状态；不修改 runtime、`source/`、`AGENTS.md`、配置、既有设计文档或计划，不执行 `git push`。
+- 实施配置授权：C 批次已按用户授权只修改根级 `_config.arknights.yml` 的 `bgm.enable`、`bgm.autoplay`、`bgm.loop`、`bgm.src` 四个字段；未修改 `_config.yml`、主题默认 `themes/arknights/_config.yml` 或其它配置。
 
-## 1. 背景与当前来源
+## 1. 背景与最终来源
 
-本规格基于仓库中已经存在的实现路径，不引入未确认的主题能力。当前相关来源如下：
+本规格基于仓库中已经存在的实现路径，不引入未确认的主题能力。下表记录实施前基线与最终落点；旧值只用于说明迁移，不再代表当前事实：
 
-| 关注点 | 当前路径 | 当前事实 |
+| 关注点 | 当前路径 | 最终事实 |
 | --- | --- | --- |
-| 页面标题 | `themes/arknights/layout/includes/layout.pug` | 文件末尾注册 `visibilitychange`，隐藏页面时把标题改为“冲刺”，恢复时改回脚本初始化时缓存的标题。 |
-| Pjax 标题 | `themes/arknights/layout/includes/js-data.pug`、`themes/arknights/source/js/pjax.js` | Pjax selector 包含 `title`，切换时通过 History API 写入新页面标题；该正常逻辑不属于清理范围。 |
-| 评论开关 | `themes/arknights/layout/post.pug`、`source/projects/index.md`、`source/data/index.md` | 文章模板以 `page.comments` 和已启用评论组件共同决定是否渲染 `#comments`；项目页和数据页当前未显式关闭。 |
-| AI 协议与 DOM | `themes/arknights/scripts/markers/handlers/ai.js` | 当前合法状态为 `PASS`、`EDIT`、`IGNORE`、`NOTREVIEW`，输出 `.ai-badge--pass|edit|ignore|notreview`，tooltip 同时列出四态。 |
-| AI 样式 | `themes/arknights/source/css/_custom/custom.styl` | 当前 tooltip 通过 `display: none` / `display: flex` 切换；状态色为 PASS 绿、EDIT 紫、IGNORE 灰、NOTREVIEW 橙。 |
-| 导航 active | `themes/arknights/source/css/_core/header/header.styl` | 当前 active 导航项使用 5px 左边框，并在多个断点用左内边距补偿。 |
-| 桌面侧栏 footer | `themes/arknights/source/css/_core/aside/aside.styl` | 当前 `aside > footer` 位于 sticky aside 底部，桌面 padding-bottom 为 30px；`flex_layout.styl` 在 `≤768px` 另有移动端覆盖。 |
-| 工具箱 DOM 与样式 | `themes/arknights/layout/includes/bottom-btn.pug`、`themes/arknights/source/css/_page/post/bottom_btn.styl` | 当前工具箱只有标注、分享、收藏三项；独立右列 BGM 按钮同时承载 audio 元素。 |
-| 工具箱控制器 | `themes/arknights/source/js/_src/include/Toolbox.ts` | 当前 `Toolbox` 负责展开、标注、分享、收藏和 Pjax 恢复；文件已进入主题 `arknights.js` bundle。 |
-| BGM 控制器 | `themes/arknights/source/js/_src/include/BgmControl.ts` | 当前是短函数，读取 `#bgm` 与 `#bgm-control` 后直接调用 `play()` / `pause()`，不处理拒绝、错误或 Pjax 重建按钮。 |
-| 项目悬停 | `source/js/project-tooltip.js` | 当前独立 IIFE 在 `DOMContentLoaded` 与 `pjax:success` 扫描 `.project-card`，用元素自有 `_tooltipBound` 防重复并更新 `--mx/--my`。 |
-| 主题脚本入口 | `themes/arknights/layout/includes/js-data.pug`、`themes/arknights/source/js/_src/tsconfig.json` | `arknights.js` 由 `_src/include/**/*.ts` 编译；当前另有一个 `project-tooltip.js` script 标签。 |
-| 项目卡 DOM | `themes/arknights/scripts/markers/handlers/projects.js` | 输出 `.project-card`、`--mx/--my` 消费所需的既有结构、懒加载图片和 `.project-name`；本规格不修改该 handler。 |
-| 项目卡样式 | `themes/arknights/source/css/_custom/custom.styl` | hover 视觉读取 `--mx/--my`；本规格不修改项目卡 CSS。 |
-| 文章内容边界 | `themes/arknights/layout/post.pug` | `#paginator` 当前是 `#post-content` 的子节点，因此截图目标不能只传选择器而不显式排除 paginator。 |
-| BGM 资源 | `themes/arknights/source/audio/bgm.mp3`、`themes/arknights/source/icons/sound.svg` | 本地 MP3 与 sound SVG 已存在，可直接复用。 |
-| BGM 配置 | `_config.arknights.yml` | 实施前有效值为 `enable: false`、`autoplay: true`、`loop: true`、`src: /audio/bgm.mp3`；这是本规格实施前的历史状态。用户已授权 C 批次把该根级主题配置更新为第 9.1 节固定值，实际构建必须启用 BGM。 |
-| SnapDOM | `themes/arknights/source/lib/` | 当前没有 SnapDOM 资源，也没有 npm 依赖或 TypeScript import 路径。 |
-| 构建产物探针 | `.temp/marker-artifacts.js` | 当前仍要求 `public/js/project-tooltip.js` 和对应 script 标签存在，实施时必须反向更新。 |
-| 正式 marker 规格 | `docs/2026-09-24-marker-interpreter-design.md` | 当前记录旧 AI 状态，实施 A 必须同步为新协议。 |
-| 项目活文档 | `AGENTS.md` | 当前记录旧导航、工具箱容量、独立项目悬停脚本和产物路径；实施 A、B、C 必须按实际落地阶段同步。 |
+| 页面标题 | `themes/arknights/layout/includes/layout.pug` | 已删除 `visibilitychange`、缓存标题与“冲刺”改写；页面隐藏/恢复不改变标题。 |
+| Pjax 标题 | `themes/arknights/layout/includes/js-data.pug`、`themes/arknights/source/js/pjax.js` | Pjax selector 继续包含 `title`，切换时通过 History API 写入新页面标题。 |
+| 评论开关 | `themes/arknights/layout/post.pug`、`source/projects/index.md`、`source/data/index.md` | 文章模板继续以 `page.comments` 和已启用评论组件共同决定是否渲染 `#comments`；项目页和数据页已显式 `comments: false`。 |
+| AI 协议与 DOM | `themes/arknights/scripts/markers/handlers/ai.js` | 合法状态为 `PASS`、`EDIT`、`UNKN`、`NONE`，输出 `.ai-badge--pass|edit|unkn|none`，tooltip 固定列出四态。 |
+| AI 样式 | `themes/arknights/source/css/_custom/custom.styl` | tooltip 使用 visibility/opacity/transform 160ms 双向动画；状态色为 PASS 绿、EDIT 紫、UNKN 灰、NONE 橙。 |
+| 导航 active | `themes/arknights/source/css/_core/header/header.styl` | active 使用全断点 2.5px 透明占位底边与主题高亮底边，不再使用 5px 左边框及旧 padding 补偿。 |
+| 桌面侧栏 footer | `themes/arknights/source/css/_core/aside/aside.styl` | `aside > footer` 位于 sticky aside 底部，≥769px 使用 `max(0px, calc(30px - 1lh))`；`flex_layout.styl` 的 ≤768px 移动规则不变。 |
+| 工具箱 DOM 与样式 | `themes/arknights/layout/includes/bottom-btn.pug`、`themes/arknights/source/css/_page/post/bottom_btn.styl` | 工具箱为标注、分享、收藏、截图、音乐五项，按固定扇形角度展开；右列独立 BGM 按钮已删除。 |
+| 工具箱控制器 | `themes/arknights/source/js/_src/include/Toolbox.ts` | `Toolbox` 负责展开、标注、分享、收藏、共享 status 与 `data-action` document 委托；截图/BGM 委托独立控制器。 |
+| BGM 控制器 | `themes/arknights/source/js/_src/include/BgmControl.ts` | 长生命周期控制器持有唯一 audio，处理播放/暂停、媒体事件、失败重试与 Pjax 后按钮同步。 |
+| 项目悬停 | `themes/arknights/source/js/_src/include/ProjectTooltip.ts` | 已并入主题 bundle，用模块私有 `WeakSet` 防止重复绑定并在 `pjax:success` 重扫；独立源文件已删除。 |
+| 主题脚本入口 | `themes/arknights/layout/includes/js-data.pug`、`themes/arknights/source/js/_src/tsconfig.json` | `arknights.js` 由 `_src/include/**/*.ts` 编译；不再输出独立 `project-tooltip.js` script 标签。 |
+| 项目卡 DOM | `themes/arknights/scripts/markers/handlers/projects.js` | 保持 `.project-card`、`--mx/--my` 消费所需的既有结构、懒加载图片和 `.project-name`；本轮未修改该 handler。 |
+| 项目卡样式 | `themes/arknights/source/css/_custom/custom.styl` | hover 视觉继续读取 `--mx/--my`；本轮未修改项目卡 CSS。 |
+| 文章内容边界 | `themes/arknights/layout/post.pug` | `#paginator` 是 `#post-content` 的子节点，截图控制器显式临时 detach 并按 generation 条件恢复。 |
+| BGM 资源 | `themes/arknights/source/audio/bgm.mp3`、`themes/arknights/source/icons/sound.svg` | 本地 MP3 与 sound SVG 继续复用；audio 位于 Pjax 替换区外。 |
+| BGM 配置 | `_config.arknights.yml` | 根级最终值为 `enable: true`、`autoplay: false`、`loop: true`、`src: /audio/bgm.mp3`；Pug 通过 `url_for(theme.bgm.src)` 消费。 |
+| SnapDOM | `themes/arknights/source/lib/snapdom/3.1.1/` | 已 vendored classic 3.1.1 资源与 LICENSE，控制器首次点击懒加载；无 package/lock/tsconfig 改动。 |
+| 构建产物探针 | `.temp/marker-artifacts.js` | 已反向锁定三篇 AI、四行 tooltip、项目卡、评论、唯一 audio、五项工具箱、search、vendor/hash 与实际缓存版本。 |
+| 正式 marker 规格 | `docs/2026-09-24-marker-interpreter-design.md` | 已同步 `PASS/EDIT/UNKN/NONE` 协议；旧状态仅保留负例。 |
+| 项目活文档 | `AGENTS.md` | 已同步 2.5px 导航底边、ProjectTooltip bundle、五项工具箱/SnapDOM/BGM、评论与最终门禁口径。 |
 
 `docs/2026-09-24-marker-interpreter-plan.md` 是已执行迁移的历史计划，不作为当前协议事实来源。A 批次只更新正式 marker 设计规格；历史计划不重写，实施探针与当前规格以新枚举为准。
 
@@ -57,7 +57,7 @@
 3. `handlers/projects.js` 的字段、安全校验、网格生成和 DOM 输出不在 ProjectTooltip 合并范围内。
 4. 项目卡 CSS、懒加载策略、链接协议、图片路径、`.projects-grid` 和 `.project-card` DOM 不变。
 5. 除 C 批次已获用户明确授权的根级 `_config.arknights.yml` 中 `bgm.enable`、`bgm.autoplay`、`bgm.loop`、`bgm.src` 四个字段外，不修改任何配置；尤其不修改 `_config.yml`、主题默认 `themes/arknights/_config.yml`、`package.json`、lockfile、`tsconfig.json` 或 CI。
-6. SnapDOM 固定为 `@zumer/snapdom` 3.1.1 的本地 classic/IIFE 资源；不使用 ESM，不通过 npm import 接入。
+6. SnapDOM 固定为 `@zumer/snapdom` 3.1.1 的本地 classic 发布资源（官方 `dist/snapdom.js` 原字节落盘为 `snapdom.min.js`）；不使用 ESM，不通过 npm import 接入。
 7. 不恢复旧 AI 状态，不接受大小写变体，不提供迁移期双读。
 8. 不对长文章截图分片、裁切或只截首屏；超出安全尺寸时必须整体缩放。
 9. 默认站点启用 BGM，但 `theme.bgm.autoplay` 固定为 `false`；首次播放必须由用户点击触发。
@@ -251,7 +251,7 @@ defer arknights.js
 3. 删除 `source/js/project-tooltip.js`。
 4. 从 `js-data.pug` 删除独立 `project-tooltip.js` script 标签和相关注释。
 5. 不新增单独 script、额外入口、package script 或 tsconfig include。
-6. B 批次将 `jsVersion` 从当前 `20260947` 递增为 `20260948`。
+6. B 批次已把 `jsVersion` 从 `20260947` 递增为 `20260948`，C 批次再递增为最终 `20260949`。
 
 ### 6.2 行为契约
 
@@ -309,7 +309,7 @@ B 批次只改变脚本归属和绑定实现。若 artifact 显示 card DOM 或 
 5. 删除右列 `.i-bgm` 按钮及其内联 audio；右列仍只保留回到顶部、返回、目录和主题切换。
 6. 标注、分享、收藏现有图标、class、视觉反馈和持久化键不变。
 7. 截图中没有 `#post-content` 时，不渲染截图按钮，也不保留隐藏死按钮。
-8. C 批次把根级 `bgm.enable` 更新为 `true` 后，默认站点的实际构建必须渲染音乐按钮和唯一 audio。专项测试可以单独传入 `enable=false` fixture 验证关闭分支，但该 fixture 不代表默认站点配置，也不替代实际构建验收。
+8. C 批次已把根级 `bgm.enable` 更新为 `true`，默认站点实际构建必须渲染音乐按钮和唯一 audio。专项测试可以单独传入 `enable=false` fixture 验证关闭分支，但该 fixture 不代表默认站点配置，也不替代实际构建验收。
 
 ### 7.2 扇形几何
 
@@ -346,7 +346,7 @@ themes/arknights/source/lib/snapdom/3.1.1/
 
 约束如下：
 
-1. `snapdom.min.js` 必须是 `@zumer/snapdom` 3.1.1 发布的 classic/IIFE 构建，暴露经 3.1.1 fixture 验证的 `window.snapdom` 全局。
+1. `snapdom.min.js` 必须是 `@zumer/snapdom` 3.1.1 发布的 classic 构建，暴露经 3.1.1 fixture 验证的 `window.snapdom` 全局。
 2. `LICENSE` 必须是该版本随包发布的许可证文本。
 3. 资源不经过 npm 依赖解析，不修改 package 或 lockfile。
 4. TypeScript 不使用 `import`、`require` 或 `type: module` 加载 SnapDOM。
@@ -791,8 +791,8 @@ D 的文档或探针修正可独立提交；若自动化失败，回到 A—C �
 
 BGM 验收不能只检查默认产物中的最终 `src` 字符串，必须同时证明模板消费配置值：
 
-1. 读取 `themes/arknights/layout/includes/layout.pug`，静态断言模板包含并使用 `url_for(theme.bgm.src)` 生成 `audio#bgm` 的 `src`，且没有在模板中另行写死默认音源路径。
-2. 以默认 fixture `theme.bgm.src=/audio/bgm.mp3` 渲染，记录默认 `audio#bgm` 的 `src`，断言其等于 `url_for('/audio/bgm.mp3')`。
+1. 读取 `themes/arknights/layout/includes/layout.pug`，静态断言模板包含并使用 `url_for(theme.bgm.src)` 生成 `audio#bgm` 的 `src`；默认 source 由 `layout.pug` 的第 55–56 行直接消费合并后的 `theme.bgm`，模板中不再写硬编码默认音源路径。
+2. 以默认 fixture `theme.bgm.src=/audio/bgm.mp3` 渲染，记录默认 `audio#bgm` 的 `src`，断言其等于 `url_for('/audio/bgm.mp3')`；artifact 读取合并后的 `theme.bgm` 并复核同一契约。
 3. 仅在临时专项 fixture 中将 `theme.bgm.src` 改为 `/audio/bgm-fixture.mp3`，使用同一模板重新渲染；断言输出 `src` 等于 `url_for('/audio/bgm-fixture.mp3')`，且与默认输出不同。
 4. 两种模板输出都断言恰有一个 `audio#bgm`，该元素不含 `controls` 属性且无 `autoplay` 属性；BGM 状态机 fixture 另断言 `.toolbox-bgm[data-action="bgm"]` 首次点击前不会调用 `play()`，首次按钮点击才触发播放。
 5. fixture 只在临时测试数据中覆盖 source，不修改根级配置或默认构建产物；默认站点实际产物仍必须断言 `/audio/bgm.mp3`。
@@ -843,15 +843,23 @@ node .temp/marker-e2e.test.js
 
 每次记录 `ok` 输出与退出码 0。AI handler 属于受影响范围，因此不能以“marker runtime 未改”为由跳过这些探针。
 
-### 14.4 构建与 artifact
+### 14.4 D 最终自动化与构建
 
-最终只对同一最终状态运行一次完整 Hexo 构建：
+A1—C 自动化源码门禁已在各责任任务完成；D 负责在同一最终源码状态执行主题 TypeScript build、主题 UI 专项、九个 marker 探针、语法/Git 检查、一次完整 Hexo build、artifact、geometry、nav smoke 与 HTTP smoke。最终产物门禁如下。
+
+构建前执行：
+
+最终只对同一最终状态运行一次完整 Hexo 构建，随后立即执行三项产物门禁：
 
 ```powershell
 $env:TZ = 'Asia/Shanghai'
 npm run build
 node .temp/marker-artifacts.js
+node .temp/r10-toolbox-geometry.js
+node .temp/nav-smoke.js
 ```
+
+HTTP smoke 使用本地静态服务器对最终 `public/` 的代表性文章、项目、数据、搜索 JSON、Arklights bundle、CSS、MP3 与 SnapDOM 资源执行 `HEAD`/`GET`，记录路由、状态码、content-type 与资源长度。
 
 artifact 探针必须检查：
 
@@ -963,7 +971,7 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 
 ## 18. 完成定义
 
-1. A—C 每批独立提交，文件范围与本规格一致。
+1. A—C 每批独立提交，文件范围与本规格一致；实际主提交为 A1 `8147ea2`、A2 `b0f86d1`（样式修复 `4395c87`）、B `ccd6745`、C `ef3f43f`（活文档 `eff00f1`、资源完成判定修复 `b30fe85`）。
 2. 主题 TypeScript build、九个 marker 探针、专项 UI 探针和最终 Hexo build 全部退出码 0。
 3. 根级 BGM 四字段与第 9.1 节完全一致，其中 `bgm.src=/audio/bgm.mp3`，模板通过 `url_for(theme.bgm.src)` 消费；模板/专项 fixture 证明 source 随 `theme.bgm.src` 改变而改变；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际唯一 audio/音乐按钮、`controls` 属性缺失、无 autoplay、首击播放、Pjax 持久化和版本号正确。
 4. `git diff --check` 通过，工作区不含无关文件。
@@ -971,6 +979,8 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 6. `AGENTS.md`、本文档和正式 marker 设计规格与最终代码一致。
 7. 不执行 `git push`。
 
-## 19. 结论
+## 19. 实施与验收结论
 
-本规格将本轮主题改造收敛为四个有明确边界的批次：先完成标题、评论、AI 协议和视觉清理，再把项目悬停并入 `arknights.js`，随后用独立 `ScreenshotControl` 和长生命周期 `BgmControl` 扩展五项工具箱，最后执行文档、自动化、构建和真实有头浏览器验收。AI 新旧状态不兼容，项目悬停不改变 marker handler 或卡片 DOM/CSS，SnapDOM 固定本地 3.1.1 classic 资源且不进入 package，截图以 Pjax generation 取消旧任务并对长图整体缩放；C 批次按用户授权只把根级 BGM 四字段设为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，并由 Pug 通过 `url_for(theme.bgm.src)` 消费该 source，使实际构建渲染唯一跨 Pjax audio 和工具箱音乐按钮，首击才播放。所有缓存版本、配置与产物断言和无障碍反馈均有确定契约；外部有头浏览器验收未完成时不得声称通过。
+A1、A2、B、C 已按本规格完成：A1 删除页面隐藏标题改写、仅在项目/数据页关闭评论，并把 AI 状态硬切换为 `PASS/EDIT/UNKN/NONE`；A2 落地 160ms tooltip、2.5px 导航底边、桌面 footer 与五项工具箱静态契约；B 将项目悬停并入 `arknights.js`；C 以独立 `ScreenshotControl`、长生命周期 `BgmControl` 和本地 SnapDOM 3.1.1 完成截图/音乐接线。最终版本为 `cssVersion=20260952`、`jsVersion=20260949`，根级 BGM 为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，Pug 通过 `url_for(theme.bgm.src)` 生成 Pjax 区外唯一 audio。
+
+自动化、构建与 HTTP smoke 证据记录在本轮 D 报告。主题 TypeScript build、8 个主题 UI 专项、9 个 marker 探针、最终语法/Git 检查均退出码 0；Hexo 以 `TZ=Asia/Shanghai` 生成 32 个文件，artifact/geometry/nav/HTTP smoke 均退出码 0，nav 共 119 项检查通过。真实 PNG 首尾覆盖、音频实际播放/错误重试、tooltip 动画、六档断点、Pjax 标题/搜索/收藏/标注/工具箱交互及 reduce-motion 仍须真实有头浏览器逐项验收，当前状态明确为 pending。
