@@ -3,8 +3,8 @@
 const AI_BADGES = Object.freeze({
   PASS: Object.freeze({ key: 'pass', label: 'PASS', description: '已人工审核通过' }),
   EDIT: Object.freeze({ key: 'edit', label: 'EDIT', description: '经人工审核并被人工修改' }),
-  IGNORE: Object.freeze({ key: 'ignore', label: 'IGNORE', description: '可忽略此标记' }),
-  NOTREVIEW: Object.freeze({ key: 'notreview', label: 'NOTREVIEW', description: '尚未经人工审核' })
+  UNKN: Object.freeze({ key: 'unkn', label: 'UNKN', description: '未知，无法判断' }),
+  NONE: Object.freeze({ key: 'none', label: 'NONE', description: '未经人工审核' })
 })
 const HTML_TEXT_ENTITIES = Object.freeze({
   '&': '&amp;',
@@ -83,7 +83,7 @@ function parseAi(args, context) {
     typeof stateArgument.value !== 'string' ||
     !Object.hasOwn(AI_BADGES, stateArgument.value)
   ) {
-    return failure('AI_INVALID_STATE', 'AI state must be PASS, EDIT, IGNORE, or NOTREVIEW')
+    return failure('AI_INVALID_STATE', 'AI state must be PASS, EDIT, UNKN, or NONE')
   }
 
   let text = null

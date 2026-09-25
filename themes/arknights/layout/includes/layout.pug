@@ -63,17 +63,3 @@ html(lang=config.language theme-mode=htmlThemeMode)
             script!=url
           else
             script(defer src=url)
-
-    //- 离开页面标题变化
-    script.
-      (function() {
-        var normalTitle = document.title;
-        var leaveTitle = '♿冲刺!冲刺!♿';
-        document.addEventListener('visibilitychange', function() {
-          if (document.hidden) {
-            document.title = leaveTitle;
-          } else {
-            document.title = normalTitle;
-          }
-        });
-      })();

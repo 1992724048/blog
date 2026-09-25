@@ -53,7 +53,7 @@ Task 4 的候选实现暴露了两个不能靠最终 HTML 修补的问题：
 ### 4.2 参数与错误原则
 
 - 参数是位置参数，参数顺序由 handler 契约定义，不能使用命名参数。
-- 只有 handler 注册的枚举可以裸写。AI 的合法枚举为 `PASS`、`EDIT`、`IGNORE`、`NOTREVIEW`；其它大写 token 即使符合字符形式也不是合法枚举。
+- 只有 handler 注册的枚举可以裸写。AI 的合法枚举为 `PASS`、`EDIT`、`UNKN`、`NONE`；其它大写 token 即使符合字符形式也不是合法枚举。`IGNORE`、`NOTREVIEW` 及其它旧值或别名均不属于合法协议。
 - `null` 只能裸写，解析为 JavaScript `null`。
 - 名称、URL、路径、文案及其它字符串都必须使用双引号。`""` 是空字符串，`"null"` 是普通文本，不是空值。
 - 引号内允许逗号，也允许保留内部空白。引号内仅支持 `\"` 和 `\\` 两种转义；其它反斜杠序列不构成合法 quoted-text。
@@ -87,7 +87,7 @@ quoted-text := '"' ... '"'
 [#]<AI>{PASS}
 [#]<AI>{PASS, "本文由AI辅助生成"}
 [#]<AI>{EDIT, "包含逗号的文案, 以及带\"引号\"的文本"}
-[#]<AI>{NOTREVIEW, "null"}
+[#]<AI>{NONE, "null"}
 [#]<PJ>{"C++ 包管理工具", "https://github.com/1992724048/cpp-pack-tool", "/images/projects/cpp_pack.png"}
 ```
 
@@ -100,6 +100,8 @@ quoted-text := '"' ... '"'
 ```text
 [#]<UNKNOWN>{PASS}
 [#]<AI>{UNKNOWN}
+[#]<AI>{IGNORE}
+[#]<AI>{NOTREVIEW}
 [#]<AI>{PASS, "未闭合}
 [#]<AI>{PASS, null, "多余参数"}
 [#]<AI>{, "缺少状态"}
@@ -115,18 +117,18 @@ AI 标记的参数契约为 `(state, text?)`：
 
 | 位置 | 类型 | 规则 |
 | --- | --- | --- |
-| 1 | 枚举 | 仅接受 `PASS`、`EDIT`、`IGNORE`、`NOTREVIEW` |
+| 1 | 枚举 | 仅接受 `PASS`、`EDIT`、`UNKN`、`NONE` |
 | 2 | quoted-text 或 `null` | 可省略；提供时沿用现有 1–40 字符限制，长度口径不改变 |
 
 AI 支持 block 和 inline 两种 lexer 模式，但“inline”只表示普通 Markdown text 上下文。link label 固定为 text-carrier（状态 `text-preserved`），按最终 label 渲染语义委托当前 Hexo link renderer；image alt、link href 和字符串 title 固定 raw-preserve，均不生成 wrapper、不调用 AI handler。image alt 的唯一语义来源是当前 Hexo `image` renderer 实际读取的 `image.text`：扩展恢复该字段并委托 renderer，不把 `image.tokens` 规范化成另一套 alt 文本。link title 只有 `typeof token.title === 'string'` 时才允许扫描；`null`、`undefined` 和其它类型都跳过。HTML 标签及属性由 lexer 整体保护，属性 marker 不进入 AI 解释器。block/inline 不改变徽标的状态、四态类名和 tooltip 契约。AI 输出必须保留：
 
 - `.ai-badge` 根类。
-- 当前四态类名和状态标签：`pass`、`edit`、`ignore`、`notreview`。
+- 当前四态类名和状态标签：`pass`、`edit`、`unkn`、`none`。
 - 机器人 SVG 图标、状态区域和 `.ai-badge__tip` 四态图例。
 - 文案存在时的可选 `.ai-badge__text`。
-- 当前状态对应的说明文字：PASS 为“已人工审核通过”，EDIT 为“经人工审核并被人工修改”，IGNORE 为“可忽略此标记”，NOTREVIEW 为“尚未经人工审核”。
+- 当前状态对应的说明文字：PASS 为“已人工审核通过”，EDIT 为“经人工审核并被人工修改”，UNKN 为“未知，无法判断”，NONE 为“未经人工审核”。tooltip 行顺序固定为 `PASS`、`EDIT`、`UNKN`、`NONE`。
 
-文本文案、状态标签和说明文字均必须按 HTML 文本上下文转义。状态缺失、未知状态、文案超长、文案类型错误或参数数量错误时，整个标记原样保留。
+文本文案、状态标签和说明文字均必须按 HTML 文本上下文转义。状态缺失、未知状态、文案超长、文案类型错误或参数数量错误时，整个标记原样保留。`IGNORE` 与 `NOTREVIEW` 是硬切换负例：必须返回 `AI_INVALID_STATE`，整枚 marker 恢复为原文，不生成 badge，也不把旧枚举作为 AI 状态写入 projection。
 
 ### 6.2 PJ
 
@@ -270,7 +272,7 @@ themes/arknights/scripts/markers/
 - 作为唯一 Hexo 业务适配层，负责加载 registry、调用 lexer/parser/handler、消费 pending carrier、编排连续 PJ、恢复错误原文、保存 content/excerpt 投影并暴露显式过滤器注册函数。
 - before priority 4 创建一次 render carrier 和 options bridge；`processAllTokens` 只审计 content 的 Marked occurrence，after priority 9 消费 content pending，并单独审计、消费或恢复显式 excerpt 的 `excerpt-pending`。
 - 每次 before 只扫描 `data.content` 与入口处显式存在的字符串 `data.excerpt`。`data.more` 永不扫描、永不由 pipeline 读取或写入；实现探针必须在 `data` 上定义会抛异常的 `more` getter/setter，并分别调用 pipeline before/after/`projectText(data, 'content'|'excerpt'|'more')`，同时用计数器断言 getter/setter 调用数始终为 0，不能只依赖“抛错未被冒泡”。Hexo 自身的 excerpt priority 10 会从已物化 `data.content` 派生/覆盖 `data.more`，因此真实 Hexo 用例不安装抛异常 `more`，也不存在 standalone `more` 输入或 `sourceField: 'more'`。
-- `content` 的 occurrence 必须具有 Marked provenance；显式 `excerpt` 不经过 Hexo 的 Markdown parse，store 将其记录为字段独立的 `excerpt-pending`，只能由 after 9 写回自己的字段，不得进入 `processAllTokens` 的 content 审计，也不得借用 content 的 HTML 标签或 provenance。before 与 after 9 之间，显式 excerpt 字段只含完整 opaque token，不使用 `data-arknights-carrier` wrapper；这使 priority 8 的 test-only filter 可捕获 carrier/token，priority 9 后再用同一 token 查询终态。after 9 结束时，每枚 excerpt occurrence 必须恰好为 `consumed` 或已恢复原文的 `failed`。纯 pipeline 测试必须在 before 后从 `data.markdown[CARRIER_SYMBOL]` 捕获本次 carrier，并在 after 后用 `getOccurrence(id)`/`getOccurrenceByToken(token)` 断言：合法 AI excerpt 的最终字段是具体 `.ai-badge--notreview` DOM 且 occurrence=`consumed`，非法 AI excerpt 的最终字段恢复为具体转义 marker 且 occurrence=`failed`；两者都不得含 wrapper、opaque token、sentinel 或 NUL。只断言 projection 不足以证明字段已消费。
+- `content` 的 occurrence 必须具有 Marked provenance；显式 `excerpt` 不经过 Hexo 的 Markdown parse，store 将其记录为字段独立的 `excerpt-pending`，只能由 after 9 写回自己的字段，不得进入 `processAllTokens` 的 content 审计，也不得借用 content 的 HTML 标签或 provenance。before 与 after 9 之间，显式 excerpt 字段只含完整 opaque token，不使用 `data-arknights-carrier` wrapper；这使 priority 8 的 test-only filter 可捕获 carrier/token，priority 9 后再用同一 token 查询终态。after 9 结束时，每枚 excerpt occurrence 必须恰好为 `consumed` 或已恢复原文的 `failed`。纯 pipeline 测试必须在 before 后从 `data.markdown[CARRIER_SYMBOL]` 捕获本次 carrier，并在 after 后用 `getOccurrence(id)`/`getOccurrenceByToken(token)` 断言：合法 AI excerpt 的最终字段是具体 `.ai-badge--none` DOM 且 occurrence=`consumed`，非法 AI excerpt 的最终字段恢复为具体转义 marker 且 occurrence=`failed`；两者都不得含 wrapper、opaque token、sentinel 或 NUL。只断言 projection 不足以证明字段已消费。
 - 局部失败可按完整 token 精确恢复；无法证明当前字段位置时，字段级 fallback 必须读取 `carrier.originalField(field)` 的入口原值作为权威，再按 HTML 文本上下文安全序列化。`store.restore(value)` 只在 token 仍完整时作为局部 best effort，不能作为字段级 fallback 的唯一来源。探针必须先把已物化 token 改成损坏/截断值，再证明 fallback 仍能从 originalField 恢复。
 - `createMarkerPipeline(options = {})` 允许省略 options，并默认使用 `[aiHandler, projectsHandler]` 与 `createTokenStore`；自定义 options 只能替换这两个已声明依赖。传入 `null`、非普通对象、非数组/空 handlers 或非函数 factory 时抛 `Error`，其 `code === 'INVALID_PIPELINE_OPTIONS'`；handler 自身不满足统一接口时由 registry 抛 `INVALID_HANDLER`。
 - 提供后续 meta description 使用的通用投影入口。handler 节点在 projection 中替换为 `toPlainText`，周围已渲染结构 HTML 保留给既有 `strip_html` 清理。正常 after 只保存 `content` 与显式 `excerpt` 的 projection；`projectText(data, 'excerpt')` 在无显式 excerpt 时，必须从已保存的 content projection 按字面 `<!-- more -->` 派生 excerpt 前缀视图，没有分隔符时回退到完整 content projection。该无分隔符分支的探针必须先保存 `projectText(data, 'content')`，再断言 `projectText(data, 'excerpt')` 与其逐字相等，不能断言为 `null`。该入口不读取 `data.more`、不扫描 marker、不写 `excerpt`/`more`，也不接受 `sourceField: 'more'`。Task 4 验证显式 excerpt 字段的 DOM/终态与 `projectText`，但不读取或断言 `data.description`；`data.description` 和 `meta-description.js` 接线归 Task 5。
@@ -363,7 +365,7 @@ themes/arknights/scripts/markers/
 ### 9.3 `toPlainText(node)`
 
 - 只返回纯文本，不返回 HTML、tooltip、SVG、属性或 CSS。
-- AI 返回状态值（`PASS`、`EDIT`、`IGNORE` 或 `NOTREVIEW`）与用户提供的可选文案；有文案时两者以一个空格分隔，没有文案时只返回状态值。结果不包含 tooltip、机器人 SVG 或四态图例。
+- AI 返回状态值（`PASS`、`EDIT`、`UNKN` 或 `NONE`）与用户提供的可选文案；有文案时两者以一个空格分隔，没有文案时只返回状态值。结果不包含 tooltip、机器人 SVG 或四态图例。
 - PJ 只返回项目名称，不返回链接、图片路径、卡片属性或 CSS URL。
 - meta description 只能通过 pipeline 的通用投影入口使用该结果，不得重新引入旧标记正则或 AI 专用 DOM 清理分支。
 
@@ -474,7 +476,7 @@ Alert、Spoiler、Terms 及其 core 文件不在迁移范围内，不因 markers
 | heading | 真实 `Hexo#post.render` 中 marker 在 heading 前、后方、两侧、嵌套强调中、至少两个连续 heading-only、成功/失败 marker、PJ inline 不支持、`headerIds:false`、后续正常 heading | test-only spy 确认 `parseInline` 收到原 `token.tokens` 同一引用；priority 9 仍物化/恢复；最终 heading-only 无 `id`/`.headerlink` 且通过内部串审计；每个共享 `_headingId` snapshot 同时断言 `!Object.hasOwn(snapshot, '')` 与 `!Object.hasOwn(snapshot, '-1')`，后续正常 heading id 等于对照；纯 `new Marked()` 不作为此门禁 |
 | 注册 | 同一 context+pipeline 重复调用、同一 context 不同 pipeline、不同 context、重复 `hexo.init()` | before 4、after 9、marked:use 0 各恰好一条；同 pair 幂等；不同 pipeline 抛稳定重复错误；init 后不手动注册 |
 | 并发隔离 | `Promise.all` 并发渲染两篇不同 marker 文档、重复 init 后再并发 | 每篇只消费自己的 carrier；无串文、无未消费 occurrence；Marked defaults 重装不丢失其它文章状态 |
-| AI handler | 四个状态、可选文案、1–40 字符限制、tooltip 嵌套、文案转义 | `.ai-badge`、四态类、tooltip 和可选 `.ai-badge__text` 均保持契约 |
+| AI handler | `PASS/EDIT/UNKN/NONE`、旧值 `IGNORE/NOTREVIEW` 负例、可选文案、1–40 字符限制、tooltip 顺序与文案转义 | 新四态 class、tooltip 和 projection 符合协议；旧值返回 `AI_INVALID_STATE`、恢复原 marker 且不生成 badge |
 | PJ handler/grid | 三字段、页面类型、block 限制、真实 Hexo 两个连续 PJ、普通文字中断、空行中断、非法字段、handler 失败 | 两个连续 PJ 恰好一个 `.projects-grid`、两个直接 `.project-card` 且无额外 `p` wrapper；普通文字/空行产生两个网格；非法枚恢复；失败不产生半截网格；不依赖纯 `new Marked()` 的 `breaks:false` 假设 |
 | PJ 安全 | `javascript:`、`data:`、`vbscript:`、协议相对地址、CSS 注入、引号和反斜杠 | 危险 URL 或 CSS 不能进入 href、src 或 `--card-img` |
 | 可观测性 | store/carrier spy、正常 content 的实际 Marked token、HTML 属性与四种 raw-text protected 区域 | protected 区域不签发 occurrence、不附 `arknights` metadata；正常 content 在真实 token 上出现冻结 descriptor/数组/元素/嵌套 parent；不靠最终字符串猜测“没有内部处理” |
