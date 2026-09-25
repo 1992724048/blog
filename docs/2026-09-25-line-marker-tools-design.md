@@ -23,7 +23,7 @@
 5. 保留既有 AI 徽标、项目卡、GitHub Alert、Monaco Editor、`.link-card`、`.admonition` 与 `.expand-box` 的可用视觉和交互资产。
 6. 删除四个旧 tag 入口及其专属文档、死代码，不提供旧语法或旧 tag 兼容分支。
 7. 修复暗色 GitHub Alert 交互态、桌面导航宽度稳定性和 BGM 状态生命周期。
-8. 按职责拆分 `pipeline.js` 与 `Toolbox.ts`，使 marker pipeline 与主题控制器不继续膨胀为单文件大模块；除第 16.3 节冻结的 `bgmControl.clearStatus()` additive API 外，不改变任何对外契约。
+8. 按职责拆分 `pipeline.js` 与 `Toolbox.ts`，使 marker pipeline 与主题控制器不继续膨胀为单文件大模块；标注/分享/收藏的 A 批次拆分保持既有行为，第 16.3 节 C 批次另修 BGM/status 生命周期，除冻结的 `bgmControl.clearStatus()` additive API 外不改变任何对外契约。
 
 ## 2. 范围边界
 
@@ -31,7 +31,7 @@
 
 - 生产 marker 名称：`AI`、`Project`、`Alerts`、`Editor`、`LinkCard`。
 - marker lexer、parser、token store、registry、pipeline、Marked 扩展和五类 handler。
-- 第 12.1.1 节的模块拆分：`pipeline.js` 的物化/失败恢复/Project 编排/投影四个子模块，以及 `Toolbox.ts` facade、标注/持久化、分享/收藏控制器与 `ToolboxStatusLease.ts`；除第 16.3 节明确的 `bgmControl.clearStatus()` additive API 外，只搬运实现、不改外部契约。
+- 第 12.1.1 节的模块拆分：`pipeline.js` 的物化/失败恢复/Project 编排/投影四个子模块，以及 `Toolbox.ts` facade、标注/持久化、分享/收藏控制器与 `ToolboxStatusLease.ts`。A 批次对既有标注/分享/收藏实现只搬运、不改行为；第 16.3 节 C 批次实施的 BGM/status 状态机与 `pjax:error` 修复是显式行为变更，不计入“纯搬运”。
 - `content`、显式 `excerpt`、派生 excerpt、SEO description 和搜索 sidecar 的 marker 纯文本投影。
 - `source/_posts/` 与 `source/projects/index.md` 中现有四处 marker 的一次性迁移。
 - 主题 README、AGENTS 活文档和本地自动化门禁同步。
@@ -963,17 +963,17 @@ Toolbox 侧职责与事件所有权冻结如下：
 
 | 模块 | 职责与唯一事件所有权 | 禁止承担的职责 |
 | --- | --- | --- |
-| `Toolbox.ts` | facade；唯一拥有 `document.click` 的 toolbox `data-action` 委托、外点判断、Escape、`pjax:send/error/success` 重置，并公开 `toggle()/annotate()/share()/favorite()` | 标注 Range 算法、localStorage 序列化、分享/收藏业务、截图/BGM 内部状态 |
+| `Toolbox.ts` | facade；唯一拥有 `document.click` 的 toolbox `data-action` 委托、外点判断、Escape、既有 `pjax:send/success` 重置，并公开 `toggle()/annotate()/share()/favorite()` | 标注 Range 算法、localStorage 序列化、分享/收藏业务、截图/BGM 内部状态、为纯搬运偷加 `pjax:error` |
 | `ToolboxAnnotationController.ts` | 标注模式、选区工具栏、五色、`hl-mark` 增删/恢复及其 document `mousedown`/`selectionchange`/mark/toolbar/color click，以及 `main` scroll 收起工具栏 | localStorage key、直接注册 Pjax 或 toolbox 外点 click、分享/收藏 |
 | `ToolboxPersistence.ts` | 唯一封装 `arknights:highlights:*`、`arknights:favorites`、标注颜色的读取、校验、序列化与恢复数据 | DOM 查询、事件监听、UI timer |
 | `ToolboxShareController.ts` | `share()`、URL 复制、`.copied` 反馈及其自有一次性 timer | localStorage、全局事件监听、截图/BGM |
-| `ToolboxFavoriteController.ts` | `favorite()`、收藏集合增删、`.saved` 反馈及其自有一次性 timer | 标注、全局事件监听、截图/BGM |
+| `ToolboxFavoriteController.ts` | `favorite()`、收藏集合增删与 `.saved` 反馈；沿用当前同步更新 `.saved`/`aria-pressed`/title/aria-label 的行为，不创建 UI timer | 标注、全局事件监听、截图/BGM、为收藏新增当前不存在的 timer |
 | `ToolboxStatusLease.ts` | 共享 `.toolbox-status` 的唯一 generation、token、timer 与 `MutationObserver`；只提供第 16.3 节 lease API | 导入 `BgmControl.ts`/`Toolbox.ts`、播放状态机、截图/分享/收藏业务 |
-| `BgmControl.ts` | 组合 `ToolboxStatusLease.ts`，拥有 BGM 状态机及其既有 Pjax/media/operation 事件 | 标注、分享、收藏、工具箱开合 |
+| `BgmControl.ts` | 组合 `ToolboxStatusLease.ts`；C 批次实现 BGM 状态机及其 `pjax:send/error/success`、media/operation 事件，其中 `pjax:error` 是用户已要求的 BGM/status 行为修复 | 标注、分享、收藏、工具箱开合 |
 | `ScreenshotControl.ts` | 保持截图 lease/generation；只经 `window.screenshotControl` 接收 facade 委托 | 导入任一 Toolbox 模块或持有 toolbox 状态 |
 | `environment.d.ts` | 声明 SnapDOM、`window.screenshotControl`、`window.bgmControl` 与冻结 facade 方法类型；同步新增 `clearStatus(): void` | 运行时实现、全局可变状态或未公开 controller 类型 |
 
-依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`。同层控制器之间不得互相引用，Persistence/StatusLease 不得反向引用 facade 或业务控制器，`ScreenshotControl.ts` 与其它 Toolbox 模块之间不得新增 import；facade 只通过冻结的 `window` API 委托 screenshot/BGM。事件计数门禁必须证明初始载入和每次 `pjax:success` 后，facade 的 toolbox document click/keyup/Pjax listener、标注 controller 的 mousedown/selectionchange/mark/toolbar/color click 与 main scroll listener 均不增长且没有同回调重复绑定；Share/Favorite/Persistence 不新增 document/window listener。
+依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`。同层控制器之间不得互相引用，Persistence/StatusLease 不得反向引用 facade 或业务控制器，`ScreenshotControl.ts` 与其它 Toolbox 模块之间不得新增 import；facade 只通过冻结的 `window` API 委托 screenshot/BGM。事件计数门禁必须证明初始载入和每次 `pjax:success` 后，facade 的 toolbox document click/keyup 及既有 `pjax:send/success` listener、标注 controller 的 mousedown/selectionchange/mark/toolbar/color click 与 main scroll listener 均不增长且没有同回调重复绑定；C 批次另行证明 `BgmControl.ts` 对 `pjax:send/error/success` 各只有一个 listener。Share/Favorite/Persistence 不新增 document/window listener。
 
 marker pipeline 模块职责如下：
 
@@ -997,7 +997,7 @@ marker pipeline 模块职责如下：
 
 #### 12.1.1 拆分边界与验证
 
-模块拆分本身只搬运实现，不改变既有对外行为；第 16.3 节明确列出的 `bgmControl.clearStatus(): void` 是唯一新增的公开方法，必须由 A 的 status adapter 与 C 的状态机按本文实现，除此之外不得顺手扩张 facade/API。`defaultPipeline` 仍是 `pipeline.js` 与 `meta-description.js` 通过普通 CommonJS 缓存共享的同一实例；对外可观察面逐项冻结如下，任一非规格化变化都视为破坏契约：
+A 批次的 pipeline 子模块以及标注/持久化/分享/收藏控制器拆分本身只搬运既有实现，不改变标注、分享或收藏的 DOM、storage key、事件集合、计时行为与可见结果；FavoriteController 不获得当前不存在的 timer。A 只为 C 引入 `ToolboxStatusLease.ts` 接线适配，`bgmControl.clearStatus(): void` 是唯一新增的公开方法。第 16.3 节的 BGM 状态机、共享 status lease 行为及 `pjax:error` 处理属于用户已要求的 C 批次 BGM/status 行为修复，明确不属于“纯搬运”，必须由独立行为门禁覆盖；除此之外不得顺手扩张 facade/API。`defaultPipeline` 仍是 `pipeline.js` 与 `meta-description.js` 通过普通 CommonJS 缓存共享的同一实例；对外可观察面逐项冻结如下，任一非规格化变化都视为破坏契约：
 
 | 冻结面 | 契约 |
 | --- | --- |
@@ -1036,22 +1036,22 @@ interface Window {
 }
 ```
 
-删除 `cards/hide.styl` 时不得整段删除共享导入。`themes/arknights/source/css/_modules/modules.styl` 当前的 `@import 'cards/*'` 必须替换为以下两个显式 import，二者缺一即视为 Alerts 或 LinkCard 样式回归：
+删除 `cards/hide.styl` 时不得整段删除共享导入，也不得留下只服务该旧规则的变量。`themes/arknights/source/css/_modules/modules.styl` 当前的 `@import 'cards/*'` 必须精确替换为以下两个显式 import，二者缺一即视为 Alerts 或 LinkCard 样式回归：
 
 ```styl
 @import 'cards/admonition'
 @import 'cards/link-card'
 ```
 
-显式 import 仍位于 `expand` 之前，保持现有模块顺序；删除后 `_modules/cards/` 只剩 `admonition.styl` 与 `link-card.styl`。
+显式 import 仍位于 `expand` 之前，保持现有模块顺序；删除后 `_modules/cards/` 只剩 `admonition.styl` 与 `link-card.styl`。同时从 `themes/arknights/source/css/_core/color/light.styl` 与 `dark.styl` 删除当前无其它消费者的 `--theme-hide`；`comments/gitalk.styl` 自己作用域内的 `.hide` 不属于旧 hide 卡片规则，继续保留。
 
 拆分验证：
 
 1. 文件规模门禁：`.temp/line-marker-pipeline.test.js` 逐个断言 `pipeline.js`、每个 `pipeline/*.js`、`environment.d.ts`、`Toolbox.ts`、`ToolboxAnnotationController.ts`、`ToolboxPersistence.ts`、`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts`、`BgmControl.ts`、`ScreenshotControl.ts` 与 `ProjectTooltip.ts` 均不超过 500 行；不能用目录总行数或仅检查 facade 代替逐文件断言，任一超限即失败。
 2. pipeline 依赖门禁：静态扫描子模块的 `require`，断言无子模块互引、无子模块反向引用 `pipeline.js`、无 Hexo/文件系统/网络依赖。
-3. Toolbox 依赖与事件门禁：静态扫描 `/// <reference path>`、`namespace ToolboxModules` 成员访问与 top-level import/export，只允许第 12.1.1 节列出的依赖边；运行探针在初次载入、关闭/打开 toolbox、标注、分享、收藏和连续 `pjax:success` 后核对各 owner 的 listener/observer/timer 数量，证明每个事件只由表中的唯一 owner 注册、没有表外 document/window/Pjax/main listener、没有同回调重复绑定，main scroll 也只注册一次，且 share/favorite timer 各自只有一个待清理句柄。
+3. Toolbox 依赖与事件门禁：静态扫描 `/// <reference path>`、`namespace ToolboxModules` 成员访问与 top-level import/export，只允许第 12.1.1 节列出的依赖边；运行探针在初次载入、关闭/打开 toolbox、标注、分享、收藏和连续 `pjax:success` 后核对各 owner 的 listener/observer/timer 数量，证明每个事件只由表中的唯一 owner 注册、没有表外 document/window/Pjax/main listener、没有同回调重复绑定，main scroll 也只注册一次。分享 controller 仍只有自身一个待清理 timer。C 批次的 BGM 门禁另外断言 `pjax:error` 只由 `BgmControl.ts` 处理一次，不能把该行为变更算作 A 的纯搬运。
 4. Toolbox 行为回归：`theme-ui-toolbox.test.js` 覆盖五项展开/关闭、标注增删/恢复/五色/复制/搜索、分享 copied、收藏 saved；`theme-ui-bgm.test.js`、`theme-ui-screenshot.test.js` 与 `project-tooltip.test.js` 分别回归 status lease、截图 generation 和项目悬停。拆分前后 DOM、storage key、公开 facade、全局 API 与可见行为必须一致。
-5. 样式导入回归：断言 `modules.styl` 不再含 `cards/*` 或 `cards/hide`，但精确含 `cards/admonition` 与 `cards/link-card`；编译后 `.admonition/.expand-box`、`.link-card`、`.link-background/.link-main/.link-title/.link-descr` 均命中，`.hide` 零命中。
+5. 样式导入回归：断言 `modules.styl` 不再含 `cards/*` 或 `cards/hide`，但精确含 `cards/admonition` 与 `cards/link-card`；编译后 `.admonition/.expand-box`、`.link-card`、`.link-background/.link-main/.link-title/.link-descr` 均命中。删除门禁只检查旧 cards 顶层 `.hide` 规则已消失且源码/产物中的 `--theme-hide` 零命中；不得做全局 `.hide` 零命中，`comments/gitalk.styl` 自己的 `.hide` 合法且必须保留。
 6. 全量行为回归：第 18.4 节矩阵在同一最终状态只跑一次，任何 marker DOM、projection、sidecar、Toolbox、status lease、截图或 BGM 断言差异都判定为契约破坏。
 7. 幂等与身份：`line-marker-registry.test.js` 断言 `pipeline.js` 导出的 `defaultPipeline` 与 `meta-description.js` 共享同一引用，且重复 `register` 不新增 filter。
 
@@ -1074,26 +1074,29 @@ before_post_render priority 4（markers before）
 → before_post_render priority > 4 的其它已注册阶段（当前 footnotes 为 10）
 → Markdown renderer（ctx.render.render）
 → onRenderEnd hook
-→ 内容阶段 execFilter('after_render:html', renderedContent, { context, args: [renderData] })
+→ Post#render 内部 execFilter('after_render:html', renderedContent, { context, args: [renderData] })；该字面名 store 通常为空
 → restoreComments / restoreCodeBlocks
 → after_post_render priority < 9 的其它已注册阶段（当前 spoiler 为 5）
 → after 9（markers after，priority 9）
 → after_post_render priority > 9（Hexo excerpt 10，以及 1100 的 alerts/terms/checkbox/lightgallery/pandoc/encrypt/meta-description/search）
 ```
 
-这里必须区分两个同源但不同作用域的 dispatch。Hexo 8.1.2 的 filter alias 把注册名 `after_render:html` 存入 `_after_html_render` store，但调用点与 payload 不同：
+Hexo 8.1.2 只在 `filter.register` 时把公共注册名 `after_render:html` 映射为内部 store 名 `_after_html_render`；`execFilter` 不会再次做这层映射：
 
-1. `Post#render -> Render#render` 在 `onRenderEnd` 之后执行 `execFilter('after_render:html', 内容 HTML, { args: [renderData] })`。这是 Post 内容阶段，位于 `after_post_render` 与 after 9 之前。
-2. 同一文档 build 在 Post 已物化后才进入 `createLoadThemeRoute`：`view.render(locals) -> injector.exec -> execFilter('_after_html_render', 完整页面 HTML, { args: [locals] }) -> route stream`。这是路由阶段，位于 after 9 之后。
+| 调用位置 | 实际查询的 store | 结果 |
+| --- | --- | --- |
+| 公共 API `filter.register('after_render:html', fn)` | `store._after_html_render` | 注册函数进入路由阶段使用的 store |
+| `Post#render -> Render#render` 的 `execFilter('after_render:html', 内容 HTML, ...)` | `store['after_render:html']` | 正常公共注册路径下该 store 为空，注册的 `_after_html_render` filter 不在这里执行；除非第三方直接改写内部 store |
+| 同一文档 build 的 `createLoadThemeRoute`：`view.render(locals) -> injector.exec -> execFilter('_after_html_render', 完整页面 HTML, ...)` | `store._after_html_render` | 公共 `after_render:html` 注册函数只在完整页面路由阶段执行，且位于 after 9 之后 |
 
-同一 filter 函数因 store alias 可能在一次完整 build 中先后处理“内容”和“完整页面”两次；探针必须按调用 payload 与调用点分别计数，不得把二者合并为一次，也不得写成“Post#render 从不 dispatch after_render:html”。拒绝语义固定如下：
+因此不得再写成“同一注册 filter 在内容阶段和路由阶段各执行一次”。真实探针必须使用公共 `register` API 验证：注册 spy 后 `store._after_html_render` 含该函数、`store['after_render:html']` 无公共注册函数；执行真实 `Post#render` 时 spy 计数仍为 0，随后真实 route 才使 spy 计数变为 1。拒绝语义固定如下：
 
 | 作用域 | 阶段 | 拒绝后果 |
 | --- | --- | --- |
-| Post 内容生命周期 | before 4 与 after 9 之间的任一阶段，即后续 `before_post_render`、renderer、`onRenderEnd`、内容 `after_render:html`、restore 或 `after_post_render` priority < 9 | `Post#render` 直接 reject，after 9 不执行；原异常向构建调用方传播；下一次同 data 的 before 4 先从 `carrier.originalField` 修复字段与 descriptor、清除旧 state，再执行新一轮 tokenization |
+| Post 内容生命周期 | before 4 与 after 9 之间的实际公共阶段，即后续 `before_post_render`、renderer、`onRenderEnd`、restore 或 `after_post_render` priority < 9 | `Post#render` 直接 reject，after 9 不执行；原异常向构建调用方传播；下一次同 data 的 before 4 先从 `carrier.originalField` 修复字段与 descriptor、清除旧 state，再执行新一轮 tokenization |
 | 路由生命周期 | `_after_html_render` | after 9 已完成，不得回写已物化的 `content`/`excerpt`、不得改写 occurrence 终态、不得生成 token/placeholder；filter 拒绝进入 route stream 错误路径，pipeline 不参与也不回滚字段 |
 
-before 4 先无正文读取地修复同 data 的旧 bridge/state，再调用第 12.6 节共享 encryption policy；只有 `public` 状态可以读取 content/excerpt 并建立 carrier。after 9 始终在 finally 恢复 bridge。内容生命周期持续拒绝会令 `Post#render` reject，不返回半成品。路由 stream 错误是否使 CLI 非零退出由第 12.2.1 节的 `--bail` 门禁判定，不能仅凭“发生了 filter throw”宣称默认构建已失败。
+before 4 先无正文读取地修复同 data 的旧 bridge/state，再调用第 12.6 节共享 encryption policy；只有 `public` 状态可以读取 content/excerpt 并建立 carrier。after 9 始终在 finally 恢复 bridge。Post 内容生命周期持续拒绝会令 `Post#render` reject，不返回半成品。路由 stream 错误是否使 CLI 非零退出由第 12.2.1 节的 `--bail` 门禁判定，不能仅凭“发生了 filter throw”宣称默认构建已失败。
 
 #### 12.2.1 构建失败语义与门禁
 
@@ -1101,13 +1104,13 @@ Hexo 8.1.2 的 `hexo generate` 默认不启用 `--bail`。`plugins/console/gener
 
 最终门禁必须区分三类信号：
 
-1. **Post/filter Promise 拒绝**：`before_post_render`、renderer、`onRenderEnd`、内容 `after_render:html` 或 `after_post_render` 的异常使 `Post#render` Promise reject；这不需要 `--bail` 才能传播，但 marker 内容 dispatch 拒绝仍必须证明 after 9 跳过与同 data 下一次修复。
+1. **Post/filter Promise 拒绝**：后续 `before_post_render`、renderer、`onRenderEnd` 或 `after_post_render` 的异常使 `Post#render` Promise reject；这不需要 `--bail` 才能传播。门禁使用 priority > 4 的真实 `before_post_render` 拒绝证明 after 9 跳过与同 data 下一次修复，不再伪造内容阶段 `after_render:html` filter 拒绝。
 2. **route stream 错误**：完整页面 `_after_html_render` 拒绝发生在 route data stream；最终生成命令固定使用 `hexo generate --bail`（脚本中以 `npx hexo generate --bail` 或逐字等价的根站点 `npm run build -- --bail` 执行），只有该命令非零退出才作为 route 失败的可靠构建证据。不得退回未加 bail 的根站点 `npm run build`。
 3. **artifact 完整性**：`--bail` 只保证 stream 错误传播，不证明 marker DOM、搜索 sidecar、版本、receipt 与禁止串正确。`line-marker-artifacts.js`、`marker-artifacts.js`、Alerts/LinkCard/Toolbox 等 post-build 探针仍为独立强制门禁；缺失、错配或语义回归即使进程退出 0 也必须失败。
 
-`.temp/line-marker-build-failure.test.js` 必须在隔离的最小 Hexo site 中用子进程真实执行 CLI：让同一 filter 仅在 payload 为 Post 内容时拒绝，证明有/无 bail 均使 `Post#render`/生成失败且 after 9 不执行，而路由 payload 正常通过；再让同一 filter 仅在 payload 为完整页面时拒绝，证明默认模式只记录并可能退出 0，而 `generate --bail` 必须非零。最后故意破坏一项预期 artifact，证明 artifact 探针独立非零。测试不得修改真实 `source/`、`public/` 或 `db.json`，也不得把 stderr 中出现 `Render HTML failed` 当作退出码证据。
+`.temp/line-marker-hexo.test.js` 必须执行上节真实 alias/store 探针。`.temp/line-marker-build-failure.test.js` 必须在隔离的最小 Hexo site 中用子进程真实执行 CLI，并以两个互不混淆的场景验证失败边界：先让 priority > 4 的 `before_post_render` filter 拒绝，证明有/无 bail 均使 `Post#render`/生成失败且 after 9 不执行；再通过公共 API 注册会在路由阶段执行的 `after_render:html` filter 并令其拒绝，证明默认模式只记录并可能退出 0，而 `generate --bail` 必须非零。最后故意破坏一项预期 artifact，证明 artifact 探针独立非零。测试不得修改真实 `source/`、`public/` 或 `db.json`，也不得把 stderr 中出现 `Render HTML failed` 当作退出码证据。
 
-第 15 节批次 D 必须把本作用域、alias 双 dispatch、`--bail` 命令和 artifact 分层同步进 AGENTS 活文档，不得继续沿用「路由 `after_render:html` 位于 after 9 之前」或「根站点默认 `npm run build` 吞错仍算构建失败」的旧表述。
+第 15 节批次 D 必须把注册 alias、Post 内容调用空 store、路由阶段实际执行、`--bail` 命令和 artifact 分层同步进 AGENTS 活文档，不得继续沿用「同一 filter 在内容与路由阶段执行两次」或「根站点默认 `npm run build` 吞错仍算构建失败」的旧表述。
 
 ### 12.3 block occurrence、坐标与 placeholder
 
@@ -1185,7 +1188,7 @@ bridge 安装顺序固定为：
 
 `data.markdown` bridge 不是全局 current carrier。Marked 15 singleton 可能在当前或下一次 parse 前短暂强引用 parse options；`processAllTokens` 一进入就在 `finally` 从当前 parse options 副本删除 `CARRIER_SYMBOL`，删除失败返回 `CARRIER_AUDIT_FAILED`。hook 退出后，Marked defaults hook options 与 renderer options 均不得再含本次 symbol；原始 `data.markdown` bridge 仍由 after 9 或下一次同 data before 恢复。
 
-后续 `before_post_render`、renderer、`onRenderEnd`、内容阶段 `after_render:html` 或任一 `after_post_render` priority < 9 的 filter 拒绝时，after 9 不执行，renderer 已产生的临时 HTML 不得交给页面或搜索。`Post#render` 原样 reject。若同一 post data 再次 render，下一次 before 4 必须先从 `carrier.originalField` 恢复所有原字段、按原 descriptor 恢复 bridge、清除 WeakMap state，再执行 encryption policy 和新一次 tokenization；不得沿用旧 occurrence、placeholder range 或 projection。内容生命周期持续拒绝不返回半成品。路由阶段 `_after_html_render` 位于 after 9 之后，其拒绝进入 route stream 错误路径，不回滚已物化字段，pipeline 不感知；最终生成命令是否非零退出按第 12.2.1 节 `--bail` 门禁判定。
+后续 `before_post_render`、renderer、`onRenderEnd` 或任一 `after_post_render` priority < 9 的 filter 拒绝时，after 9 不执行，renderer 已产生的临时 HTML 不得交给页面或搜索。`Post#render` 原样 reject。`Render#render` 虽调用字面名 `after_render:html`，但公共注册名已映射到 `_after_html_render`，该内容调用通常为空，不作为 marker pipeline 的拒绝边界。若同一 post data 再次 render，下一次 before 4 必须先从 `carrier.originalField` 恢复所有原字段、按原 descriptor 恢复 bridge、清除 WeakMap state，再执行 encryption policy 和新一次 tokenization；不得沿用旧 occurrence、placeholder range 或 projection。Post 内容生命周期持续拒绝不返回半成品。路由阶段 `_after_html_render` 位于 after 9 之后，其拒绝进入 route stream 错误路径，不回滚已物化字段，pipeline 不感知；最终生成命令是否非零退出按第 12.2.1 节 `--bail` 门禁判定。
 
 当前 bridge 支持边界只有 `dompurify` 缺省或显式 `false`，以及测试中可证明逐字 identity 的 sanitizer。`true`、自定义 sanitizer、未知 adapter 或任何会重排/改写 placeholder DOM 的配置，在字段改写前返回 `MARKDOWN_SANITIZER_UNSUPPORTED`；不得以关闭检查或事后修补继续。受控 `renderMarkdown` 同样只继承该已验证配置和 `sanitizeUrl:true`。
 
@@ -1199,7 +1202,7 @@ bridge 安装顺序固定为：
 | before 4 的 public `content` 或显式 string `excerpt` 源字段含 NUL | 不创建 carrier/token/occurrence/failure DOM/projection；所有源字段与 descriptor 保持 before 前值 | 是，传播 `UNEXPECTED_NUL`，当前字段/构建 fail-closed |
 | handler `render` 输出或 `toPlainText` projection 新生成 NUL | 丢弃该 handler 的全部结果，仅该 occurrence 输出 escaped `<pre>`、投影保存无 NUL 的 `normalizeLineEndings(raw)`，状态 `failed` | 否；仅后续字段审计失败时按下一层抛出 |
 | token collision/exhaustion、加密状态 ambiguous、bridge/field write/unsupported sanitizer 失败 | 恢复所有原字段和 descriptor，不创建可见 carrier | 是，传播稳定错误码 |
-| 后续 `before_post_render`、renderer、`onRenderEnd`、内容 `after_render:html`、`after_post_render` priority < 9 拒绝 | after 9 不执行；`Post#render` 异常传播，页面无输出；同 data 重试先修复 | 是 |
+| 后续 `before_post_render`、renderer、`onRenderEnd`、`after_post_render` priority < 9 拒绝 | after 9 不执行；`Post#render` 异常传播，页面无输出；同 data 重试先修复。`Render#render` 对字面名 `after_render:html` 的调用不作为公共注册 filter 的拒绝边界 | 是 |
 | 路由阶段 `_after_html_render` 拒绝 | 位于 after 9 之后，不回滚已物化字段；转为 route stream 错误，pipeline 不参与 | 是（route stream）；CLI 失败须由 `generate --bail` 证明 |
 | placeholder 数量/范围/metadata/内部串/终态审计失败 | 当前字段使用安全字段 fallback，所有未终态 occurrence 标 `failed`，恢复 bridge | 是，传播 `PLACEHOLDER_AUDIT_FAILED` 或 `PIPELINE_AUDIT_FAILED` |
 | `renderMarkdown`/`markdownToPlainText` 单枚失败 | 整枚回退，不保留已成功 render 的部分 DOM | 否；若造成字段级审计失败则按上一行抛出 |
@@ -1344,7 +1347,7 @@ content/excerpt/description 契约：
 | `themes/arknights/scripts/tags/code-editor.js` | 删除，由 Editor handler 取代 |
 | `themes/arknights/scripts/tags/link-card.js` | 删除，由 LinkCard handler 取代 |
 | `themes/arknights/scripts/tags/admonition.js` | 删除，由 Alerts handler 取代 |
-| `themes/arknights/source/css/_modules/cards/hide.styl` 与 `modules.styl` 的 `@import 'cards/*'` | 删除 hide 文件并把通配替换为显式 `cards/admonition`、`cards/link-card` imports；`.hide` 只服务被删除 tag，最终 `arknights.css` 因此变化，B 批次必须递增 `cssVersion` |
+| `themes/arknights/source/css/_modules/cards/hide.styl`、`modules.styl` 的 `@import 'cards/*'` 与 light/dark 的 `--theme-hide` | 删除 hide 文件与两个无消费者变量，把通配精确替换为显式 `cards/admonition`、`cards/link-card` imports；旧 cards 顶层 `.hide` 只服务被删除 tag，但 Gitalk 自己的 `.hide` 保留。最终 `arknights.css` 因此变化，B 批次必须递增 `cssVersion` |
 | `themes/arknights/scripts/markers/handlers/projects.js` | 删除，由 `project.js` 取代 |
 | 旧 `[#]<NAME>{...}` grammar | 删除，不保留读取分支 |
 | `themes/arknights/scripts/markers/sentinel.js` | 删除；连续 Project 归入 pipeline block 分组 |
@@ -1397,19 +1400,19 @@ content/excerpt/description 契约：
 
 | 批次 | 原子范围 | 独立门禁 | 建议提交信息 |
 | --- | --- | --- | --- |
-| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`、Toolbox facade/标注/持久化/分享/收藏/StatusLease 拆分与 BGM status adapter、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；逐模块 ≤500 行、依赖/事件所有权；Toolbox/BGM/截图回归；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
-| B | 删除四个旧 tag、`hide.styl`、旧 Project handler/分组模块/死代码；把 `modules.styl` 的 `cards/*` 替换为显式 admonition/link-card imports；README 与 AGENTS 本地定制地图/删除清单/缓存版本同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中；最终 CSS 保留 `.admonition/.link-card`、不再含 `.hide` 且 `cssVersion` 已递增 | `refactor(tags): 删除旧标签并同步内容文档` |
-| C | GitHub Alert、导航、BGM 修复（含 `retireOperation`，复用 A 的 `ToolboxStatusLease` adapter）；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/retire 终态/mediaFailed/MutationObserver lease、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
-| D | 最终门禁与 AGENTS 验证矩阵/当前版本/双 dispatch 生命周期/`--bail` 构建失败语义收口，不再引入功能 | 第 18 节 source/unit（含 ownership/build-failure）→ `hexo generate --bail` → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
+| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`、Toolbox facade/标注/持久化/分享/收藏/StatusLease 拆分与 BGM status adapter、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；逐模块 ≤500 行、依赖/事件所有权；标注/分享/收藏拆分前后行为一致；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
+| B | 删除四个旧 tag、`hide.styl`、light/dark 的无消费者 `--theme-hide`、旧 Project handler/分组模块/死代码；把 `modules.styl` 的 `cards/*` 精确替换为显式 admonition/link-card imports；README 与 AGENTS 本地定制地图/删除清单/缓存版本同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中；最终 CSS 保留 `.admonition/.link-card`，旧 cards 顶层 `.hide` 与 `--theme-hide` 零命中（Gitalk 自身 `.hide` 允许保留），`cssVersion` 已递增 | `refactor(tags): 删除旧标签并同步内容文档` |
+| C | GitHub Alert、导航、BGM 修复（含 `retireOperation`、`pjax:error` 生命周期与共享 status，复用 A 的 `ToolboxStatusLease` adapter）；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/retire 终态/mediaFailed/MutationObserver lease、三个 Pjax 事件、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
+| D | 最终门禁与 AGENTS 验证矩阵/当前版本/filter 注册 alias 与路由生命周期/`--bail` 构建失败语义收口，不再引入功能 | 第 18 节 source/unit（含 ownership/build-failure）→ `hexo generate --bail` → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
 
 #### AGENTS 活文档待更新范围
 
 本次文档提交不改 `AGENTS.md`；实施各批次必须按以下范围同步，不能只在提交说明中口头修正：
 
-1. **Architecture / Hexo 生命周期**：把旧“renderer → onRenderEnd → `after_render:html` → after 9”一类混合表述拆为两个 dispatch；写明内容 `Post#render/Render#render` 的 `after_render:html` 位于 after 9 前、拒绝会跳过 after 9 并要求同 data 下一次 before 4 修复；完整页面路由 `_after_html_render` 位于 after 9 后、只形成 route stream 错误。补充二者因 Hexo filter alias 可执行同一函数但 payload/调用点不同。
+1. **Architecture / Hexo 生命周期**：写明公共 `filter.register('after_render:html', fn)` 在注册时把函数存入 `_after_html_render` store；`Post#render -> Render#render` 随后执行的 `execFilter('after_render:html')` 查询的是通常为空的字面名 store，不执行该公共注册 filter；只有 after 9 已完成后的完整页面路由 `execFilter('_after_html_render')` 才执行它并形成 route stream 错误。Post 内容的 after 9 前拒绝边界只列实际公共阶段（后续 `before_post_render`、renderer、`onRenderEnd`、restore、`after_post_render` priority < 9），不得再记录内容/路由双 dispatch。
 2. **Architecture / 构建失败语义**：记录默认 `hexo generate` 不启用 bail 可能记录并吞掉 route stream error；最终门禁固定 `hexo generate --bail` 或等价命令，post-build artifact 完整性仍是独立门禁，三类失败信号不得混写。
-3. **Source Tree / Toolbox 模块树**：登记 `environment.d.ts` 的 `clearStatus(): void` 契约、`Toolbox.ts` facade、`ToolboxAnnotationController.ts`、`ToolboxPersistence.ts`、`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts` 及 pipeline 四子模块；写明每个文件 ≤500 行、依赖方向、事件唯一 owner 与 Pjax 不重复绑定契约。
-4. **本地定制地图 / 样式导入**：删除旧 `.hide` 条目时，记录 `modules.styl` 从 `cards/*` 改为显式 `cards/admonition` 与 `cards/link-card`，并把 Alerts/LinkCard 编译产物回归列入门禁。
+3. **Source Tree / Toolbox 模块树**：登记 `environment.d.ts` 的 `clearStatus(): void` 契约、`Toolbox.ts` facade、`ToolboxAnnotationController.ts`、`ToolboxPersistence.ts`、`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts` 及 pipeline 四子模块；写明每个文件 ≤500 行、依赖方向、事件唯一 owner、FavoriteController 无 UI timer，以及 A 的既有 `pjax:send/success` 纯搬运与 C 的 BGM `pjax:send/error/success` 行为修复边界。
+4. **本地定制地图 / 样式导入**：删除旧 `.hide` 条目时，记录 `modules.styl` 从 `cards/*` 精确改为显式 `cards/admonition` 与 `cards/link-card`，并记录 light/dark 的 `--theme-hide` 同步删除；门禁保留 Alerts/LinkCard 编译产物，只要求旧 cards 顶层 `.hide` 与 `--theme-hide` 零命中，不误伤 Gitalk 自己的 `.hide`。
 5. **缓存版本**：按第 15 节递增链更新当前值，最终固定 `cssVersion=20260955`、`jsVersion=20260952`；artifact 探针必须核对 meta-data/js-data 与 public 查询串一致。
 6. **Verification / 测试命令**：保留九个既有 `marker-*.test.js`，加入本节全部 `line-marker-*`、Toolbox/BGM/截图/ProjectTooltip、ownership/build-failure、Alerts/Nav、artifact 与 smoke 探针；最终生成命令写为 `TZ=Asia/Shanghai hexo generate --bail`（Windows 脚本等价设置 `$env:TZ` 后执行 `npx hexo generate --bail`），不得继续记录未加 bail 的根站点 `npm run build` 为最终失败门禁。
 7. **Conventions / ownership fixture**：记录 synthetic/browser receipt 文件、外层生成并传入的 nonce、install `--nonce`/remove `--expected-nonce`、receipt 传播、跨进程 remove、nonce/receipt 不匹配保留作者文件，以及 Ctrl+C/硬中断后的恢复命令；`.temp/` 仍不提交。
@@ -1419,7 +1422,7 @@ content/excerpt/description 契约：
 1. A 在同一 commit 内完成五 handler、完整 allowlist、自动注册、控制器/样式和现有 source 迁移；A 之前不修改任何当前活动 lexer/parser/pipeline，也不预注册空 registry。不得把 A 拆成可构建但不完整的提交。
 2. A/B/C/D 必须分别在上表原子范围内完成上节 AGENTS 同步；任何批次都不得把旧 Hexo 生命周期、默认 build 失败语义、旧 Toolbox 单文件职责或 `cards/*` 导入继续留作“最终事实”。
 3. A 修改 `MonacoEditor.ts`、`Expands.ts`、`environment.d.ts`、`BgmControl.ts` 的 status adapter、六个 Toolbox 模块、Alerts/LinkCard/Editor 样式与产物，因此把 `jsVersion` 从 `20260950` 递增到 `20260951`，把 `cssVersion` 从 `20260952` 递增到 `20260953`。
-4. B 删除 `themes/arknights/source/css/_modules/cards/hide.styl`，并把 `themes/arknights/source/css/_modules/modules.styl` 的 `@import 'cards/*'` 替换为显式 admonition/link-card imports；最终 `arknights.css` 因此发生字节变化，必须把 `cssVersion` 从 `20260953` 递增到 `20260954`，即使本批不新增视觉规则；B 不改 JS 产物，`jsVersion` 保持 `20260951`。
+4. B 删除 `themes/arknights/source/css/_modules/cards/hide.styl`，并从 `themes/arknights/source/css/_core/color/light.styl`、`dark.styl` 删除无消费者的 `--theme-hide`；同时把 `themes/arknights/source/css/_modules/modules.styl` 的 `@import 'cards/*'` 精确替换为显式 admonition/link-card imports，不得整段删除共享导入。最终 `arknights.css` 因此发生字节变化，必须把 `cssVersion` 从 `20260953` 递增到 `20260954`，即使本批不新增视觉规则；B 不改 JS 产物，`jsVersion` 保持 `20260951`。
 5. C 修改 `BgmControl.ts` 和主题 Stylus，因此把 `jsVersion` 从 `20260951` 递增到 `20260952`，把 `cssVersion` 从 `20260954` 递增到 `20260955`。
 6. D 不修改浏览器 CSS/JS 产物，不递增对应版本；最终值为 `cssVersion=20260955`、`jsVersion=20260952`。
 7. 缓存版本递增机制不变：CSS 产物改 `themes/arknights/layout/includes/meta-data.pug` 的 `cssVersion`，JS 产物改 `themes/arknights/layout/includes/js-data.pug` 的 `jsVersion`；`marker-artifacts.js` 必须断言最终 `arknights.css?v=` 与 `arknights.js?v=` 命中上述最终值，命中旧值即失败。
@@ -1568,7 +1571,7 @@ enterFailed(reason, token)
 | 任意状态 | 原生 `error` 或 `reconcile` 发现当前 `audio.error !== null` | 以该 listener/reconcile 的 `M`/`L` 调用 `enterFailed("audio-error", token)` | `failed` |
 | 任意状态 | 一个 `pjax:send`、`pjax:error` 或 `pjax:success` dispatch | 该 handler 恰好调用一次 `L=invalidateLifecycle(eventType)`；健康时按 `audio.paused` 重算 `playing/paused` 并以 `L` reconcile，若 `mediaFailed` 或 `audio.error` 为真则以同一 `L` 调用 `enterFailed("pjax-"+eventType, L)` | 对应实况状态 |
 
-三个 Pjax 事件各自是一次独立 dispatch：每次 `invalidateLifecycle()` 恰好令 `lifecycleGeneration` 增加 1、调用 `invalidateStatusLease()` 1 次并重绑 persistent listener 1 次，且自身不改变 `operationGeneration`。只有该 dispatch 随后实际进入 `enterFailed(..., L)` 时，`advanceOperationGeneration()` 才额外增加 operation 1 次；健康路径的 operation 增量为 0。一次 `send → error → success` 序列固定产生 3 次 lifecycle 失效，不得因重复注册、媒体回调或 reconcile 产生第 2 次同 dispatch lifecycle 失效。Pjax 始终保留区外唯一 `audio#bgm` 的实况播放状态与 `mediaFailed`，success 只按新 `L` 对应的实况 reconcile。
+三个 Pjax 事件各自是一次独立 dispatch；其中新增 `pjax:error` 处理以及下述 generation/status 变化均属于 C 批次用户已要求的 BGM/status 行为修复，不归入 A 的控制器纯搬运。每次 `invalidateLifecycle()` 恰好令 `lifecycleGeneration` 增加 1、调用 `invalidateStatusLease()` 1 次并重绑 persistent listener 1 次，且自身不改变 `operationGeneration`。只有该 dispatch 随后实际进入 `enterFailed(..., L)` 时，`advanceOperationGeneration()` 才额外增加 operation 1 次；健康路径的 operation 增量为 0。一次 `send → error → success` 序列固定产生 3 次 lifecycle 失效，不得因重复注册、媒体回调或 reconcile 产生第 2 次同 dispatch lifecycle 失效。Pjax 始终保留区外唯一 `audio#bgm` 的实况播放状态与 `mediaFailed`，success 只按新 `L` 对应的实况 reconcile。
 
 `mediaFailed` 只在 `enterFailed(reason, token)` 中置为 `true`，且该函数必须与 `playbackState = "failed"` 同步完成。唯一清除点是 `failed` 用户重试中的当前 `O` 所对应 `load()` 正常返回：必须先清零再以同一 `O` 调用 `play()`；随后 play resolve 保持 `false`，play reject、pause 抛错或任何绑定当前 token 的新 `error` 立即通过 `enterFailed(reason, token)` 重新置为 `true`。初始化、pause、普通 `play()`、Pjax success、status timer 和 DOM reconcile 都不得清零。只有 `failed` toggle 才执行 `load()`；普通 `paused -> starting` 不重载媒体。所有旧 operation/lifecycle 的 resolve、reject、media callback 与 Pjax continuation 都不得修改 `mediaFailed`、状态、status、timer 或 `aria-busy`。
 
@@ -1683,8 +1686,8 @@ timer callback / clearStatus()
 | Marked block | `start(src.slice(1))` 不 `+1`、严格整行 tokenizer、custom block 非 paragraph、renderer 精确 placeholder、`processAllTokens`/`walkTokens`/symbol finally 清理 |
 | placeholder | 每 token 恰一精确 DOM/range、无未拥有 namespace、顺序/重叠/替换审计；`sourceRange` 切 HTML 必须失败 |
 | bridge | 无 own property、accessor 零调用、unsupported value、descriptor/spread/define Proxy、已有 descriptor flags/value 深比较、原子回滚 |
-| render 拒绝/重试 | 用真实 `Post#render`/`Render#render` 逐阶段注入拒绝：后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、内容阶段 `after_render:html`、`after_post_render`（priority < 9，当前 spoiler）各注入一次；断言 `Post#render` reject、after 9 未执行、临时 `data.content` 未被交出。同一 post data 再次 render 时，下一次 before 4 先从 `carrier.originalField` 修复字段值与 descriptor、清除旧 state 后重新 tokenization，旧 carrier/occurrence/placeholder range/projection 均不复用。真实 route 的 `_after_html_render` 拒绝另由 after 9 已完成、字段不回滚、route stream error 三项断言，并由 build-failure probe 证明 `--bail` 非零 |
-| 生命周期顺序 | 同一 spy filter 注册名固定为 `after_render:html`，并断言 Hexo store alias 为 `_after_html_render`。事件轨迹必须精确为 `before4 -> before>4 -> renderer -> onRenderEnd -> content after_render:html -> restore -> after_post<9 -> after9 -> after_post>9`，随后真实 `createLoadThemeRoute`/route stream 再出现 `full-page _after_html_render`；两次调用分别断言 payload 是内容 HTML 与完整页面 HTML，不得断言 Post#render 不调用 `after_render:html`，也不得把两次调用合并为一次。另断言 priority < 9 的 spoiler 先于 after 9、core excerpt 10 后于 after 9 |
+| render 拒绝/重试 | 用真实 `Post#render`/`Render#render` 对实际公共阶段逐项注入拒绝：后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、`after_post_render`（priority < 9，当前 spoiler）各注入一次；断言 `Post#render` reject、after 9 未执行、临时 `data.content` 未被交出。不得把 `Render#render` 对空字面名 store 的 `after_render:html` 调用伪装成公共 filter 拒绝。同一 post data 再次 render 时，下一次 before 4 先从 `carrier.originalField` 修复字段值与 descriptor、清除旧 state 后重新 tokenization，旧 carrier/occurrence/placeholder range/projection 均不复用。真实 route 的 `_after_html_render` 拒绝另由 after 9 已完成、字段不回滚、route stream error 三项断言，并由 build-failure probe 证明 `--bail` 非零 |
+| Hexo filter alias/store | 使用公共 API 注册唯一 spy：`register('after_render:html', spy)` 后，断言 `filter.store._after_html_render` 精确含 spy，`filter.store['after_render:html']` 不含该公共注册函数。真实 `Post#render` 仍执行自己的 `execFilter('after_render:html')` 调用，但因字面名 store 通常为空，spy 计数必须为 0；随后真实 `createLoadThemeRoute` 执行 `execFilter('_after_html_render')`，spy 才精确调用 1 次且 payload 为完整页面 HTML。不得再要求同一 spy 在内容与路由阶段各调用一次。另断言 priority < 9 的 spoiler 先于 after 9、core excerpt 10 后于 after 9 |
 | sanitizer | 缺省/false/逐字 identity 通过；true/自定义改写 placeholder 在字段改写前失败 |
 | AI | 四态、可选 text、content/excerpt ID namespace、path hash、键盘 focus、tooltip/投影、错误恢复 |
 | Project | 页面/URL 注入、只按 sourceRange 恰好一个 CRLF/CR/LF 分组、失败/文本/空行 flush、投影 LF、Pjax 绑定 |
@@ -2007,7 +2010,7 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | `line-marker-registry.test.js` | 五 handler 注册与受控接口 | 无；source/unit |
 | `line-marker-handlers.test.js` | Alerts/Editor/LinkCard 三类 DOM/投影、LinkCard ABNF/descr 三态、失败恢复 | 内存 Hexo HTML；不读取 public |
 | `line-marker-pipeline.test.js` | occurrence、Project 分组、fallback、projection；第 12.1.1 节模块规模与依赖门禁 | 内存 Hexo；不读取 public |
-| `line-marker-hexo.test.js` | 真实 `Post#render`/内容 `after_render:html` 拒绝与修复、真实 route `_after_html_render` 顺序；Alerts/Editor/LinkCard 三类终态 | 内存 source→内容 HTML→route stream |
+| `line-marker-hexo.test.js` | 真实 `filter.register` alias/store、Post 内容空 store 与 route `_after_html_render` 单次执行；Post 实际公共阶段拒绝与修复；Alerts/Editor/LinkCard 三类终态 | 内存 source→内容 HTML→route stream |
 | `line-marker-fixture-ownership.test.js` | receipt/nonce 跨进程；install 成功/失败/中断；目标篡改与作者文件保护 | 隔离 `.temp` 子进程沙箱；不读真实 public |
 | `line-marker-build-failure.test.js` | Post/filter reject、route stream 默认吞错与 `--bail` 非零、artifact 独立失败 | 隔离最小 Hexo site 子进程 |
 | 九个旧 `marker-*.test.js` | 既有 AI/Project/carrier/search 行为按 block-only 回归 | 无；source/unit |
@@ -2081,9 +2084,9 @@ BROWSER_RECEIPT   = ".temp/line-marker-browser-fixture.ownership.json"
 6. 桌面导航 active 不引发布局位移，移动端布局不回归。
 7. BGM 的 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed`、operation/lifecycle token、`retireOperation` 终态 retire 与 listener 归零、共享 status lease、toolbox 与 Pjax 状态机全部通过。
 8. document-private search sidecar、加密空投影、缓存自愈和 fail-closed 行为保持有效。
-9. 第 12.1.1 节拆分完成：`pipeline.js` 与四个子模块，以及 `environment.d.ts`、`Toolbox.ts`、标注/持久化、分享/收藏控制器、`ToolboxStatusLease.ts` 均逐文件 ≤500 行；依赖方向、事件唯一 owner、Pjax 重绑与全部既有行为回归通过，导出 API、注册 identity 与产物契约不变。
+9. 第 12.1.1 节拆分完成：`pipeline.js` 与四个子模块，以及 `environment.d.ts`、`Toolbox.ts`、标注/持久化、分享/收藏控制器、`ToolboxStatusLease.ts` 均逐文件 ≤500 行；依赖方向、事件唯一 owner、既有 `pjax:send/success` 重绑与标注/分享/收藏行为回归通过；C 的 BGM `pjax:error`/status 行为修复另有独立门禁，导出 API、注册 identity 与产物契约不变。
 10. 捕获层 `raw`/`sourceRange` 逐字保留 CR/CRLF；恢复层 handler 字段、最终 `content`/`excerpt`、失败 DOM 与所有 projection 一律 LF 化且不含 U+000D，两层测试分别断言。
-11. 内容 `after_render:html` 拒绝确实跳过 after 9 并由同 data 下一次 before 4 修复；路由 `_after_html_render` 发生在 after 9 后并形成 route stream 错误。最终构建使用 `--bail`，未把默认 generate 的可能吞错或日志文本当作失败证据。
+11. 公共 `after_render:html` 注册在 alias/store 探针中只进入 `_after_html_render`：真实 `Post#render` 的字面名调用不执行该 spy，真实 route 才执行一次；Post 内容的 after 9 前实际公共 filter 拒绝确实跳过 after 9 并由同 data 下一次 before 4 修复，路由 `_after_html_render` 拒绝只形成 route stream 错误。最终构建使用 `--bail`，未把默认 generate 的可能吞错或日志文本当作失败证据。
 12. synthetic/browser fixture 的 receipt、外层 nonce、final/staging/public 身份与跨进程 cleanup 全部通过；expected nonce 或 receipt 不匹配的作者文件逐字保留，安装成功、失败、中断与并发冲突路径均可诊断且无本轮残留。
 13. A 至 D 均有独立测试、审查和 commit；A 的 handler、注册、控制器和内容迁移保持原子，均未 push。
 14. AGENTS 的 Source Tree、Architecture、本地定制地图、当前版本和 Verification 命令已按第 15 节范围同步，不再保留旧生命周期、默认 build 失败语义或旧 Toolbox 单模块表述。
@@ -2105,7 +2108,7 @@ BROWSER_RECEIPT   = ".temp/line-marker-browser-fixture.ownership.json"
 | 加密文档意外读取正文 | 加密空 sidecar、字段 getter 计数、render count 与搜索输出回归 |
 | vendored 主题同步覆盖本地实现 | 修改点集中在 handler、控制器、局部 Stylus 和 README；同步上游时按本规格逐项复核 |
 | `pipeline.js` / `Toolbox.ts` 继续膨胀或事件归属漂移 | 第 12.1.1 节冻结模块树：pipeline 四子模块；Toolbox facade、标注/持久化、分享/收藏与 StatusLease；逐文件 ≤500 行、依赖方向、事件唯一 owner、Pjax 计数和全量行为回归均为门禁 |
-| 内容 `after_render:html` 与路由 `_after_html_render` 被混为一个阶段 | 分别记录 Post 内容 dispatch 与完整页面 route dispatch；前者拒绝触发 after 9 跳过/重试修复，后者只形成 route stream 错误并由 `--bail` 门禁判定 |
+| Hexo filter alias 被误判为内容/路由双 dispatch | 真实探针断言 `register('after_render:html')` 只进入 `_after_html_render` store；Post 内字面名调用不执行公共注册 filter，route 的 `_after_html_render` 才执行一次。Post 拒绝边界改用实际公共 filter，route 失败仍由 `--bail` 门禁判定 |
 | 默认 generate 吞掉 route stream 错误却被误报为失败或成功 | 最终命令固定 `hexo generate --bail`，另跑独立 artifact 完整性门禁；不以日志替代退出码，也不以退出码替代 artifact |
 | fixture cleanup 覆盖作者文件或跨进程中断后无法回收 | 外层 nonce + exclusive-create receipt 传播到 staging/source/public；新进程 remove 同时校验 expected nonce 与 receipt；成功/失败/硬中断/并发/篡改子进程探针与人工恢复流程 |
-| 删除 hide 时误删共享 cards 样式 | `modules.styl` 的 `cards/*` 精确替换为 `cards/admonition` 与 `cards/link-card`；编译产物对两类 selector 与 `.hide` 零命中分别门禁 |
+| 删除 hide 时误删共享 cards 样式或误伤 Gitalk | `modules.styl` 的 `cards/*` 精确替换为 `cards/admonition` 与 `cards/link-card`，light/dark 的 `--theme-hide` 同步删除；门禁只要求旧 cards 顶层 `.hide` 与 `--theme-hide` 零命中，并显式允许 Gitalk 自己的 `.hide` |
