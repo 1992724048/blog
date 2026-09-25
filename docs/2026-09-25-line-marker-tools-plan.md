@@ -570,6 +570,10 @@ function test_toolbox_dependency_edges() {
     const text = fs.readFileSync(path.join(includeDir, name), 'utf8')
     assert.ok(text.includes('/// <reference path="ToolboxStatusLease.ts" />'),
       `${name} must declare its dependency on the shared status lease`)
+    // 调用形态约束：实现须与 A1-4 / A1-5 的计划片段同形——`{ owner: '…' }` 字面量与
+    // `claimStatus(` 处于**同一调用内**，且 message 实参表达式内不得含 `)`（否则 `[^)]*`
+    // 会在该 `)` 处提前截断而误报）。share 为单行 `claimStatus(button.dataset.labelCopied || '',
+    // { owner: 'share' })`；favorite 为三元换行但同样不含 `)`，两者都在 `[^)]*` 的匹配范围内。
     assert.match(text, /claimStatus\([^)]*\{ owner: '(share|favorite)' \}\)/,
       `${name} must write the shared status through claimStatus with its own owner token`)
     assert.ok(!stripComments(text).includes('.toolbox-status'),
@@ -764,7 +768,7 @@ declare namespace ToolboxModules {
 }
 ```
 
-`closeColors()` 是 `onDocumentClick` 的唯一下沉入口，`dismissPendingSelection()` 承接基线 `applyState(false)` 的 `this.pendingRange = null`（关闭工具箱时丢弃待标注选区）；`refreshToolbarButtons()` 承接基线 `Toolbox.ts:345-356`（只读 `annotateToolbar` 并调用 `selectionRange` / `isAnnotating` / `hideToolbar` / `updateToolbarButtons`，四个依赖全是标注内部），因此它**归 `ToolboxAnnotationController`、不是 facade 成员**——显式登记以免拆分时被当成死代码丢掉；它的三个调用点（基线 `:647` / `:654` / `:661` / `:691`，`annotateSelection` 与 `clearSelectionHighlights` 内部）同样随之搬迁。四者都不新增 listener，也不由 facade 触碰标注内部状态。
+`closeColors()` 是 `onDocumentClick` 的唯一下沉入口，`dismissPendingSelection()` 承接基线 `applyState(false)` 的 `this.pendingRange = null`（关闭工具箱时丢弃待标注选区）；`refreshToolbarButtons()` 承接基线 `Toolbox.ts:345-356`（只读 `annotateToolbar` 并调用 `selectionRange` / `isAnnotating` / `hideToolbar` / `updateToolbarButtons`，四个依赖全是标注内部），因此它**归 `ToolboxAnnotationController`、不是 facade 成员**——显式登记以免拆分时被当成死代码丢掉；它的四处调用点（基线 `:647` / `:654` / `:661` / `:691`，`annotateSelection` 与 `clearSelectionHighlights` 内部）同样随之搬迁。四者都不新增 listener，也不由 facade 触碰标注内部状态。
 
 - [ ] **A1-7 新建 `ToolboxStatusLease.ts`**：共享 `.toolbox-status` 的 `statusGeneration` / token / `MutationObserver` / 唯一 timer，只提供规格第 16.3 节的 lease API。A 阶段落**最小实现**（写 `textContent` / `hidden = false` + 记 `owner`，**零 timer、零 observer**），C3-2 在同一 lease 上叠加 timer + `MutationObserver` 与 `retireOperation` / `invalidateLifecycle` 集成；A1 同时固定签名、`StatusLease` 形状与「A 结束后 `BgmControl.ts` 仍只有既有唯一 `pjax:success`（`syncButton`）listener」这条边界：
 
@@ -1633,6 +1637,8 @@ const projectGridHelpers = Object.freeze({ isAdjacent, escapeHtmlText })
 
 before 4 的加密判定改为调用共享 policy：`inspectSearchEncryption(data, hexoConfig.encrypt)`，`public` 才 tokenization，`ambiguous` 在读取正文前抛 `ENCRYPTION_STATE_AMBIGUOUS`。
 
+before 4 同时新增**显式 excerpt 字段的 fail-closed 校验**：frontmatter 有 own `excerpt` 但值不是 string 时，**在读取正文（`data.content`）之前**抛 `INVALID_EXCERPT_FIELD`，并把该字段恢复到入口原值（不输出半成品、允许同 data 重试）。这替代当前 `pipeline.js:51-64` `collectSourceFields` 第 57-62 行的「静默忽略」行为——`Object.hasOwn(data, 'excerpt')` 命中但 `typeof excerpt !== 'string'` 时既不入 fields 也不报错，导致非法 excerpt 被原样带进 `data.excerpt`。错误码归属不变：实现落在 A2-18，断言落在 A2-23 的 `test_invalid_excerpt_field_is_fail_closed`（见第 13.4 节错误码归属表，`line-marker-hexo.test.js` 仍只负责这 2 条）。
+
 - [ ] **A2-19 启用 `.temp/line-marker-pipeline.test.js` 的 pipeline 段**（追加并把 `test_pipeline_submodule_size()` 加入执行序列）：
 
 ```js
@@ -1904,7 +1910,7 @@ U+0000 在本模块中一律由 `String.fromCharCode(0)` 构造并注入，不�
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { JSDOM } = require('jsdom')
+const { JSDOM, VirtualConsole } = require('jsdom')
 const Hexo = require('hexo')
 const root = path.resolve(__dirname, '..')
 const {
@@ -1948,28 +1954,42 @@ function installCounters(handler, counts) {
 }
 
 // 真实 `Post#render` 执行 helper（可运行骨架）：隔离 Hexo 实例 + `register.js` 自动注册 + 真实渲染。
-// 可复用片段取自 `.temp/marker-hexo-integration.test.js`：第 26-30 行（`new Hexo(root, { silent: true })`
-// 后 `await hexo.init()`，注册由 `register.js` 自动完成，init 后不得再调 `registerMarkerFilters`）与
-// 第 425-462 行（在 `after_post_render` priority 8 读 `data.markdown[CARRIER_SYMBOL]`，再取
-// `getOccurrences()` 快照 `{ name, state }`）。每次调用 new 一个新实例并在 finally 里 `exit()`，
-// 因此同一进程内多次渲染互不共享 carrier 与 pipeline。
+// 可复用片段取自 `.temp/marker-hexo-integration.test.js` 第 26-30 行（`new Hexo(root, { silent: true })`
+// 后 `await hexo.init()`，注册由 `register.js` 自动完成，init 后不得再调 `registerMarkerFilters`）。
+// 出处更正：`.temp/marker-hexo-integration.test.js` 第 425-462 行是**显式 excerpt 字段**的
+// `getOccurrenceByToken` 观察（核对 excerpt occurrence 的 `field` / `state`），**不是**本 helper
+// 在 priority 8 留存 carrier 这一用法的先例；下面的时序依据来自规格第 12.5 节的终态迁移规则
+// 与实跑结论，不来自该段。
+//
+// 时序依据（终态快照必须在 `Post#render` resolve 之后取，不能在 filter 内取）：
+//   1. occurrence 的终态迁移只发生在 after 9（规格 §12.5）。`after_post_render` priority 8
+//      早于 after 9，此刻读到的 occurrence 全部仍是 `pending-markdown`。
+//   2. after 9 已移除 `data.markdown` 的 carrier descriptor，因此 priority ≥ 10 再读
+//      `data.markdown[CARRIER_SYMBOL]` 会抛 `TypeError: ... 'Symbol(arknights.markerCarrier)'`。
+// 所以 filter 内**只留存 carrier 引用**（实现为闭包数组 `retainedCarriers`，一次渲染恰好
+// push 一次）、既不 map 也不断言；等 `Post#render` resolve 之后再对留存引用 map 出
+// `{ name, state }`，断言（`failed: 1 / consumed: 4`）也在该处执行。
+// 每次调用 new 一个新实例并在 finally 里 `exit()`，因此同一进程内多次渲染互不共享
+// carrier 与 pipeline。
 async function renderMemoryFixture(source) {
   const counts = { render: 0, toPlainText: 0 }
   const restoreCounters = installCounters(alertsHandler, counts)
   const hexo = new Hexo(root, { silent: true })
-  let occurrences = null
+  const retainedCarriers = []
   try {
     await hexo.init()
-    hexo.extend.filter.register('after_post_render', data => {
-      occurrences = data.markdown[CARRIER_SYMBOL]
-        .getOccurrences()
-        .map(item => ({ name: item.name, state: item.state }))
+    hexo.extend.filter.register('after_post_render', post => {
+      retainedCarriers.push(post.markdown[CARRIER_SYMBOL])
     }, 8)
     const rendered = await hexo.post.render('memory-probe.md', {
       content: source,
       type: 'post',
       path: 'memory-probe.md'
     })
+    const [retainedCarrier] = retainedCarriers
+    assert.ok(retainedCarrier, 'the priority 8 filter must run exactly once per render')
+    const occurrences = retainedCarrier.getOccurrences()
+      .map(item => ({ name: item.name, state: item.state }))
     return {
       data: {
         content: rendered.content,
@@ -1984,7 +2004,29 @@ async function renderMemoryFixture(source) {
   }
 }
 
-function test_expands_rebind_idempotence() {
+// 最小可用 DOM：与 `.temp/nav-smoke.js` 已验证配方同形——`pretendToBeVisual` 提供
+// `requestAnimationFrame`，`beforeParse` 补 `matchMedia` / `offsetParent` / `fetch`，
+// VirtualConsole 过滤已知环境缺口（`Not implemented: navigation` 与 MathJax / Pjax /
+// canvas.getContext / HTMLMediaElement.play 的 undefined 报错）。返回 `environmentGaps`
+// 供断言复查，避免探针自身静默吞掉非环境性报错。
+function createExpandsDom() {
+  const environmentGaps = []
+  const isEnvironmentGap = message => /MathJax is not defined/.test(message) ||
+    /Pjax is not defined/.test(message) ||
+    /HTMLCanvasElement\.prototype\.getContext/.test(message) ||
+    /HTMLMediaElement\.prototype\.play/.test(message)
+  const virtualConsole = new VirtualConsole()
+  virtualConsole.on('jsdomError', error => {
+    if (!/Not implemented: navigation/.test(error.message) && !isEnvironmentGap(error.message)) {
+      environmentGaps.push('jsdomError: ' + error.message)
+    }
+  })
+  virtualConsole.on('error', (...args) => {
+    const message = args.join(' ')
+    if (!isEnvironmentGap(message)) {
+      environmentGaps.push('console.error: ' + message)
+    }
+  })
   const dom = new JSDOM(`<!doctype html><body>
     <div class="admonition expand-box adm-note open" style="--ex-color:#22BBFF">
       <div class="ex-header" role="button" tabindex="0" aria-expanded="true">
@@ -1993,8 +2035,43 @@ function test_expands_rebind_idempotence() {
       </div>
       <div class="ex-content"><p>x</p></div>
     </div>
-  </body>`, { url: 'https://issuimo.com/', runScripts: 'dangerously' })
-  const { window } = dom
+  </body>`, {
+    url: 'https://issuimo.com/',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+    beforeParse(window) {
+      window.fetch = () => Promise.reject(new Error('offline'))
+      if (!window.matchMedia) {
+        window.matchMedia = () => ({
+          matches: false,
+          addEventListener() {}, removeEventListener() {},
+          addListener() {}, removeListener() {}
+        })
+      }
+      // jsdom 不实现 offsetParent，用父元素链近似（仅用于祖先判断）
+      Object.defineProperty(window.HTMLElement.prototype, 'offsetParent', {
+        configurable: true,
+        get() { return this.parentElement }
+      })
+    }
+  })
+  return { window: dom.window, environmentGaps }
+}
+
+// bundle 执行顺序事实（`themes/arknights/source/js/arknights.js` 的拼接产物顺序）：
+// `let code = new Code()`（第 284 行）在其构造函数里已经走完
+// `findCode() -> expand.setHTML() -> addEvent(.ex-header)`，即 Expands 的 click / keypress
+// 绑定**先于**后面的 `var header = new Header()`（第 1517 行）执行。`new Header()` 的构造
+// 读 `header.topbar` / `.navBtn` / `.navItemList` 等真实页面结构，最小 fixture DOM 给不出，
+// 缺结构时抛 `Error: Unknown HTML`。
+//
+// 因此对 `window.eval` 做**定向捕获**，只容忍上面这一处 `Header` 结构缺口：
+//   1. 抛错必须逐字是 `Unknown HTML`，其它任何 bundle 失败一律重新抛出（不掩盖 Expands / Code 问题）；
+//   2. 捕获后**单独证明** Expands 绑定已完成——`.ex-header` 必须已经挂上 click 与 keypress
+//      监听，否则本测试直接失败，绝不带着未绑定的 DOM 继续跑幂等断言。
+function test_expands_rebind_idempotence() {
+  const { window, environmentGaps } = createExpandsDom()
   const clickCounts = new WeakMap()
   const keypressCounts = new WeakMap()
   const originalAdd = window.EventTarget.prototype.addEventListener
@@ -2005,23 +2082,40 @@ function test_expands_rebind_idempotence() {
     }
     return originalAdd.call(this, type, listener, options)
   }
-  window.eval(fs.readFileSync(path.join(root, 'themes/arknights/source/js/arknights.js'), 'utf8'))
+  // 局部变量不得与模块级的 `root`（`path.resolve(__dirname, '..')`）同名：
+  // 同名会在函数作用域内形成 TDZ，使同函数内位于声明之前的 `path.join(root, ...)`
+  // 在 tsc 的 `--checkJs` 下报 TS2448（Block-scoped variable used before its declaration），
+  // 运行时也会抛 ReferenceError。因此展开盒容器一律叫 `expandBox`，且全文只声明一次
+  // （此处一次取用，后文不再重复 `const` 声明——重复声明会改报 TS2451）。
+  const expandBox = window.document.querySelector('.expand-box')
+  const header = expandBox.querySelector('.ex-header')
+  let headerEnvironmentError = null
+  try {
+    window.eval(fs.readFileSync(path.join(root, 'themes/arknights/source/js/arknights.js'), 'utf8'))
+  } catch (error) {
+    const message = String(error?.message ?? error)
+    assert.match(message, /Unknown HTML/,
+      `only the new Header() page-structure gap may be tolerated, got: ${message}`)
+    headerEnvironmentError = error
+  }
+  if (headerEnvironmentError !== null) {
+    assert.equal(clickCounts.get(header) >= 1, true,
+      'the Expands click binding must already exist when new Header() is the throwing site')
+    assert.equal(keypressCounts.get(header) >= 1, true,
+      'the Expands keypress binding must already exist when new Header() is the throwing site')
+  }
   for (let index = 0; index < 3; index += 1) {
     window.document.dispatchEvent(new window.Event('pjax:success'))
     window.dispatchEvent(new window.Event('hexo-blog-decrypt'))
   }
   const headers = [...window.document.querySelectorAll('.ex-header')]
   assert.equal(headers.length, 1)
-  for (const header of headers) {
-    assert.equal(clickCounts.get(header), 1, 'exactly one click listener per ex-header')
-    assert.equal(keypressCounts.get(header), 1, 'exactly one keypress listener per ex-header')
+  assert.equal(headers[0], header, 'the fixture must expose exactly the probed ex-header')
+  assert.equal(header.closest('.expand-box'), expandBox)
+  for (const probed of headers) {
+    assert.equal(clickCounts.get(probed), 1, 'exactly one click listener per ex-header')
+    assert.equal(keypressCounts.get(probed), 1, 'exactly one keypress listener per ex-header')
   }
-  // 局部变量不得与模块级的 `root`（`path.resolve(__dirname, '..')`）同名：
-  // 同名会在块级作用域内形成 TDZ，使本函数后半段的 `root.classList` 在 tsc 的
-  // `--checkJs` 下报 TS2448（Block-scoped variable used before its declaration），运行时也会抛
-  // ReferenceError。因此展开盒容器一律叫 `expandBox`。
-  const header = headers[0]
-  const expandBox = header.closest('.expand-box')
   // 不硬编码期望字面量：以 DOM 声明的初值为基准断言「切换后必须写成相反值」，
   // 断言的是 reverse() 必须写 aria-expanded，而不是 fixture 恰好带了某个字面量
   const initial = header.getAttribute('aria-expanded')
@@ -2036,6 +2130,7 @@ function test_expands_rebind_idempotence() {
   spaceHeader.dispatchEvent(new window.KeyboardEvent('keypress', { key: ' ', bubbles: true, cancelable: true }))
   assert.equal(expandBox.classList.contains('fold'), true, 'Space must toggle exactly once')
   assert.equal(spaceHeader.getAttribute('aria-expanded'), String(initial !== 'true'))
+  assert.deepEqual(environmentGaps, [], 'the fixture must not produce non-environment jsdom errors')
 }
 ```
 
@@ -2112,7 +2207,9 @@ async function test_security_escaping_matrix() {
 }
 ```
 
-`renderMemoryFixture(source)` 是本文件的共用 helper（骨架见本节首个代码块）：创建隔离 Hexo 实例、`register.js` 自动注册 `defaultPipeline` 与五 handler、执行真实 `Post#render`，并返回 `{ data, store }`。`data.content` 是渲染结果，`data.projection` 是 `defaultPipeline.projectText(data, 'content')`，`data.occurrences` 是 `after_post_render` priority 8 从 `data.markdown[CARRIER_SYMBOL].getOccurrences()` 取到的 `{ name, state }` 快照；`store.countState` 的定义见上一段。本文件不再重复实现该 helper。
+`renderMemoryFixture(source)` 是本文件的共用 helper（骨架见本节首个代码块）：创建隔离 Hexo 实例、`register.js` 自动注册 `defaultPipeline` 与五 handler、执行真实 `Post#render`，并返回 `{ data, store }`。`data.content` 是渲染结果，`data.projection` 是 `defaultPipeline.projectText(data, 'content')`；`data.occurrences` 是**终态**快照：`after_post_render` priority 8 的 filter 只把 `data.markdown[CARRIER_SYMBOL]` 的 carrier 引用 push 进闭包数组 `retainedCarriers`（不做 map、不做断言），`Post#render` resolve 之后才对留存引用 map 出 `{ name, state }`——因为终态迁移只发生在 after 9，priority 8 读到的仍是 `pending-markdown`，而 after 9 已移除 carrier descriptor（priority ≥ 10 读取会抛 `TypeError: ... 'Symbol(arknights.markerCarrier)'`）。`store.countState` 的定义见上一段。本文件不再重复实现该 helper。
+
+`test_expands_rebind_idempotence()` 另有两处与本骨架绑定的约束：其一，`createExpandsDom()` 必须提供 `.temp/nav-smoke.js` 已验证的最小可用环境配方（`pretendToBeVisual` + `beforeParse` 补 `matchMedia` / `offsetParent` / `fetch` + VirtualConsole 过滤），否则 bundle 会在更早的位置因缺 `matchMedia` / `requestAnimationFrame` 失败，测不到 Expands；其二，对 `window.eval` 的定向捕获**只用于容忍 `new Header()`（bundle 第 1517 行）对真实页面结构的依赖**，不掩盖 Expands / Code 失败——抛错必须逐字是 `Unknown HTML`，且捕获后必须单独证明 `.ex-header` 的 click / keypress 绑定已存在，否则测试直接失败。`expandBox` 在本函数内只声明一次（`const` 重复声明会报 TS2451，与模块级 `root` 的 TDZ 约束一并登记）。
 
 本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-handlers.test.js` 的全部错误码**（共 20 条，缺一条即门禁不完整）：
 
@@ -2150,23 +2247,32 @@ function test_filter_alias_and_store() {
 }
 
 // 真实 `Post#render` 执行 helper（可运行骨架）：隔离 Hexo 实例 + `register.js` 自动注册 + 真实渲染。
-// 可复用片段与 A2-22 的 `renderMemoryFixture` 同源，均取自 `.temp/marker-hexo-integration.test.js`：
+// 可复用片段与 A2-22 的 `renderMemoryFixture` 同源：取自 `.temp/marker-hexo-integration.test.js`
 // 第 26-30 行（`new Hexo(root, { silent: true })` + `await hexo.init()`，注册由 `register.js` 自动完成，
-// init 后不得再调 `registerMarkerFilters`、不得创建第二套 pipeline）与第 425-462 行
-// （`after_post_render` priority 8 读 `data.markdown[CARRIER_SYMBOL]` 再取 `getOccurrences()` 快照）。
+// init 后不得再调 `registerMarkerFilters`、不得创建第二套 pipeline）。
+// 出处更正：`.temp/marker-hexo-integration.test.js` 第 425-462 行是**显式 excerpt 字段**的
+// `getOccurrenceByToken` 观察，不是本 helper 在 priority 8 留存 carrier 这一用法的先例。
 // base_dir 必须是仓库根 `root`：只有根目录的 `_config.yml` 才带 `theme: arknights`，
 // 临时目录下没有主题，`register.js` 不会被自动加载，真实渲染路径也就无从建立。
+//
+// 时序依据与 A2-22 完全一致（终态迁移只在 after 9，规格 §12.5）：priority 8 早于 after 9，
+// 此刻读到的 occurrence 仍是 `pending-markdown`；after 9 已移除 carrier descriptor，
+// priority ≥ 10 再读会抛 `TypeError: ... 'Symbol(arknights.markerCarrier)'`。因此 filter 内
+// 只把 carrier 引用 push 进闭包数组 `retainedCarriers`（一次渲染恰好一次），`Post#render`
+// resolve 之后才 map 出 `{ name, state }`，`every(state === 'consumed')` 断言也在该处执行。
 async function renderThroughRealPostRender(data) {
   const hexo = new Hexo(root, { silent: true })
-  let occurrences = null
+  const retainedCarriers = []
   try {
     await hexo.init()
-    hexo.extend.filter.register('after_post_render', rendered => {
-      occurrences = rendered.markdown[CARRIER_SYMBOL]
-        .getOccurrences()
-        .map(item => ({ name: item.name, state: item.state }))
+    hexo.extend.filter.register('after_post_render', post => {
+      retainedCarriers.push(post.markdown[CARRIER_SYMBOL])
     }, 8)
     const rendered = await hexo.post.render(String(data.path), data)
+    const [retainedCarrier] = retainedCarriers
+    assert.ok(retainedCarrier, 'the priority 8 filter must run exactly once per render')
+    const occurrences = retainedCarrier.getOccurrences()
+      .map(item => ({ name: item.name, state: item.state }))
     return {
       content: rendered.content,
       projection: defaultPipeline.projectText(rendered, 'content'),
@@ -2222,7 +2328,7 @@ main().catch(error => {
 })
 ```
 
-本文件**必须** `require('./line-marker-memory-fixture')` 并复用其 `MEMORY_SOURCE`，不得内联第二份 fixture 文本；`line-marker-handlers.test.js` 与本文件对同一 fixture 的断言因此天然一致，规格第 18.2 节的「共享」要求由单一模块而不是两份拷贝保证。`renderThroughRealPostRender(data)` 是本文件的执行 helper（骨架见上方代码块）：创建隔离 Hexo、走 `register.js` 自动注册后的真实 `Post#render`，返回 `{ content, projection, occurrences }`；形态与 A2-22 的 `renderMemoryFixture` 一致但各自在本文件内实现一次，不要求跨文件共享实现。**不传 base_dir**：base_dir 固定为仓库根，保证主题脚本被自动加载（`store.countState` 的定义见 A2-22，本文件不重复该计数器）。
+本文件**必须** `require('./line-marker-memory-fixture')` 并复用其 `MEMORY_SOURCE`，不得内联第二份 fixture 文本；`line-marker-handlers.test.js` 与本文件对同一 fixture 的断言因此天然一致，规格第 18.2 节的「共享」要求由单一模块而不是两份拷贝保证。`renderThroughRealPostRender(data)` 是本文件的执行 helper（骨架见上方代码块）：创建隔离 Hexo、走 `register.js` 自动注册后的真实 `Post#render`，返回 `{ content, projection, occurrences }`；形态与 A2-22 的 `renderMemoryFixture` 一致但各自在本文件内实现一次，不要求跨文件共享实现，`occurrences` 的取法也遵守同一时序（priority 8 只把 carrier 引用 push 进 `retainedCarriers`，resolve 之后才 map 终态）。**不传 base_dir**：base_dir 固定为仓库根，保证主题脚本被自动加载（`store.countState` 的定义见 A2-22，本文件不重复该计数器）。
 
 同文件另加三段（`INVALID_EXCERPT_FIELD` 段已写在上面的骨架里，不在这三段中重复）：(a) priority 5 透传——真实 `Post#render` 同时启用 alerts 5 与 spoiler 5，断言执行后 `data.content` 内 block placeholder 逐字节不变、`countExact` 仍为 1、显式 excerpt 的 opaque token 唯一、after 9 完成全部物化，注入的 `> [!NOTE]` 与 `??x??` 仍生效；(b) 拒绝重试——对后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、`after_post_render`（priority < 9）各注入一次拒绝，断言 `Post#render` reject、after 9 未执行、同 data 再次 render 时先从 `carrier.originalField` 修复后重新 tokenization；(c) 加密同源——仅 frontmatter `password` 的 public data 正常把 `> [!NOTE]` 转为 `.alert`，tag 命中密码 / `encrypt: true` / `origin` 残留三类 encrypted data 的 `content`/`excerpt`/`more` 逐字节未被改写，ambiguous data 抛 `ENCRYPTION_STATE_AMBIGUOUS` 且字段未被改写，并对 `alerts.js` 源码断言 `data.encrypt`/`data.password` 直读零命中。**（c）的零命中断言范围按 §2.5 裁决记录只覆盖 `themes/arknights/scripts/filters/alerts.js` 单文件**：`spoiler.js` / `meta-description.js` / `terms.js` 的自判是显式残留，探针必须额外断言这三文件在本批**未被改动**（`git diff --name-only` 中不出现它们），把「已知残留」与「意外漂移」区分开，禁止写成目录级零命中。
 
@@ -3463,6 +3569,9 @@ finally {
 - `clearStatus()` 的调用点在 A1-8 / §1.3 表 / C3-4 三处均为 `applyState(true)`，与规格第 12.1.1 节第 1015 行、第 16.3 节第 1651 行一致。
 - `expands.reverse()` 的 `aria-expanded` 写入（A1-14）与 A2-22 探针的相对翻转断言一致，探针不硬编码目标字面量。
 - 导出名一致性：§2.3 的 `aiHandler` / `projectHandler` / `alertsHandler` / `editorHandler` / `linkCardHandler` 在 §2.3、A2-7 探针、A2-10..A2-14 步骤中完全一致；`metaDescription.projectText` 与 `defaultPipeline.projectText` 同一引用在 A2-7 断言。
+- `claimStatus` 调用形态全文一致：A1-2 的 `assert.match` 正则、A1-4 的单行片段、A1-5 的三元换行片段与 §2.6 裁决记录同形——`{ owner: '…' }` 字面量必须与 `claimStatus(` 处于同一调用内且 message 实参表达式内不含 `)`；实施时若把 message 改成含 `)` 的辅助函数调用，须同步放宽该正则（或改写调用形态），二者不得各行其是。
+- occurrence 终态快照的取法全文一致：A2-22 的 `renderMemoryFixture`、A2-23 的 `renderThroughRealPostRender` 与第 13.4 节派生名登记三处都写明「priority 8 只把 carrier 引用 push 进 `retainedCarriers`、`Post#render` resolve 之后才 map 终态」，与规格 §12.5「终态迁移只发生在 after 9」一致；禁止在任何 priority ≥ 10 处读 `data.markdown[CARRIER_SYMBOL]`。
+- `INVALID_EXCERPT_FIELD` 的落点一致：实现写在 A2-18 的 before 4（读正文前抛、字段回入口原值），断言写在 A2-23 的 `test_invalid_excerpt_field_is_fail_closed`，错误码归属表只挂 `line-marker-hexo.test.js`，不在 A2-19 / A2-22 重复承载。
 
 **派生名登记（规格未逐字给出、按既有仓库约定推导，实施时不得再改名）**
 
@@ -3480,7 +3589,7 @@ finally {
 | `renderPostThroughMarked` / `runPostRender` | A2-19 的真实 renderer 等价入口与 before→render→after 封装 |
 | `assertPayloadOnlyInMarkerSource` | A2-22 CSS 上下文判据：payload 只允许出现在 escaped marker source 内 |
 | `loadBgmProbe` 及其 19 个方法 | C3-1 的 BGM 计数探针；方法面与映射见 C3-1 的对照表（`ariaBusyWrites()` 是相对构造后基线快照的 delta） |
-| `renderMemoryFixture` / `renderThroughRealPostRender` | A2-22 / A2-23 的真实 `Post#render` 执行 helper；A2-22 返回 `{ data: { content, projection, occurrences }, store }`，A2-23 返回 `{ content, projection, occurrences }`；两者形态一致、各自在本文件内实现一次，均为「隔离 Hexo 实例（`new Hexo(root, { silent: true })` + `await hexo.init()`，由 `register.js` 自动注册，init 后不手动注册）+ 真实 `hexo.post.render`」，可复用片段取自 `.temp/marker-hexo-integration.test.js` 第 26-30 行与第 425-462 行 |
+| `renderMemoryFixture` / `renderThroughRealPostRender` | A2-22 / A2-23 的真实 `Post#render` 执行 helper；A2-22 返回 `{ data: { content, projection, occurrences }, store }`，A2-23 返回 `{ content, projection, occurrences }`；两者形态一致、各自在本文件内实现一次，均为「隔离 Hexo 实例（`new Hexo(root, { silent: true })` + `await hexo.init()`，由 `register.js` 自动注册，init 后不手动注册）+ 真实 `hexo.post.render`」，可复用片段只取自 `.temp/marker-hexo-integration.test.js` 第 26-30 行；occurrence 终态快照按规格 §12.5 的时序在 `Post#render` resolve 之后才从 priority 8 push 进 `retainedCarriers` 的 carrier 引用 map 出（第 425-462 行是 excerpt 的 `getOccurrenceByToken` 观察，不是本用法先例） |
 | `installCounters` / `store.countState` | A2-22 的 handler 阶段计数 wrapper 与其计数入口；`countState` 只计被包裹的那一个 handler 成功进入该阶段的次数（语义见 A2-22），因此 NUL 断言恒为 1 而非 5 |
 | `StatusClaimOptions` / `StatusLease.owner` | §2.6 lease 写入入口的 options 形状与 owner 归属字段；`claimStatus` 的全仓唯一写法是 `(message, { owner, delay? })`（裁决记录见 §2.6） |
 | `.temp/line-marker-pipeline.test.js` 承载规格 12.1.1 第 5 条样式导入回归与 lease 的 timer / observer 静态门禁 | 规格 18.4 的 probe 映射表未单列该条，该 probe 已承载 12.1.1 的规模与依赖门禁；A1-2 落 lease 的 `=== 0`（最小实现零 timer、零 observer）、C3-2 把它换成 `=== 1`，`countCalls` 也只能落在同一文件（全仓唯一持有该 helper 的探针） |
