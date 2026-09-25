@@ -186,7 +186,7 @@ const scale = Math.min(
 
 `width`/`height` 必须来自当前 root 的正向有限测量；任一为 0、负数、`NaN` 或正/负 `Infinity` 时直接走截图失败状态，不调用 SnapDOM。
 
-SnapDOM 调用固定为 `window.snapdom.toCanvas(root, { scale, dpr: 1 })`。`dpr: 1` 防止浏览器默认 DPR 与已包含 DPR 的 `scale` 重复相乘。capture 执行期间当前截图按钮必须 `disabled === true`，成功/失败 finally 均恢复为 false；同页重入仍复用同一 `capturePromise`。每次截图开始时，`detachPaginator()` 必须在移除节点前保存当时的 `launchGeneration`、原 `parent = paginator.parentNode` 和原 `nextSibling = paginator.nextSibling`。`finally` 仅在 `launchGeneration === currentGeneration` **或**保存的原 `parent.isConnected === true` 时把 paginator 恢复到保存位置；只有 generation 已变化且原 parent 已脱离文档时才放弃恢复。Pjax fixture 以 `parent.isConnected === false` 表示导航替换，不要求 `parentNode === null`。`pjax:send`/`pjax:error` 立即递增 generation，`pjax:success` 再递增并只绑定当前按钮。
+SnapDOM 调用固定为 `window.snapdom.toCanvas(root, { scale, dpr: 1 })`。`dpr: 1` 防止浏览器默认 DPR 与已包含 DPR 的 `scale` 重复相乘。capture 执行期间当前截图按钮必须 `disabled === true`，成功/失败 finally 均恢复为 false；同页重入仍复用同一 `capturePromise`。每次截图开始时，`detachPaginator()` 必须在移除节点前保存当时的 `launchGeneration`、原 `parent = paginator.parentNode` 和原 `nextSibling = paginator.nextSibling`。`finally` 仅在 `launchGeneration === currentGeneration` **或**保存的原 `parent.isConnected === true` 时把 paginator 恢复到保存位置；只有 generation 已变化且原 parent 已脱离文档时才放弃恢复。Pjax fixture 以 `parent.isConnected === false` 表示导航替换；旧节点不得挂回新文章，generation 变化且旧 parent 脱离文档时不恢复，不要求 `parentNode === null`。`pjax:send`/`pjax:error` 立即递增 generation，`pjax:success` 再递增并只绑定当前按钮。
 
 ### 5. BgmControl 接口
 
@@ -1367,7 +1367,7 @@ assert.equal(detachedStatus.hidden, false)
 assert.equal(newStatus.textContent, newPageStatusSentinel)
 assert.equal(newStatus.hidden, false)
 assert.equal(detachedParent.isConnected, false)
-assert.equal(detachedPaginator.parentNode, detachedParent)
+assert.equal(detachedParent.contains(detachedPaginator), false)
 assert.equal(newRoot.contains(newPaginator), true)
 assert.equal(newButton.disabled, false)
 assert.equal(newButton.getAttribute('aria-busy'), 'false')
@@ -1882,7 +1882,7 @@ git diff --cached --check
 - [ ] **4.7（3 分钟）实现全局类型与 ScreenshotControl 骨架。** 先在 `include/environment.d.ts` 声明 `Window.snapdom`、`SnapDomGlobal` 和 `SnapDomToCanvasOptions`，再建立常量、generation、Promise 单例、script load/timeout/global shape 校验和 current DOM 查询；禁止局部重复声明或 `any` 逃逸。
 - [ ] **4.8（5 分钟）实现资源稳定等待。** 依次等待 fonts、图片；完整图片立即成功，未完成图片临时设 `loading=eager`，load/error 均 settle，15 秒超时失败；每个 await 后校验 generation。
 - [ ] **4.9（5 分钟）实现 capture 与长图缩放。** 校验当前 generation，开始执行时禁用当前截图按钮，detach paginator，调用 `toCanvas(root,{scale,dpr:1})`，`toBlob` PNG，临时 anchor 下载；finally 在 generation 未变或原 parent 仍 connected 时恢复 paginator，并恢复 lazy loading、busy、`button.disabled` 和 URL。
-- [ ] **4.10（4 分钟）实现 generation 取消。** `pjax:send`、`pjax:error` 立即递增；`pjax:success` 再递增并只绑定新按钮。`pjax:error` 保持原 parent connected 时旧分页器必须恢复但不得下载；`pjax:send` fixture 先断开原 parent，generation 变化后不得把旧 paginator 插回，不得改写新按钮状态或新页共享 `role=status` 文本。
+- [ ] **4.10（4 分钟）实现 generation 取消。** `pjax:send`、`pjax:error` 立即递增；`pjax:success` 再递增并只绑定新按钮。`pjax:error` 保持原 parent connected 时旧分页器必须恢复但不得下载；`pjax:send` fixture 先断开原 parent，generation 变化后不恢复，旧节点不得挂回新文章，不得改写新按钮状态或新页共享 `role=status` 文本。
 - [ ] **4.11（4 分钟）重构 BgmControl。** 用长生命周期 class 替换 13 行函数；保存唯一 audio，绑定媒体事件和 `pjax:success`，实现 pending/reject/error-retry/pause/continue。
 - [ ] **4.12（4 分钟）接入 Toolbox 分发。** 删除 `#to-toolbox` 与五项工具的内联 onclick；增加一次 document click 委托和 `data-action` switch，toggle 与工具项各只分发一次。截图/BGM 业务只委托控制器，分享及收藏保存/取消只做共享 status 的最小写入；不在本任务拆分或新增 Highlight/Favorites/Status 业务模块。
 - [ ] **4.13（3 分钟）移动唯一 audio。** 从 `bottom-btn.pug` 删除 audio；仅在 C 将 `audio#bgm` 放到 `layout.pug` 的 `main`/Pjax 替换区外，`src=url_for(theme.bgm.src)`、`preload="metadata"`、`loop=theme.bgm.loop`，不输出 controls/autoplay。
@@ -1896,7 +1896,7 @@ git diff --cached --check
 
 ### 验证边界
 
-- C 的 jsdom 探针证明状态机、DOM、Promise、超时、缩放参数、文件名和 Pjax generation；其中 `pjax:error` 明确证明“取消下载但恢复仍 connected 的旧 paginator”，`pjax:send` 明确证明“parent 已断开时不恢复”。它不证明真实 PNG 像素或真实音频输出。
+- C 的 jsdom 探针证明状态机、DOM、Promise、超时、缩放参数、文件名和 Pjax generation；其中 `pjax:error` 明确证明“取消下载但恢复仍 connected 的旧 paginator”，`pjax:send` 明确证明“generation 变化且旧 parent 脱离时不恢复，旧节点不得挂回新文章”。它不证明真实 PNG 像素或真实音频输出。
 - C 不运行完整 Hexo build；实际 `public/`、真实 SnapDOM 长图、音频和 Pjax 留给 D 构建与有头浏览器门禁。
 - SnapDOM 跨域资源失败按固定失败反馈处理；不增加代理、CDN、worker 或插件。
 
@@ -2281,7 +2281,7 @@ npm run build
 5. 展开五项工具，核对顺序、66px 五角度、40px 命中区和桌面 hover 抽出；分别记录 status 隐藏/显示前后 `#to-toolbox` 的 rect，确认宽高与底缘不变；Tab、Enter、Space 可操作，status/pressed/busy 可感知。
 6. 点击截图，打开下载 PNG，确认只有正文，无 header、aside、bottom tools 或 paginator。
 7. 在代表性文章 `/2026/08/14/ai-programming-journey/` 按下方“长文截图 fixture”原位替换 `#post-content` 内容，确认先显示整体缩小提示，PNG 覆盖全文且未裁切。
-8. 截图等待 canvas 时分别模拟 `pjax:error` 与 `pjax:send`：前者保持原 parent connected，确认不下载但分页器恢复；后者先让旧 parent 脱离文档，确认不下载且旧分页器不插回，新页按钮和共享 status 不被旧任务改写。
+8. 截图等待 canvas 时分别模拟 `pjax:error` 与 `pjax:send`：前者保持原 parent connected，确认不下载但分页器恢复；后者先让旧 parent 脱离文档，确认 generation 变化后不恢复、不下载且旧节点不得挂回新文章，新页按钮和共享 status 不被旧任务改写。
 9. 确认首击前 `play()` 未调用；点击后播放，第二次暂停，第三次从当前时间继续并循环。Pjax 跨页时 audio 节点 identity、currentTime 和播放状态不变。
 10. 用 DevTools 临时令媒体请求失败，确认 label/status 报失败；恢复资源后下一次点击先 load 再成功重试。
 11. 用搜索触发 Pjax，在文章、项目、数据页往返；ProjectTooltip、Screenshot、BGM 和 Toolbox 均无重复 listener。
