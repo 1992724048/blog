@@ -23,7 +23,8 @@
 - 页面隐藏/恢复不得改写 `document.title`；Pjax 的 `title` selector、History API 和前进/后退行为保持现状。
 - 仅 `source/projects/index.md` 与 `source/data/index.md` 增加 `comments: false`；文章页继续沿用主题 `page.comments` 与评论组件逻辑。
 - AI 旧值 `IGNORE`、`NOTREVIEW` 及任何别名原样失败，稳定错误码仍为 `AI_INVALID_STATE`；不提供兼容读取。
-- 缓存版本只按实际产物递增：A `cssVersion 20260950 -> 20260951`，B `jsVersion 20260947 -> 20260948`，C `cssVersion 20260951 -> 20260952` 且 `jsVersion 20260948 -> 20260949`。
+- 缓存版本只按实际产物递增：A2 只改 CSS 产物，`cssVersion 20260950 -> 20260951` 且不递增 JS；B 只改 `arknights.js` 产物，`jsVersion 20260947 -> 20260948` 且不改 CSS；C 改 CSS 与 `arknights.js`，`cssVersion 20260951 -> 20260952` 且 `jsVersion 20260948 -> 20260949`。`search.js` 未变化时不得为其另增版本或缓存参数。
+- `Toolbox.ts` 本批次只增加统一 `data-action`/document 委托和既有分享/收藏状态的最小 status 写入，不新增截图、BGM、标注、收藏等业务；现有文件已接近 800 行，后续可另提 `Highlight`、`Favorites`、`Status` 拆分方案，但必须先经用户确认，不在 A—C 或 D 中顺手扩大重构。
 - `npm --prefix themes/arknights run build` 只在 B、C 的 TypeScript 源发生变更后运行；A2 的 Pug/Stylus 变更不运行主题 TypeScript build。
 - 完整 `npm run build` 只在 D 的同一最终状态运行一次；PowerShell 固定先执行 `$env:TZ = 'Asia/Shanghai'`。
 - `.temp/` 探针和 `public/` 产物均不提交；每任务只暂存列出的文件，不执行 `git push`。
@@ -34,11 +35,20 @@
 
 | 批次 | 任务 | 依赖 | 独立提交 |
 | --- | --- | --- | --- |
-| A1 | 内容、页面行为、评论与 AI 硬切换 | 当前 `3f32c0f` 文档基线 | `feat(theme-ui): 清理页面行为并切换 AI 状态` |
+| A1 | 内容、页面行为、评论与 AI 硬切换 | 计划基线 `70b6748` | `feat(theme-ui): 清理页面行为并切换 AI 状态` |
 | A2 | AI/导航/footer 视觉与工具箱五项静态基础 | A1 | `feat(theme-ui): 调整导航侧栏与工具箱视觉` |
 | B | ProjectTooltip TypeScript 合并 | A2 | `refactor(projects): 合并项目悬停脚本到主题 bundle` |
 | C | SnapDOM、截图、BGM 与 Toolbox 分发 | B | `feat(theme-ui): 扩展工具箱截图与背景音乐` |
 | D | 活文档、最终自动化、构建、产物与人工门禁交付 | A1–C | `docs(theme-ui): 同步实施状态与验收口径` |
+
+### 缺陷修复、依赖与提交边界
+
+1. 五个任务严格按 A1 → A2 → B → C → D 串行执行；任一前置任务或其缺陷修复提交未通过时，不开始后继任务。
+2. 自动化或审查发现问题时，停止 D，回到产生根因的 A1、A2、B 或 C 任务修复；A1/A2/C 修复 runtime、配置或生成产物，B 修复 ProjectTooltip 迁移，D 只修文档与 `.temp/` 探针。
+3. 每个发现的问题由责任任务追加一个独立 Conventional Commit，例如 `fix(theme-ui): 修复截图分页器恢复` 或 `fix(projects): 修复悬停重绑`；禁止 `git commit --amend`、`git rebase`、重写或合并已经提交的任务历史。
+4. 修复提交只包含根因所属任务的文件；`.temp/` 仍不提交。修复后先跑该任务受影响门禁，再恢复后续依赖；最终源码状态变化后，D 的完整构建与最终全量门禁只重跑一次。
+5. 缺陷修复若未改变某类实际产物，不递增对应缓存版本；若改变 CSS 或 JS 产物，只在责任任务内递增一次该版本，并同步测试、文件表、暂存清单和 `AGENTS.md`。
+6. D 不以“最终门禁”名义夹带 runtime 修复；D 的唯一跟踪提交只含 `AGENTS.md` 与已批准设计文档的最终状态更新。
 
 ## Locked Interfaces
 
@@ -112,6 +122,7 @@ interface SnapDomGlobal {
 }
 
 interface PaginatorRestore {
+  launchGeneration: number
   paginator: HTMLElement
   parent: Node
   nextSibling: Node | null
@@ -157,7 +168,7 @@ const scale = Math.min(
 
 `width`/`height` 必须来自当前 root 的正向有限测量；任一为 0、负数或非有限数时直接走截图失败状态，不调用 SnapDOM。
 
-SnapDOM 调用固定为 `window.snapdom.toCanvas(root, { scale, dpr: 1 })`。`dpr: 1` 防止浏览器默认 DPR 与已包含 DPR 的 `scale` 重复相乘。`restorePaginator` 同时校验启动 generation、原 `parent.isConnected` 和保存的 `nextSibling`；generation 已变化时不把旧节点插回任何页面。`pjax:send`/`pjax:error` 立即递增 generation，`pjax:success` 再递增并只绑定当前按钮。
+SnapDOM 调用固定为 `window.snapdom.toCanvas(root, { scale, dpr: 1 })`。`dpr: 1` 防止浏览器默认 DPR 与已包含 DPR 的 `scale` 重复相乘。`restorePaginator` 在 `launchGeneration === currentGeneration` **或**保存的原 `parent.isConnected === true` 时，把 paginator 恢复到保存的 `parent` 与 `nextSibling`；只有 generation 已变化且原 parent 已脱离文档时才放弃恢复，避免把仍连接的错误导航页面留在缺页状态。`pjax:send`/`pjax:error` 立即递增 generation，`pjax:success` 再递增并只绑定当前按钮。
 
 ### 5. BgmControl 接口
 
@@ -188,6 +199,7 @@ var bgmControl = new BgmControl()
 class Toolbox {
   private onToolboxClick(event: MouseEvent): void
   private dispatchAction(action: string): void
+  private writeStatus(message: string): void
   public toggle(): void
   public annotate(): void
   public share(): void
@@ -200,13 +212,15 @@ var toolbox = new Toolbox()
 `onToolboxClick` 使用一次 document 级事件委托：
 
 ```text
-#to-toolbox                         -> toggle()
-[data-action=annotate]              -> annotate()
-[data-action=share]                 -> share()
-[data-action=favorite]              -> favorite()
-[data-action=screenshot]            -> screenshotControl.capture()
-[data-action=bgm]                   -> bgmControl.toggle()
+#to-toolbox[data-action=toolbox]     -> toggle()
+.toolbox-item[data-action=annotate]  -> annotate()
+.toolbox-item[data-action=share]     -> share()
+.toolbox-item[data-action=favorite]  -> favorite()
+.toolbox-item[data-action=screenshot]-> screenshotControl.capture()
+.toolbox-item[data-action=bgm]       -> bgmControl.toggle()
 ```
+
+`#to-toolbox` 与五个 `.toolbox-item` 均不得带内联 `onclick`；一次 document click 只按最近的匹配按钮分发一个 action，点击 SVG/path 等后代也只调用一次。
 
 Pjax 替换按钮后不缓存旧 Element；`pjax:send` 关闭工具箱和标注栏，截图/BGM 控制器各自处理 generation 或 media 生命周期。
 
@@ -248,7 +262,7 @@ toolbox:
 
 ## Task 1 — Batch A1: 内容、页面行为、评论与 AI 硬切换
 
-**依赖:** 无；基于 `3f32c0f` 后的当前代码执行。
+**依赖:** 无；以计划提交 `70b6748` 为代码基线。
 
 ### 文件范围
 
@@ -422,19 +436,40 @@ function renderBottomFixture({ post = true, bgm = true } = {}) {
     },
     is_post: () => post,
     toc: () => [],
+    url: '',
     url_for: value => `/${String(value).replace(/^\/+/, '')}`,
     __: key => key
   })
 }
 const html = renderBottomFixture()
 const document = new JSDOM(html).window.document
+const toolboxToggle = document.querySelector('#to-toolbox')
 const actions = [...document.querySelectorAll('.toolbox-item')]
 assert.deepEqual(actions.map(button => button.getAttribute('data-action')), [
   'annotate', 'share', 'favorite', 'screenshot', 'bgm'
 ])
 assert.ok(actions.every(button => button.tagName === 'BUTTON' && button.getAttribute('type') === 'button'))
+assert.ok(actions.every(button => button.hasAttribute('onclick') === false))
+assert.equal(toolboxToggle.getAttribute('data-action'), 'toolbox')
+assert.equal(toolboxToggle.hasAttribute('onclick'), false)
+assert.equal(toolboxToggle.getAttribute('aria-expanded'), 'false')
+assert.equal(toolboxToggle.getAttribute('aria-controls'), 'toolbox-items')
+for (const button of [toolboxToggle, ...actions]) {
+  assert.ok(button.getAttribute('aria-label'))
+  assert.ok(button.getAttribute('title'))
+}
+for (const action of ['annotate', 'favorite', 'bgm']) {
+  assert.equal(document.querySelector(`[data-action="${action}"]`).getAttribute('aria-pressed'), 'false')
+}
+assert.equal(document.querySelector('[data-action="screenshot"]').getAttribute('aria-busy'), 'false')
+assert.equal(document.querySelector('[data-action="screenshot"]').hasAttribute('aria-pressed'), false)
+assert.equal(document.querySelector('[data-action="share"]').hasAttribute('aria-pressed'), false)
+assert.equal(document.querySelector('[data-action="share"]').hasAttribute('aria-busy'), false)
+const status = document.querySelector('.toolbox-status')
+assert.ok(status.matches('[role="status"][aria-live="polite"][aria-atomic="true"]'))
+assert.equal(status.hidden, true)
 assert.equal(document.querySelector('.bottom-btn-stack > .i-bgm'), null)
-assert.ok(document.querySelector('.toolbox-status[role="status"][aria-live="polite"][aria-atomic="true"]'))
+assert.equal(document.querySelector('.toolbox-bgm'), null)
 assert.equal(document.querySelector('.toolbox-screenshot').getAttribute('data-snapdom-src'), '/lib/snapdom/3.1.1/snapdom.min.js')
 assert.equal(new JSDOM(renderBottomFixture({ post: false })).window.document.querySelector('.toolbox-screenshot'), null)
 assert.equal(new JSDOM(renderBottomFixture({ bgm: false })).window.document.querySelector('.toolbox-bgm'), null)
@@ -445,13 +480,18 @@ assert.match(custom, /\.ai-badge--none \.ai-badge__status[\s\S]*#E6A23C/)
 assert.doesNotMatch(custom, /ai-badge--ignore|ai-badge--notreview/)
 assert.match(custom, /\.ai-badge:hover \.ai-badge__tip,[\s\S]*:focus-within/)
 const tipBlock = custom.match(/\.ai-badge__tip\s*\{([^}]*)\}/)[1]
+const openTipBlock = custom.match(/\.ai-badge:hover \.ai-badge__tip,[\s\S]*?\.ai-badge:focus-within \.ai-badge__tip\s*\{([^}]*)\}/)[1]
 assert.match(tipBlock, /display flex/)
 assert.match(tipBlock, /visibility hidden/)
 assert.match(tipBlock, /opacity 0/)
+assert.match(tipBlock, /transform translateY\(4px\) scale\(\.98\)/)
+assert.match(tipBlock, /transform-origin top left/)
 assert.doesNotMatch(tipBlock, /display none/)
+assert.match(openTipBlock, /visibility visible/)
+assert.match(openTipBlock, /opacity 1/)
+assert.match(openTipBlock, /transform translateY\(0\) scale\(1\)/)
 assert.match(custom, /transition opacity 160ms, transform 160ms, visibility 0s linear 160ms/)
-assert.match(custom, /transition-delay 0s/)
-assert.match(custom, /translateY\(4px\) scale\(\.98\)/)
+assert.match(openTipBlock, /transition-delay 0s/)
 assert.match(custom, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.ai-badge__tip[\s\S]*transition none[\s\S]*transform none/)
 
 const header = read('themes/arknights/source/css/_core/header/header.styl')
@@ -498,21 +538,81 @@ assert.match(css, /box-shadow 0 2px 8px rgba\(0, 0, 0, \.25\)/)
 assert.match(css, /box-shadow 0 4px 10px rgba\(0, 0, 0, \.35\)/)
 assert.match(css, /translate\(calc\(var\(--fan-x\) \+ var\(--pull-x\)\), calc\(var\(--fan-y\) \+ var\(--pull-y\)\)\) scale\(1\.08\)/)
 assert.match(css, /focus-visible[\s\S]*translate\(calc\(var\(--fan-x\)/)
+const closedItems = css.match(/\.bottom-btn \.toolbox-item\s*\{([^}]*)\}/)[1]
+assert.match(closedItems, /visibility hidden/)
+assert.match(closedItems, /opacity 0/)
+assert.match(closedItems, /pointer-events none/)
+const statusBlock = css.match(/\.bottom-btn \.toolbox-status\s*\{([^}]*)\}/)[1]
+assert.match(statusBlock, /position absolute/)
+assert.match(statusBlock, /pointer-events none/)
+assert.doesNotMatch(statusBlock, /position (?:static|relative)/)
 assert.match(css, /\.toolbox-status\[hidden\][\s\S]*display none/)
-assert.match(css, /\.toolbox-status[\s\S]*pointer-events none/)
+```
+
+`.temp/ai-badge-tooltip-table.test.js` 不再引用已删除的旧 `filters/ai-badge-core.js`，改为直接锁定新 handler 的四态 DOM；完整内容如下：
+
+```js
+'use strict'
+
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const { JSDOM } = require('jsdom')
+const { aiHandler } = require('../themes/arknights/scripts/markers/handlers/ai')
+
+const root = path.resolve(__dirname, '..')
+const css = fs.readFileSync(path.join(
+  root, 'themes/arknights/source/css/_custom/custom.styl'
+), 'utf8')
+const context = Object.freeze({
+  mode: 'inline',
+  type: 'post',
+  encrypt: false,
+  password: null,
+  sourceField: 'content',
+  sourcePath: 'source/_posts/ai-tooltip-probe.md'
+})
+const enumArg = value => Object.freeze({ type: 'enum', value })
+const expected = Object.freeze([
+  ['PASS', 'pass', '已人工审核通过'],
+  ['EDIT', 'edit', '经人工审核并被人工修改'],
+  ['UNKN', 'unkn', '未知，无法判断'],
+  ['NONE', 'none', '未经人工审核']
+])
+
+for (const [state, className] of expected) {
+  const parsed = aiHandler.parse([enumArg(state)], context)
+  assert.equal(parsed.ok, true, state)
+  const badge = JSDOM.fragment(aiHandler.render(parsed.node, context)).firstElementChild
+  assert.equal(badge.classList.contains(`ai-badge--${className}`), true, state)
+  assert.equal(badge.querySelector('.ai-badge__status').textContent, state)
+}
+const parsed = aiHandler.parse([enumArg('PASS')], context)
+const badge = JSDOM.fragment(aiHandler.render(parsed.node, context)).firstElementChild
+assert.ok(badge.querySelector('.ai-badge__tip-table[role="table"]'))
+assert.deepEqual(
+  [...badge.querySelectorAll('.ai-badge__tip-row')].map(row => [
+    row.querySelector('.ai-badge__tip-tag').textContent,
+    row.querySelector('.ai-badge__tip-desc').textContent
+  ]),
+  expected
+)
+assert.doesNotMatch(badge.outerHTML, /ignore|notreview/i)
+assert.match(css, /grid-template-columns\s+auto\s+1fr/)
+console.log('AI badge tooltip four-state contract: ok')
 ```
 
 ### 动作步骤
 
-- [ ] **2.1（4 分钟）写 Pug/CSS RED。** 创建 `.temp/theme-ui-a2.test.js` 并运行；预期在旧 tooltip `display`、旧 active 左边框和缺少五项 DOM 上失败。
+- [ ] **2.1（4 分钟）写 Pug/CSS/ARIA RED。** 创建 `.temp/theme-ui-a2.test.js`，并把 `.temp/ai-badge-tooltip-table.test.js` 改为上面的新 handler 四态契约；运行两者，预期在旧 tooltip `display`、旧 active 左边框、缺少五项 DOM/初始 ARIA 上失败。
 - [ ] **2.2（4 分钟）切换 AI 样式与动画。** 在 `custom.styl` 删除旧 class，加入 `UNKN/NONE` 色、160ms 双向 visibility/opacity/transform 和 reduced-motion 即时切换；tooltip DOM 结构保持不变。
 - [ ] **2.3（4 分钟）切换导航底边。** 给 `.navBlock,.navSecond` 常态预留 2.5px 透明底边，active 改底色高亮并删除全部旧 padding 补偿；不碰 `Header.ts`。
 - [ ] **2.4（3 分钟）调整桌面 footer。** 只在 `aside.styl` 的 `min-width:769px` 覆盖中写 `padding-bottom:max(0px,calc(30px - 1lh))`；验证 `flex_layout.styl` 仍原样负责 `<=768px`。
-- [ ] **2.5（5 分钟）建立五项 Pug DOM。** 删除右列 `.i-bgm` 与其中的 audio；增加 screenshot/BGM 按钮、`data-action`、ARIA 和 `toolbox-status`。暂时保留现有三项的内联接线，C 统一改为 document 事件委托。
-- [ ] **2.6（5 分钟）写五角度 CSS。** 删除 nth-child 和堆叠规则，按五个 action 设置固定变量；保留 66px、40px、1.08、阴影、桌面 hover 抽出和现有 reduced-motion。
+- [ ] **2.5（5 分钟）建立六按钮静态 DOM。** 删除右列 `.i-bgm` 与其中的 audio；增加 screenshot/BGM 按钮、五项及 `#to-toolbox` 的 `data-action`、初始 ARIA、label/title 和 `toolbox-status`。同时删除 `#to-toolbox` 与五项工具的全部内联 `onclick`；A2 只建立无内联接线的 DOM，C 再用 document 委托接线，因此 A2 仍不可部署。
+- [ ] **2.6（5 分钟）写五角度与 status CSS。** 删除 nth-child 和堆叠规则，按五个 action 设置固定变量；保留 66px、40px、1.08、阴影、桌面 hover 抽出和现有 reduced-motion；`.toolbox-status` 使用 absolute 脱离普通流并保持 pointer-events none，不参与 toolbox 高度或底缘计算。
 - [ ] **2.7（4 分钟）补语言键。** 中英文加入截图、播放/暂停/错误 label 及共享 status 文案；两语言 key 集必须相同。
 - [ ] **2.8（2 分钟）递增 CSS 版本。** 将 `meta-data.pug` 的 `cssVersion` 从 `20260950` 改为 `20260951`，不改 `jsVersion`。
-- [ ] **2.9（5 分钟）运行源码 GREEN。** 运行 `node .temp/theme-ui-a2.test.js` 与更新后的 tooltip 探针；Pug fixture 必须输出五项、40×40 基础规则和正确条件。
+- [ ] **2.9（5 分钟）运行源码 GREEN。** 运行 `node .temp/theme-ui-a2.test.js` 与 `node .temp/ai-badge-tooltip-table.test.js`；Pug fixture 必须输出 toggle+五项、无 toolbox 内联 onclick、正确初始 ARIA、40×40 基础规则、开/关 tooltip 契约和 absolute status。
 - [ ] **2.10（3 分钟）提交。** 执行 `git diff --check` 和 `git status --short`，只暂存 A2 文件，提交 `feat(theme-ui): 调整导航侧栏与工具箱视觉`，不 push。
 
 ### 验证边界
@@ -655,6 +755,7 @@ console.log('project tooltip: ok')
 | Modify | `themes/arknights/layout/includes/layout.pug` |
 | Modify | `themes/arknights/source/css/_page/post/bottom_btn.styl` |
 | Modify | `themes/arknights/layout/includes/meta-data.pug` |
+| Modify | `themes/arknights/layout/includes/js-data.pug`
 | Modify | `_config.arknights.yml` |
 | Modify | `themes/arknights/source/js/arknights.js` |
 | Modify | `AGENTS.md` |
@@ -689,7 +790,9 @@ const license = fs.readFileSync(path.join(base, 'LICENSE'))
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex')
 assert.equal(sha256(script), '21aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc')
 assert.equal(sha256(license), 'c5fbd8d2221c17ff18fc7f3fee7ecf3346fb5a3f5bb2dbd3eb08f1c0397ed1a2')
-assert.match(license.toString('utf8'), /MIT © Zumerlab/)
+const licenseText = license.toString('utf8')
+assert.match(licenseText, /MIT License/)
+assert.match(licenseText, /Copyright \(c\) 2025 ZumerLab/)
 
 const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'dangerously' })
 dom.window.eval(script.toString('utf8'))
@@ -701,6 +804,11 @@ console.log('snapdom vendor: ok')
 `.temp/theme-ui-screenshot.test.js` 使用以下公共 fixture 和调用循环，所有异步分支使用 deferred Promise，不依赖真实 SnapDOM 捕获。测试用主题现有 TypeScript 编译器转译单个控制器，不读取 package 依赖：
 
 ```js
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const { JSDOM } = require('jsdom')
+const root = path.resolve(__dirname, '..')
 const ts = require('../themes/arknights/node_modules/typescript')
 function loadTypeScript(window, relativePath) {
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
@@ -724,20 +832,36 @@ function deferred() {
   return { promise, resolve, reject }
 }
 
-function installCaptureFixture(window, { width = 800, height = 1200, pixelRatio = 1 } = {}) {
+function createScreenshotHarness({
+  width = 800,
+  height = 1200,
+  pixelRatio = 1,
+  withRoot = true,
+  canvasResult,
+  blobResult = 'png-blob',
+  toBlobError = null
+} = {}) {
+  const dom = new JSDOM('<!doctype html><body></body>', {
+    url: 'https://issuimo.com/2026/09/25/post/',
+    runScripts: 'dangerously'
+  })
+  const { window } = dom
   const { document } = window
   document.body.innerHTML = `
     <main><article>
       <h1 id="post-title"> C++/测试:标题 </h1>
-      <div id="post-content">
+      ${withRoot ? `<div id="post-content">
         <p>正文</p>
         <img id="lazy-image" loading="lazy" alt="图">
         <nav id="paginator"><a href="#">上一页</a></nav>
-      </div>
+        <p id="after-paginator">分页器之后</p>
+      </div>` : ''}
     </article></main>
     <div class="toolbox-status" role="status" hidden></div>
     <button class="toolbox-item toolbox-screenshot"
+      type="button"
       data-action="screenshot"
+      aria-busy="false"
       data-snapdom-src="/lib/snapdom/3.1.1/snapdom.min.js"
       data-label-preparing="正在准备截图"
       data-label-scaled="文章较长，截图将整体缩小"
@@ -747,45 +871,53 @@ function installCaptureFixture(window, { width = 800, height = 1200, pixelRatio 
 
   const root = document.querySelector('#post-content')
   const image = document.querySelector('#lazy-image')
+  const paginator = document.querySelector('#paginator')
+  const button = document.querySelector('.toolbox-screenshot')
+  const status = document.querySelector('.toolbox-status')
   let imageComplete = false
-  Object.defineProperty(image, 'complete', { get: () => imageComplete })
-  Object.defineProperty(image, 'naturalWidth', { get: () => imageComplete ? 100 : 0 })
-  root.getBoundingClientRect = () => ({ width, height, top: 0, left: 0, right: width, bottom: height })
+  if (image !== null) {
+    Object.defineProperty(image, 'complete', { get: () => imageComplete })
+    Object.defineProperty(image, 'naturalWidth', { get: () => imageComplete ? 100 : 0 })
+  }
+  if (root !== null) {
+    root.getBoundingClientRect = () => ({
+      width, height, top: 0, left: 0, right: width, bottom: height
+    })
+  }
   Object.defineProperty(window, 'devicePixelRatio', { value: pixelRatio, configurable: true })
   Object.defineProperty(document, 'fonts', {
     value: { ready: Promise.resolve() },
     configurable: true
   })
   window.HTMLCanvasElement.prototype.toBlob = function(callback) {
-    callback(new window.Blob(['png'], { type: 'image/png' }))
+    if (toBlobError !== null) {
+      throw toBlobError
+    }
+    callback(blobResult === null
+      ? null
+      : new window.Blob([blobResult], { type: 'image/png' }))
   }
-  const revokedUrls = []
-  window.__downloadCount = 0
-  window.URL.createObjectURL = () => 'blob:screenshot'
-  window.URL.revokeObjectURL = url => revokedUrls.push(url)
-  window.HTMLAnchorElement.prototype.click = function() {
-    window.__downloadCount += 1
-    window.lastScreenshotDownload = this.download
-    this.dataset.clicked = 'true'
-  }
-  return {
-    root,
-    image,
-    paginator: document.querySelector('#paginator'),
-    revokedUrls
-  }
-}
 
-function installSnapDomProbe(window, { canvasResult } = {}) {
   const state = {
     scriptCount: 0,
     toCanvasCalls: [],
+    detachedDuringSnapDom: [],
     navElementsCaptured: 0,
     asideElementsCaptured: 0,
-    bottomButtonElementsCaptured: 0
+    bottomButtonElementsCaptured: 0,
+    revokedUrls: [],
+    downloadCount: 0
   }
-  const appendChild = window.document.head.appendChild.bind(window.document.head)
-  window.document.head.appendChild = node => {
+  const canvas = document.createElement('canvas')
+  window.URL.createObjectURL = () => 'blob:screenshot'
+  window.URL.revokeObjectURL = url => state.revokedUrls.push(url)
+  window.HTMLAnchorElement.prototype.click = function() {
+    state.downloadCount += 1
+    window.lastScreenshotDownload = this.download
+  }
+
+  const appendChild = document.head.appendChild.bind(document.head)
+  document.head.appendChild = node => {
     if (node.tagName !== 'SCRIPT' || !node.src.endsWith('/snapdom.min.js')) {
       return appendChild(node)
     }
@@ -794,122 +926,274 @@ function installSnapDomProbe(window, { canvasResult } = {}) {
       const snapdom = function() {}
       snapdom.toCanvas = (source, options) => {
         state.toCanvasCalls.push({ source, options })
+        assert.equal(source.contains(paginator), false)
+        state.detachedDuringSnapDom.push(true)
         if (options.scale < 1) {
-          assert.equal(
-            window.document.querySelector('.toolbox-status').textContent,
-            window.document.querySelector('.toolbox-screenshot').dataset.labelScaled
-          )
+          assert.equal(status.textContent, button.dataset.labelScaled)
         }
         state.navElementsCaptured += source.querySelectorAll('header, nav').length
         state.asideElementsCaptured += source.querySelectorAll('aside').length
         state.bottomButtonElementsCaptured += source.querySelectorAll('.bottom-btn').length
-        return canvasResult || Promise.resolve(window.document.createElement('canvas'))
+        return canvasResult === undefined ? Promise.resolve(canvas) : canvasResult
       }
       window.snapdom = snapdom
       node.dispatchEvent(new window.Event('load'))
     })
     return node
   }
-  return state
+
+  return {
+    dom,
+    window,
+    document,
+    root,
+    image,
+    paginator,
+    button,
+    status,
+    canvas,
+    state,
+    setImageComplete(value) {
+      imageComplete = Boolean(value)
+    },
+    isImageComplete() {
+      return imageComplete
+    }
+  }
 }
 
-const dom = new JSDOM('<!doctype html><body></body>', {
-  url: 'https://issuimo.com/2026/09/25/post/',
-  runScripts: 'dangerously'
-})
-const { window } = dom
-const fixture = installCaptureFixture(window)
-const snapdomProbe = installSnapDomProbe(window)
-const { root, image, paginator, revokedUrls } = fixture
-const { toCanvasCalls } = snapdomProbe
-const scriptCount = () => snapdomProbe.scriptCount
-const button = window.document.querySelector('.toolbox-screenshot')
-const status = window.document.querySelector('.toolbox-status')
-loadTypeScript(window, 'themes/arknights/source/js/_src/include/ScreenshotControl.ts')
+function loadScreenshotControl(harness) {
+  loadTypeScript(
+    harness.window,
+    'themes/arknights/source/js/_src/include/ScreenshotControl.ts'
+  )
+  return harness.window.screenshotControl
+}
+
+function waitFor(predicate) {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    const poll = () => {
+      if (predicate()) {
+        resolve()
+      } else if (Date.now() - startedAt > 1000) {
+        reject(new Error('fixture condition timed out'))
+      } else {
+        setImmediate(poll)
+      }
+    }
+    poll()
+  })
+}
 ```
 
-测试循环必须包含以下断言：
+测试主体使用独立 harness；每个场景显式定义使用的 button、canvas、root 和 paginator，不依赖前一条场景遗留的变量：
 
 ```js
-// 无正文时不加载
-// root 缺失 -> script 0 次、snapdom 0 次、button.disabled === false
+const missingRootHarness = createScreenshotHarness({ withRoot: false })
+const missingRootControl = loadScreenshotControl(missingRootHarness)
+await missingRootControl.capture()
+assert.equal(missingRootHarness.state.scriptCount, 0)
+assert.equal(missingRootHarness.state.toCanvasCalls.length, 0)
+assert.equal(missingRootHarness.button.disabled, false)
+assert.equal(missingRootHarness.button.getAttribute('aria-busy'), 'false')
 
-// 首次点击与 Promise 单例
-assert.equal(scriptCount(), 1)
-await secondCapture()
-assert.equal(scriptCount(), 1)
+const normalHarness = createScreenshotHarness()
+const normalControl = loadScreenshotControl(normalHarness)
+const firstCapture = normalControl.capture()
+await waitFor(() => normalHarness.state.scriptCount === 1)
+assert.equal(normalHarness.image.getAttribute('loading'), 'eager')
+const duplicateCapture = normalControl.capture()
+assert.equal(normalHarness.state.scriptCount, 1)
+normalHarness.setImageComplete(true)
+assert.equal(normalHarness.isImageComplete(), true)
+normalHarness.image.dispatchEvent(new normalHarness.window.Event('load'))
+await Promise.all([firstCapture, duplicateCapture])
+assert.equal(normalHarness.state.toCanvasCalls.length, 1)
+assert.equal(normalHarness.state.detachedDuringSnapDom[0], true)
+assert.equal(normalHarness.root.contains(normalHarness.paginator), true)
+assert.equal(normalHarness.paginator.parentElement, normalHarness.root)
+assert.equal(normalHarness.paginator.nextElementSibling.id, 'after-paginator')
+assert.equal(normalHarness.state.navElementsCaptured, 0)
+assert.equal(normalHarness.state.asideElementsCaptured, 0)
+assert.equal(normalHarness.state.bottomButtonElementsCaptured, 0)
+assert.equal(normalHarness.state.downloadCount, 1)
+assert.match(normalHarness.window.lastScreenshotDownload, /^C\+\+-测试-标题-\d{8}-\d{6}\.png$/)
+assert.equal(normalHarness.image.getAttribute('loading'), 'lazy')
+assert.equal(normalHarness.status.textContent, normalHarness.button.dataset.labelSuccess)
+assert.deepEqual(normalHarness.state.revokedUrls, ['blob:screenshot'])
+assert.equal(normalHarness.document.querySelector('a[download]'), null)
 
-// 懒加载图片
-assert.equal(image.getAttribute('loading'), 'eager')
-imageComplete = true
-image.dispatchEvent(new window.Event('load'))
-assert.equal(toCanvasCalls.length, 1)
+const imageErrorHarness = createScreenshotHarness()
+const imageErrorControl = loadScreenshotControl(imageErrorHarness)
+const imageErrorCapture = imageErrorControl.capture()
+await waitFor(() => imageErrorHarness.image.getAttribute('loading') === 'eager')
+imageErrorHarness.image.dispatchEvent(new imageErrorHarness.window.Event('error'))
+await imageErrorCapture
+assert.equal(imageErrorHarness.state.toCanvasCalls.length, 1)
+assert.equal(imageErrorHarness.state.downloadCount, 1)
+assert.equal(imageErrorHarness.image.getAttribute('loading'), 'lazy')
+assert.equal(imageErrorHarness.root.contains(imageErrorHarness.paginator), true)
 
-// paginator 排除和 finally 恢复
-assert.equal(root.contains(paginator), false) // toCanvas stub 内观察
-assert.equal(paginator.parentElement, root)
-assert.equal(root.textContent.includes('上一页'), true)
+const invalidSizeHarness = createScreenshotHarness({ width: 0, height: 1200 })
+invalidSizeHarness.setImageComplete(true)
+const invalidSizeControl = loadScreenshotControl(invalidSizeHarness)
+await invalidSizeControl.capture()
+assert.equal(invalidSizeHarness.state.toCanvasCalls.length, 0)
+assert.equal(invalidSizeHarness.button.getAttribute('aria-busy'), 'false')
+assert.equal(invalidSizeHarness.status.textContent, invalidSizeHarness.button.dataset.labelFailed)
 
-// 截图边界
-assert.equal(snapdomProbe.navElementsCaptured, 0)
-assert.equal(snapdomProbe.asideElementsCaptured, 0)
-assert.equal(snapdomProbe.bottomButtonElementsCaptured, 0)
-assert.equal(window.__downloadCount, 1)
-assert.match(window.lastScreenshotDownload, /^C\+\+-测试-标题-\d{8}-\d{6}\.png$/)
-assert.equal(image.getAttribute('loading'), 'lazy')
+const edgeHarness = createScreenshotHarness({ width: 800, height: 20000, pixelRatio: 1 })
+edgeHarness.setImageComplete(true)
+const edgeControl = loadScreenshotControl(edgeHarness)
+await edgeControl.capture()
+assert.equal(edgeHarness.state.toCanvasCalls.length, 1)
+assert.equal(edgeHarness.state.toCanvasCalls[0].options.scale, 16384 / 20000)
+assert.equal(edgeHarness.state.toCanvasCalls[0].options.dpr, 1)
+assert.equal(edgeHarness.state.downloadCount, 1)
+assert.equal(edgeHarness.status.textContent, edgeHarness.button.dataset.labelScaledSuccess)
 
-// 另一独立 fixture 中图片触发 error 后也 settle，SnapDOM 仍执行且 loading 属性恢复
-imageComplete = false
-image.dispatchEvent(new window.Event('error'))
-assert.equal(toCanvasCalls.length, 2)
+const pixelHarness = createScreenshotHarness({ width: 12000, height: 4000, pixelRatio: 1 })
+pixelHarness.setImageComplete(true)
+const pixelControl = loadScreenshotControl(pixelHarness)
+await pixelControl.capture()
+assert.equal(pixelHarness.state.toCanvasCalls.length, 1)
+assert.equal(
+  pixelHarness.state.toCanvasCalls[0].options.scale,
+  Math.sqrt(33554432 / (12000 * 4000))
+)
+assert.equal(pixelHarness.state.downloadCount, 1)
 
-// 资源 15 秒失败
-assert.equal(button.getAttribute('aria-busy'), 'false')
-assert.equal(status.hidden, false)
-assert.equal(status.textContent, button.dataset.labelFailed)
-assert.equal(window.__downloadCount, 1)
+for (const failure of [
+  createScreenshotHarness({ blobResult: null }),
+  createScreenshotHarness({ toBlobError: new Error('toBlob failed') })
+]) {
+  failure.setImageComplete(true)
+  const control = loadScreenshotControl(failure)
+  await control.capture()
+  assert.equal(failure.state.toCanvasCalls.length, 1)
+  assert.equal(failure.state.downloadCount, 0)
+  assert.equal(failure.button.getAttribute('aria-busy'), 'false')
+  assert.equal(failure.root.contains(failure.paginator), true)
+  assert.equal(failure.status.textContent, failure.button.dataset.labelFailed)
+}
 
-// blob null、toBlob throw、global 缺失、load error、script timeout 均恢复 busy 且不下载
-
-// rejected Promise 在同一页面生命周期内缓存；再次点击不创建第二个 script
-await retryFailedCapture()
-assert.equal(scriptCount(), 1)
-
-// 不支持 Font Loading API 时直接继续；支持时 fonts.ready pending 会走 15 秒失败
-Object.defineProperty(document, 'fonts', { value: undefined, configurable: true })
-await captureWithoutFonts()
-assert.equal(toCanvasCalls.length, 1)
-
-// 每次下载后 object URL 都 revoke，临时 anchor 都从 DOM 移除
-assert.deepEqual(revokedUrls, ['blob:screenshot'])
-assert.equal(document.querySelector('a[download]'), null)
-
-// 长图整体缩放
-const callsBeforeLong = toCanvasCalls.length
-assert.equal(toCanvasCalls.at(-1).source, root)
-assert.ok(toCanvasCalls.at(-1).options.scale < 1)
-assert.equal(toCanvasCalls.at(-1).options.dpr, 1)
-assert.equal(toCanvasCalls.length, callsBeforeLong + 1) // 长图仍只调用一次，不分片
-assert.equal(status.textContent, button.dataset.labelScaledSuccess)
-
-// Pjax generation 取消
-const oldCanvas = deferred()
-document.dispatchEvent(new window.Event('pjax:send'))
-oldCanvas.resolve(canvas)
-await pendingCapture
-assert.equal(window.__downloadCount, 1)
-assert.equal(newButton.getAttribute('aria-busy'), 'false')
+const errorCanvas = deferred()
+const pjaxErrorHarness = createScreenshotHarness({ canvasResult: errorCanvas.promise })
+const pjaxErrorControl = loadScreenshotControl(pjaxErrorHarness)
+const pjaxErrorCapture = pjaxErrorControl.capture()
+await waitFor(() => pjaxErrorHarness.state.toCanvasCalls.length === 1)
+const oldRoot = pjaxErrorHarness.root
+const oldButton = pjaxErrorHarness.button
+const oldPaginator = pjaxErrorHarness.paginator
 assert.equal(oldRoot.contains(oldPaginator), false)
+pjaxErrorHarness.document.dispatchEvent(new pjaxErrorHarness.window.Event('pjax:error'))
+errorCanvas.resolve(pjaxErrorHarness.canvas)
+await pjaxErrorCapture
+assert.equal(pjaxErrorHarness.state.downloadCount, 0)
+assert.equal(oldRoot.isConnected, true)
+assert.equal(oldPaginator.parentElement, oldRoot)
+assert.equal(oldPaginator.nextElementSibling.id, 'after-paginator')
+assert.equal(oldRoot.contains(oldPaginator), true)
+assert.equal(oldButton.getAttribute('aria-busy'), 'false')
 
-// 同样的独立 fixture 把 pjax:send 换成 pjax:error，旧 Promise resolve 后仍不得下载
-// pjax:success 会再次递增 generation，并且只给新按钮绑定当前状态。
+const sendCanvas = deferred()
+const pjaxSendHarness = createScreenshotHarness({ canvasResult: sendCanvas.promise })
+const pjaxSendControl = loadScreenshotControl(pjaxSendHarness)
+const pjaxSendCapture = pjaxSendControl.capture()
+await waitFor(() => pjaxSendHarness.state.toCanvasCalls.length === 1)
+const detachedRoot = pjaxSendHarness.root
+const detachedButton = pjaxSendHarness.button
+const detachedPaginator = pjaxSendHarness.paginator
+detachedRoot.remove()
+detachedButton.remove()
+assert.equal(detachedRoot.isConnected, false)
+pjaxSendHarness.document.dispatchEvent(new pjaxSendHarness.window.Event('pjax:send'))
+const newRoot = detachedRoot.cloneNode(false)
+newRoot.id = 'post-content-new'
+const newPaginator = pjaxSendHarness.document.createElement('nav')
+newPaginator.id = 'paginator-new'
+newRoot.append(newPaginator)
+const newButton = detachedButton.cloneNode(true)
+newButton.setAttribute('aria-busy', 'true')
+pjaxSendHarness.document.body.append(newRoot, newButton)
+sendCanvas.resolve(pjaxSendHarness.canvas)
+await pjaxSendCapture
+assert.equal(pjaxSendHarness.state.downloadCount, 0)
+assert.equal(detachedPaginator.parentNode, null)
+assert.equal(newRoot.contains(newPaginator), true)
+assert.equal(newButton.getAttribute('aria-busy'), 'true')
+pjaxSendHarness.document.dispatchEvent(new pjaxSendHarness.window.Event('pjax:success'))
+assert.equal(newButton.getAttribute('aria-busy'), 'false')
 ```
+
+其余失败分支各自建立独立 fixture，固定输入与断言如下，禁止合并成没有输入和断言的笼统循环：
+
+| Fixture | 固定输入 | 必须断言 |
+| --- | --- | --- |
+| script `error` | append 的 SnapDOM script 派发 `error` | `scriptCount=1`、`toCanvasCalls=0`、下载 0、busy=false、status=`labelFailed`；再次 capture 仍 `scriptCount=1` |
+| global 缺失/入口不匹配 | script `load` 后分别删除 `window.snapdom` 或令其为 `{}` | rejected Promise 被缓存、下载 0、busy=false、第二次不新增 script |
+| fonts 不支持 | `document.fonts=undefined`，图片预先 complete | 继续到一次 `toCanvas`，下载 1 |
+| fonts 15 秒超时 | `document.fonts.ready` 保持 pending，推进 fake timer 到 15000ms | 不调用 `toCanvas`、下载 0、busy=false、status=`labelFailed` |
+| image 15 秒超时 | 字体 resolved、图片保持 pending，推进 fake timer 到 15000ms | 不调用 `toCanvas`、图片 `loading` 恢复 `lazy`、分页器恢复、下载 0 |
+| 缺全局/加载超时 | script 既不 `load` 也不 `error`，推进 fake timer 到 15000ms | 同页第二次 capture 不创建第二个 script，下载 0 |
+
+文件名分支至少建立三组输入：`#post-title.textContent='  A<>:"/\\|?*\\u0001B...  .  '` 断言 80 code-unit 上限与非法字符清除；删除标题节点并设 `document.title='Site | Fallback Title'` 断言使用站点标题；标题和 document title 都为空时断言前缀为 `post`。固定 mock `Date` 为本地 `2026-09-25T14:30:52`，三组文件名均以 `-20260925-143052.png` 结尾。
 
 文件名标题来源固定为 `#post-title.textContent`；缺失时取 `document.title.split('|').at(-1).trim()`，仍为空才回退 `post`。安全化顺序固定为：合并连续空白并 trim、把连续 Windows 保留字符/ASCII 控制字符替换为一个 `-`、删除末尾空格/句点、slice(0, 80) 后再次 trim、空结果回退 `post`。时间戳按本地字段固定为 `YYYYMMDD-HHmmss`，最终名为 `<safe-title>-<timestamp>.png`。测试再输入 100 个 UTF-16 code unit、`<>:"/\\|?*`、控制字符、尾随空格/句点，并用固定本地时间断言标题部分不超过 80 code units、无路径分隔符、空结果回退 `post`。
 
-`.temp/theme-ui-bgm.test.js` 复用上面的 `deferred()`，转译 `BgmControl.ts` 并控制 media mock：
+`.temp/theme-ui-bgm.test.js` 复制上述 `deferred()` helper，转译 `BgmControl.ts` 并控制 media mock：
 
 ```js
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const { JSDOM } = require('jsdom')
+const root = path.resolve(__dirname, '..')
+const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8')
+const ts = require('../themes/arknights/node_modules/typescript')
+function loadTypeScript(window, relativePath) {
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+  const script = ts.transpileModule(source, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.None,
+      strict: true
+    }
+  }).outputText
+  window.eval(script)
+}
+function deferred() {
+  let resolve
+  let reject
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+const bgmDom = new JSDOM(`<!doctype html><body>
+  <audio id="bgm" src="/audio/bgm.mp3" preload="metadata" loop></audio>
+  <div class="toolbox-status" role="status" hidden></div>
+  <button class="toolbox-item toolbox-bgm" type="button"
+    data-action="bgm"
+    aria-pressed="false"
+    aria-busy="false"
+    data-label-play="播放背景音乐"
+    data-label-pause="暂停背景音乐"
+    data-label-error="背景音乐加载失败，点击重试"
+    data-label-playing-status="背景音乐已开始播放"
+    data-label-paused-status="背景音乐已暂停"
+    data-label-failed-status="背景音乐加载失败，点击重试"></button>
+</body>`, { url: 'https://issuimo.com/', runScripts: 'dangerously' })
+const { window } = bgmDom
+const { document } = window
+const audio = document.querySelector('#bgm')
+const button = document.querySelector('.toolbox-bgm')
+const status = document.querySelector('.toolbox-status')
+loadTypeScript(window, 'themes/arknights/source/js/_src/include/BgmControl.ts')
+
 let paused = true
 let mediaError = null
 const calls = []
@@ -975,8 +1259,7 @@ Pjax 测试替换 `.toolbox-bgm`，保留同一 audio 引用，触发 `pjax:succ
 ```js
 const yaml = require('js-yaml')
 const pug = require('pug')
-const config = yaml.load(read('_config.yml'))
-config.root = '/'
+const baseConfig = yaml.load(read('_config.yml'))
 const themeDefault = yaml.load(read('themes/arknights/_config.yml'))
 const themeOverride = yaml.load(read('_config.arknights.yml'))
 
@@ -990,23 +1273,38 @@ function merge(base, override) {
   return result
 }
 
-function renderLayout(src) {
-  const theme = merge(themeDefault, themeOverride)
-  theme.canvas_dust = false
-  theme.bgm = { enable: true, autoplay: false, loop: true, src }
+const mergedTheme = merge(themeDefault, themeOverride)
+assert.equal(typeof mergedTheme.post.code_fold, 'number')
+
+function renderLayout({
+  src,
+  enable,
+  autoplay = false,
+  loop = true
+}) {
+  const theme = merge(mergedTheme, {
+    canvas_dust: false,
+    bgm: { enable, autoplay, loop, src }
+  })
+  const config = {
+    ...baseConfig,
+    root: '/',
+    theme_config: theme
+  }
   return pug.compileFile(path.join(root, 'themes/arknights/layout/includes/layout.pug'))({
     body: '',
     page: { title: 'fixture', content: '正文' },
     config,
     site: { posts: [], tags: [], categories: [] },
     theme,
-    is_post: () => false,
+    is_post: () => true,
     is_archive: () => false,
     is_tag: () => false,
     is_category: () => false,
     is_month: () => false,
     is_year: () => false,
     __: key => key,
+    url: '',
     url_for: value => `${config.root}${String(value).replace(/^\/+/, '')}`,
     full_url_for: value => `https://example.com${config.root}${String(value).replace(/^\/+/, '')}`,
     open_graph: () => '',
@@ -1016,66 +1314,155 @@ function renderLayout(src) {
 }
 
 for (const src of ['/audio/bgm.mp3', '/audio/bgm-fixture.mp3']) {
-  const document = new JSDOM(renderLayout(src)).window.document
+  const document = new JSDOM(renderLayout({
+    src,
+    enable: true,
+    autoplay: false,
+    loop: true
+  })).window.document
   const audios = document.querySelectorAll('audio#bgm')
+  const buttons = document.querySelectorAll('.toolbox-bgm[data-action="bgm"]')
   assert.equal(audios.length, 1)
+  assert.equal(buttons.length, 1)
   assert.equal(audios[0].getAttribute('src'), src)
   assert.equal(audios[0].hasAttribute('controls'), false)
   assert.equal(audios[0].hasAttribute('autoplay'), false)
   assert.equal(audios[0].hasAttribute('loop'), true)
   assert.equal(audios[0].getAttribute('preload'), 'metadata')
+  assert.equal(audios[0].closest('article'), null)
+  assert.equal(document.querySelector('.bottom-btn-stack .i-bgm'), null)
 }
+const disabledDocument = new JSDOM(renderLayout({
+  src: '/audio/bgm-fixture.mp3',
+  enable: false,
+  autoplay: false,
+  loop: true
+})).window.document
+assert.equal(disabledDocument.querySelectorAll('audio#bgm').length, 0)
+assert.equal(disabledDocument.querySelectorAll('.toolbox-bgm[data-action="bgm"]').length, 0)
+assert.equal(disabledDocument.querySelectorAll('.toolbox-screenshot[data-action="screenshot"]').length, 1)
 assert.match(read('themes/arknights/layout/includes/layout.pug'), /url_for\(theme\.bgm\.src\)/)
-assert.doesNotMatch(renderLayout('/audio/bgm-fixture.mp3'), /\/audio\/bgm\.mp3/)
+assert.doesNotMatch(
+  renderLayout({ src: '/audio/bgm-fixture.mp3', enable: true }),
+  /\/audio\/bgm\.mp3/
+)
 ```
 
-`.temp/theme-ui-toolbox.test.js` 转译 `Toolbox.ts`，在 `window` 上放置 `screenshotControl.capture` 和 `bgmControl.toggle` spy，执行每个 action 的 `.click()`，断言调用次数严格为 1；替换整个 `.toolbox-items` 后再触发 `pjax:success`，新按钮仍只调用一次。Pug fixture同时断言：
+`.temp/theme-ui-toolbox.test.js` 转译 `Toolbox.ts`，在 `window` 上放置 `screenshotControl.capture` 和 `bgmControl.toggle` spy，执行每个 action 的 `.click()`，断言调用次数严格为 1；替换整个 `.toolbox-items` 后再触发 `pjax:success`，新按钮仍只调用一次。toggle 同样只走 document 委托。Pug fixture 与运行时至少包含：
 
 ```js
 const items = [...document.querySelectorAll('.toolbox-item')]
+const toggle = document.querySelector('#to-toolbox')
 assert.deepEqual(items.map(item => item.getAttribute('data-action')), [
   'annotate', 'share', 'favorite', 'screenshot', 'bgm'
 ])
-for (const item of items) {
-  assert.equal(item.hasAttribute('onclick'), false)
-  assert.equal(item.getAttribute('type'), 'button')
+assert.equal(toggle.getAttribute('data-action'), 'toolbox')
+for (const button of [toggle, ...items]) {
+  assert.equal(button.hasAttribute('onclick'), false)
+  assert.equal(button.getAttribute('type'), 'button')
+  assert.ok(button.getAttribute('aria-label'))
+  assert.ok(button.getAttribute('title'))
 }
-assert.equal(document.querySelectorAll('#bgm').length, 0) // 模板 fragment不含 layout audio
+assert.equal(document.querySelectorAll('#bgm').length, 0)
 assert.equal(document.querySelectorAll('.bottom-btn-stack .i-bgm').length, 0)
+
+let toggleCalls = 0
+const originalToggle = window.toolbox.toggle
+window.toolbox.toggle = () => {
+  toggleCalls += 1
+  originalToggle()
+}
+toggle.querySelector('svg').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+assert.equal(toggleCalls, 1)
+assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+
+const actionCounts = new Map([
+  ['annotate', 0],
+  ['share', 0],
+  ['favorite', 0],
+  ['screenshot', 0],
+  ['bgm', 0]
+])
+const originalMethods = {
+  annotate: window.toolbox.annotate,
+  share: window.toolbox.share,
+  favorite: window.toolbox.favorite
+}
+window.toolbox.annotate = () => {
+  actionCounts.set('annotate', actionCounts.get('annotate') + 1)
+  originalMethods.annotate()
+}
+window.toolbox.share = () => {
+  actionCounts.set('share', actionCounts.get('share') + 1)
+  originalMethods.share()
+}
+window.toolbox.favorite = () => {
+  actionCounts.set('favorite', actionCounts.get('favorite') + 1)
+  originalMethods.favorite()
+}
+window.screenshotControl.capture = () => {
+  actionCounts.set('screenshot', actionCounts.get('screenshot') + 1)
+}
+window.bgmControl.toggle = () => {
+  actionCounts.set('bgm', actionCounts.get('bgm') + 1)
+}
+for (const [action] of actionCounts) {
+  document.querySelector(`.toolbox-item[data-action="${action}"]`).click()
+  assert.equal(actionCounts.get(action), 1)
+}
+const oldItems = document.querySelector('#toolbox-items')
+const newItems = oldItems.cloneNode(true)
+oldItems.replaceWith(newItems)
+document.dispatchEvent(new window.Event('pjax:success'))
+actionCounts.set('screenshot', 0)
+newItems.querySelector('[data-action="screenshot"]').click()
+assert.equal(actionCounts.get('screenshot'), 1)
 ```
+
+### C 跟踪文件暂存清单
+
+C 的 `.temp/` 测试仍不提交；一次提交只允许暂存下列跟踪文件，命令中的 `js-data.pug` 不得省略：
+
+```powershell
+git add -- "themes/arknights/source/js/_src/include/ScreenshotControl.ts" "themes/arknights/source/lib/snapdom/3.1.1/snapdom.min.js" "themes/arknights/source/lib/snapdom/3.1.1/LICENSE" "themes/arknights/source/js/_src/include/BgmControl.ts" "themes/arknights/source/js/_src/include/Toolbox.ts" "themes/arknights/layout/includes/bottom-btn.pug" "themes/arknights/layout/includes/layout.pug" "themes/arknights/source/css/_page/post/bottom_btn.styl" "themes/arknights/layout/includes/meta-data.pug" "themes/arknights/layout/includes/js-data.pug" "_config.arknights.yml" "themes/arknights/source/js/arknights.js" "AGENTS.md"
+git diff --cached --name-only
+git diff --cached --check
+```
+
+`git diff --cached --name-only` 的集合必须与本节 13 个路径完全相等；出现 `.temp/`、`public/`、`search.js` 或其它文件即停止提交并取消对应暂存项。
 
 ### 动作步骤
 
 - [ ] **4.1（4 分钟）写 vendor RED。** 创建 vendor 探针；先因两个文件不存在失败，锁定 hash、MIT 文本与 `window.snapdom.toCanvas`。
 - [ ] **4.2（3 分钟）落盘官方资源。** 从 npm 3.1.1 tarball 复制 `dist/snapdom.js` 为 `snapdom.min.js`、复制根 LICENSE；不编辑内容，运行 vendor GREEN。
-- [ ] **4.3（5 分钟）写截图 RED。** 创建 `theme-ui-screenshot.test.js`，一次写全资源等待、单例、缩放、paginator、文件名、blob/error 和 Pjax cancellation 断言。
-- [ ] **4.4（5 分钟）写 BGM RED。** 创建 `theme-ui-bgm.test.js`，覆盖 play resolve/reject、pause/continue、media error/load、ended、Pjax、Pug source fixture和唯一 audio 属性。
-- [ ] **4.5（4 分钟）写 Toolbox RED。** 创建 `theme-ui-toolbox.test.js`，覆盖五 action 分发、Pjax 替换后单次绑定、分享/收藏 status 与无内联 onclick。
+- [ ] **4.3（5 分钟）写截图 RED。** 创建 `theme-ui-screenshot.test.js`，按上述独立 harness 写全资源等待、单例、edge/pixel 两种超预算缩放、paginator、文件名、blob/error，以及 `pjax:error` 恢复旧分页器与 `pjax:send` 断开 parent 后不恢复两组取消断言。
+- [ ] **4.4（5 分钟）写 BGM RED。** 创建 `theme-ui-bgm.test.js`，覆盖 play resolve/reject、pause/continue、media error/load、ended、Pjax、Pug source fixture 和唯一 audio 属性。
+- [ ] **4.5（4 分钟）写 Toolbox RED。** 创建 `theme-ui-toolbox.test.js`，覆盖 toggle+五 action 的 document 分发、点击 SVG 后一次只调用一次、Pjax 替换后单次绑定、分享/收藏 status，以及 toggle/五项均无内联 onclick。
 - [ ] **4.6（3 分钟）写根配置 RED。** 在 BGM 探针解析 `_config.arknights.yml`，断言四个字段精确值；失败应只显示 `enable false`/`autoplay true` 差异。
 - [ ] **4.7（3 分钟）实现 ScreenshotControl 骨架。** 建立常量、generation、Promise 单例、script load/timeout/global shape 校验和 current DOM 查询。
 - [ ] **4.8（5 分钟）实现资源稳定等待。** 依次等待 fonts、图片；完整图片立即成功，未完成图片临时设 `loading=eager`，load/error 均 settle，15 秒超时失败；每个 await 后校验 generation。
-- [ ] **4.9（5 分钟）实现 capture 与长图缩放。** 校验当前 generation，detach paginator，调用 `toCanvas(root,{scale,dpr:1})`，`toBlob` PNG，临时 anchor 下载；finally 恢复 paginator、lazy loading、busy、button 和 URL。
-- [ ] **4.10（4 分钟）实现 generation 取消。** `pjax:send`、`pjax:error` 立即递增；`pjax:success` 再递增并只绑定新按钮；旧任务不得恢复新页 paginator或写新按钮状态。
+- [ ] **4.9（5 分钟）实现 capture 与长图缩放。** 校验当前 generation，detach paginator，调用 `toCanvas(root,{scale,dpr:1})`，`toBlob` PNG，临时 anchor 下载；finally 在 generation 未变或原 parent 仍 connected 时恢复 paginator，并恢复 lazy loading、busy、button 和 URL。
+- [ ] **4.10（4 分钟）实现 generation 取消。** `pjax:send`、`pjax:error` 立即递增；`pjax:success` 再递增并只绑定新按钮。`pjax:error` 保持原 parent connected 时旧分页器必须恢复但不得下载；`pjax:send` fixture 先断开原 parent，generation 变化后不得把旧 paginator 插回，也不得写新按钮状态。
 - [ ] **4.11（4 分钟）重构 BgmControl。** 用长生命周期 class 替换 13 行函数；保存唯一 audio，绑定媒体事件和 `pjax:success`，实现 pending/reject/error-retry/pause/continue。
-- [ ] **4.12（4 分钟）接入 Toolbox 分发。** 删除五项内联 onclick；增加 document click 委托和 `data-action` switch。截图/BGM 业务只委托控制器，分享/收藏成功写共享 status。
+- [ ] **4.12（4 分钟）接入 Toolbox 分发。** 删除 `#to-toolbox` 与五项工具的内联 onclick；增加一次 document click 委托和 `data-action` switch，toggle 与工具项各只分发一次。截图/BGM 业务只委托控制器，分享/收藏成功只做共享 status 的最小写入；不在本任务拆分或新增 Highlight/Favorites/Status 业务模块。
 - [ ] **4.13（3 分钟）移动唯一 audio。** 从 `bottom-btn.pug` 删除 audio；仅在 C 将 `audio#bgm` 放到 `layout.pug` 的 `main`/Pjax 替换区外，`src=url_for(theme.bgm.src)`、`preload="metadata"`、`loop=theme.bgm.loop`，不输出 controls/autoplay。
 - [ ] **4.14（2 分钟）启用根配置。** 只改 `_config.arknights.yml` 的 BGM 四字段为批准值；用 YAML 对象 diff 证明其它键未变。
 - [ ] **4.15（4 分钟）完成 Pug/CSS 并核对语言契约。** screenshot 使用内联相机 SVG；BGM 使用相对 sound mask；status 有文本时可见；读取 A2 已加入的两语言 key，若缺失则停止并回到 A2 修复，不在 C 另建命名。
-- [ ] **4.16（2 分钟）递增缓存版本。** `cssVersion` 改为 `20260952`，`jsVersion` 改为 `20260949`；不新增 source cache 参数。
+- [ ] **4.16（2 分钟）递增实际产物版本。** 因工具箱 Stylus 变化，把 `meta-data.pug` 的 `cssVersion` 改为 `20260952`；因 `ScreenshotControl`/`BgmControl`/`Toolbox` 进入 `arknights.js`，把 C 文件表和暂存清单中的 `js-data.pug` 内 `jsVersion` 改为 `20260949`。`search.js` 无差异，不得为其另增版本或 source cache 参数。
 - [ ] **4.17（5 分钟）运行主题 build。** 执行 `npm --prefix themes/arknights run build` 和 `node --check themes/arknights/source/js/arknights.js`；确认四个控制器进入 bundle，`search.js` 无差异。
 - [ ] **4.18（5 分钟）运行 C GREEN。** 依次运行 vendor、screenshot、BGM、Toolbox、Pug/CSS 和 `marker-migration` 探针；所有 deferred 场景均须 settle，Node 进程不得遗留 timer 或未处理 rejection。
 - [ ] **4.19（4 分钟）同步 AGENTS。** 记录五项工具、SnapDOM 本地资源、唯一 audio、根级 BGM、四控制器职责、取消/状态契约和最终验证命令。
-- [ ] **4.20（3 分钟）提交。** 执行 Git 三检查，只暂存 C 文件，提交 `feat(theme-ui): 扩展工具箱截图与背景音乐`，不 push。
+- [ ] **4.20（3 分钟）提交。** 执行 `git diff --check`、`git diff --stat`、`git status --short`，按“C 跟踪文件暂存清单”逐项暂存；再断言 cached 名单包含 `themes/arknights/layout/includes/js-data.pug`、包含全部 13 个跟踪路径且不含 `.temp/`/`public/`/`search.js`，运行 `git diff --cached --check`，提交 `feat(theme-ui): 扩展工具箱截图与背景音乐`，不 push。
 
 ### 验证边界
 
-- C 的 jsdom 探针证明状态机、DOM、Promise、超时、缩放参数、文件名和 Pjax generation；它不证明真实 PNG 像素或真实音频输出。
+- C 的 jsdom 探针证明状态机、DOM、Promise、超时、缩放参数、文件名和 Pjax generation；其中 `pjax:error` 明确证明“取消下载但恢复仍 connected 的旧 paginator”，`pjax:send` 明确证明“parent 已断开时不恢复”。它不证明真实 PNG 像素或真实音频输出。
 - C 不运行完整 Hexo build；实际 `public/`、真实 SnapDOM 长图、音频和 Pjax 留给 D 构建与有头浏览器门禁。
 - SnapDOM 跨域资源失败按固定失败反馈处理；不增加代理、CDN、worker 或插件。
 
 ## Task 5 — Batch D: 活文档、全量门禁、产物与人工验收交付
 
-**依赖:** Task 1–4 全部提交，最终源码不再变化。
+**依赖:** Task 1–4 及其全部缺陷修复提交均完成，最终源码冻结。
 
 ### 文件范围
 
@@ -1085,7 +1472,8 @@ assert.equal(document.querySelectorAll('.bottom-btn-stack .i-bgm').length, 0)
 | Modify | `docs/2026-09-25-theme-ui-toolbox-design.md` |
 | Modify | `.temp/marker-artifacts.js` |
 | Modify | `.temp/nav-smoke.js` |
-| Modify | `.temp/r10-toolbox-geometry.js` |
+| Modify | `.temp/r10-toolbox-geometry.js`
+| Test only | `.temp/ai-badge-tooltip-table.test.js` |
 | Test only | `.temp/theme-ui-a1.test.js` |
 | Test only | `.temp/theme-ui-a2.test.js` |
 | Test only | `.temp/project-tooltip.test.js` |
@@ -1095,7 +1483,7 @@ assert.equal(document.querySelectorAll('.bottom-btn-stack .i-bgm').length, 0)
 | Test only | `.temp/theme-ui-toolbox.test.js` |
 | Generated verification | `public/`；不提交 |
 
-D 默认不新增 runtime 功能；任一自动化失败都回到 A1、A2、B 或 C 的责任任务修复并重跑受影响门禁，D 不趁机重构。
+D 默认不新增 runtime 功能；任一自动化失败都停止 D，回到 A1、A2、B 或 C 的责任任务追加独立修复提交并重跑受影响门禁，D 不夹带 runtime 修复、不重构 `Toolbox.ts`。
 
 ### 最终 artifact 契约
 
@@ -1103,6 +1491,11 @@ D 默认不新增 runtime 功能；任一自动化失败都回到 A1、A2、B �
 
 ```js
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex')
+const ARTICLE_HTML_PATH = 'public/2026/08/14/ai-programming-journey/index.html'
+const homeHtml = read('public/index.html')
+const projectHtml = read('public/projects/index.html')
+const dataHtml = read('public/data/index.html')
+const articleHtml = read(ARTICLE_HTML_PATH)
 assert.deepEqual(config.bgm, {
   enable: true,
   autoplay: false,
@@ -1117,14 +1510,31 @@ assert.equal(fs.existsSync(path.join(root, 'public/js/project-tooltip.js')), fal
 assert.match(bundle, /class ProjectTooltip/)
 assert.match(bundle, /new WeakSet/)
 
-// 项目页、数据页无 #comments 和评论 provider；文章页仍有 #giscus/#comments。
-assert.equal(new JSDOM(projectHtml).window.document.querySelector('.toolbox-screenshot'), null)
-assert.equal(new JSDOM(dataHtml).window.document.querySelector('.toolbox-screenshot'), null)
+// 项目页、数据页无 #comments 和评论 provider；代表性文章页仍有 #giscus/#comments。
+for (const [name, html] of [
+  ['home', homeHtml],
+  ['project', projectHtml],
+  ['data', dataHtml]
+]) {
+  const pageDocument = new JSDOM(html).window.document
+  assert.equal(pageDocument.querySelector('.toolbox-screenshot'), null, name)
+}
 const articleDocument = new JSDOM(articleHtml).window.document
 assert.deepEqual(
   [...articleDocument.querySelectorAll('.toolbox-item')].map(item => item.dataset.action),
   ['annotate', 'share', 'favorite', 'screenshot', 'bgm']
 )
+assert.equal(articleDocument.querySelector('#to-toolbox').dataset.action, 'toolbox')
+for (const button of articleDocument.querySelectorAll('#to-toolbox, .toolbox-item')) {
+  assert.equal(button.hasAttribute('onclick'), false)
+  assert.ok(button.getAttribute('aria-label'))
+  assert.ok(button.getAttribute('title'))
+}
+for (const action of ['annotate', 'favorite', 'bgm']) {
+  assert.equal(articleDocument.querySelector(`[data-action="${action}"]`).getAttribute('aria-pressed'), 'false')
+}
+assert.equal(articleDocument.querySelector('[data-action="screenshot"]').getAttribute('aria-busy'), 'false')
+assert.equal(articleDocument.querySelector('.toolbox-status').hidden, true)
 assert.equal(articleDocument.querySelectorAll('.bottom-btn-stack .i-bgm').length, 0)
 const audios = articleDocument.querySelectorAll('#bgm')
 assert.equal(audios.length, 1)
@@ -1149,14 +1559,25 @@ assert.match(articleHtml, /arknights\.js\?v=20260949/)
 
 同时继续断言 `public/search.json` 只含新状态纯文本；所有文章/项目/search 页面均不含 marker token、wrapper、NUL、sentinel 或旧 `[&]` 语法。
 
-`.temp/nav-smoke.js` 读取最终 `public/`，在已有导航、搜索、标注、收藏回归之外增加：五 action 顺序、Enter/Space 由原生 button 契约保留、截图/BGM action spy、无内联 onclick、Pjax 替换后事件不重复。jsdom 不用截图证明动画或布局。
+`.temp/nav-smoke.js` 不再默认读取首页验证五项工具箱；主交互 fixture 改读代表性文章 `public/2026/08/14/ai-programming-journey/index.html`，JSDOM URL 同步设为 `https://issuimo.com/2026/08/14/ai-programming-journey/`，并把 localStorage/favorite/highlight 的 pathname 预期从 `/` 改为该文章路径。在已有导航、搜索、标注、收藏回归之外断言 toggle+五 action 顺序、Enter/Space 由原生 button 契约保留、截图/BGM action spy、toggle/五项均无内联 onclick、Pjax 替换后事件不重复。另建首页、`public/projects/index.html`、`public/data/index.html` 三个只读 fixture，各自断言 `.toolbox-screenshot` 为 0。`.temp/r10-toolbox-geometry.js` 同样读取该代表性文章，不以首页是否存在五项工具箱作为通过条件；增加 `.toolbox-status{position:absolute}` 静态断言，证明 status 脱离普通流，并由 `toolbox-toggle=40px`、`bottom=var(--btn-inset)` 的既有几何断言证明它不改变 toolbox 高度/底缘。jsdom 不用截图证明动画或布局。
 
 ### 动作步骤
 
 - [ ] **5.1（5 分钟）更新 artifact RED。** 先把 `.temp/marker-artifacts.js` 改为新状态、无旧脚本、新工具箱/audio/vendor/version断言；在旧 `public/` 上运行应失败。
-- [ ] **5.2（4 分钟）更新最终 DOM/CSS 探针。** 完成 `nav-smoke.js` 和 `r10-toolbox-geometry.js` 的最终 action/产物断言，仍不构建。
+- [ ] **5.2（4 分钟）更新最终 DOM/CSS 探针。** 让 `nav-smoke.js` 与 `r10-toolbox-geometry.js` 读取代表性文章，首页/项目/数据单独断言无截图按钮；补 toggle 无 onclick、一次点击一次 toggle、五 action、初始 ARIA 和 `.toolbox-status{position:absolute}` 几何断言，仍不构建。
 - [ ] **5.3（3 分钟）做语言/配置源检查。** 用 `js-yaml` 比较中英文新增 key 集；解析根级 BGM 四字段；断言 `url_for(theme.bgm.src)` 精确存在。
-- [ ] **5.4（5 分钟）运行全部专项 GREEN。** 依次运行 A1、A2、ProjectTooltip、vendor、screenshot、BGM、Toolbox、geometry、nav smoke；记录每个 `ok` 和退出码 0。
+- [ ] **5.4（5 分钟）运行源码专项 GREEN。** 依次运行 A1、A2、`ai-badge-tooltip-table`、ProjectTooltip、vendor、screenshot、BGM、Toolbox；记录每个 `ok` 和退出码 0。读取 `public/` 的 geometry/nav smoke 留到构建后的 5.8。命令固定为：
+
+```powershell
+node .temp/theme-ui-a1.test.js
+node .temp/theme-ui-a2.test.js
+node .temp/ai-badge-tooltip-table.test.js
+node .temp/project-tooltip.test.js
+node .temp/snapdom-vendor.test.js
+node .temp/theme-ui-screenshot.test.js
+node .temp/theme-ui-bgm.test.js
+node .temp/theme-ui-toolbox.test.js
+```
 - [ ] **5.5（5 分钟）运行九个 marker 探针。** 依次运行：
 
 ```powershell
@@ -1193,7 +1614,7 @@ npm run build
 
 构建失败时读取完整错误并回到责任任务修复；不在 D 添加新功能。为避免重复全量门禁，修复后只补跑失败阶段，确认源码状态未变后再执行一次最终完整构建。
 
-- [ ] **5.8（5 分钟）立即运行 artifact。** 构建成功后不修改源码，立即执行 `node .temp/marker-artifacts.js`；随后执行 `node .temp/r10-toolbox-geometry.js` 与 `node .temp/nav-smoke.js`。
+- [ ] **5.8（5 分钟）立即运行产物门禁。** 构建成功后不修改源码，依次执行 `node .temp/marker-artifacts.js`、`node .temp/r10-toolbox-geometry.js`、`node .temp/nav-smoke.js`；三者必须针对同一最终 `public/` 退出码 0。
 - [ ] **5.9（4 分钟）同步最终活文档。** `AGENTS.md` 删除旧 AI 状态、5px 导航左边框、三项工具箱、独立 ProjectTooltip 和旧 artifact 命令；写入最终控制器、vendor、配置、缓存版本和门禁。设计文档写入实际 A1–C commit hash、自动化结果和“真实有头浏览器验收 pending”。
 - [ ] **5.10（3 分钟）文档 GREEN。** 搜索运行路径和当前文档中的旧状态/旧脚本正向契约；只允许负例、风险说明和历史设计文档中明确的迁移语境。再次执行 `git diff --check`。
 - [ ] **5.11（3 分钟）提交 D。** 只暂存 `AGENTS.md` 与当前设计文档，提交 `docs(theme-ui): 同步实施状态与验收口径`，不 push。
@@ -1208,14 +1629,46 @@ npm run build
 2. 文章 -> 项目 -> 数据 -> 浏览器后退，确认标题正确，隐藏/恢复标签页不改标题，项目/数据无评论，文章评论仍按 Giscus 配置显示。
 3. 检查现有 PASS/EDIT badge 的 tooltip 打开/关闭均约 160ms、`transform-origin:top left`；用 DevTools 临时克隆 badge 并替换为 `UNKN/NONE` class/状态文字检查两色，handler 语义仍以 A1 自动探针为准；开启 reduce-motion 后无 translate/scale。
 4. 在项目页移动指针，确认预览跟随；Pjax 往返后仍有效，重复 `pjax:success` 不产生双倍更新。
-5. 展开五项工具，核对顺序、66px 五角度、40px 命中区和桌面 hover 抽出；Tab、Enter、Space 可操作，status/pressed/busy 可感知。
+5. 展开五项工具，核对顺序、66px 五角度、40px 命中区和桌面 hover 抽出；分别记录 status 隐藏/显示前后 `#to-toolbox` 的 rect，确认宽高与底缘不变；Tab、Enter、Space 可操作，status/pressed/busy 可感知。
 6. 点击截图，打开下载 PNG，确认只有正文，无 header、aside、bottom tools 或 paginator。
-7. 在 DevTools 临时把 `#post-content` 克隆到安全高度或使用本地长文 fixture，确认先显示整体缩小提示，PNG 覆盖全文且未裁切。
-8. 截图等待字体、图片或 canvas 时触发站内 Pjax；确认旧文章不下载，旧 paginator 不插回新页，新页按钮不被旧任务改写。
+7. 在代表性文章 `/2026/08/14/ai-programming-journey/` 按下方“长文截图 fixture”原位替换 `#post-content` 内容，确认先显示整体缩小提示，PNG 覆盖全文且未裁切。
+8. 截图等待 canvas 时分别模拟 `pjax:error` 与 `pjax:send`：前者保持原 parent connected，确认不下载但分页器恢复；后者先让旧 parent 脱离文档，确认不下载且旧分页器不插回，新页按钮不被旧任务改写。
 9. 确认首击前 `play()` 未调用；点击后播放，第二次暂停，第三次从当前时间继续并循环。Pjax 跨页时 audio 节点 identity、currentTime 和播放状态不变。
 10. 用 DevTools 临时令媒体请求失败，确认 label/status 报失败；恢复资源后下一次点击先 load 再成功重试。
 11. 用搜索触发 Pjax，在文章、项目、数据页往返；ProjectTooltip、Screenshot、BGM 和 Toolbox 均无重复 listener。
 12. 开启系统 reduce-motion，确认 tooltip 和工具箱无位移动画但功能完整。
+
+### 可复现长文截图 fixture
+
+1. 打开最终站点的代表性文章 `/2026/08/14/ai-programming-journey/`，记录浏览器版本、视口、`devicePixelRatio` 与当前 URL。
+2. 在 DevTools Console 原位替换现有 `#post-content` 的内容；保留原 paginator 引用，不 clone `#post-content`，也不创建重复 ID：
+
+```js
+const postContent = document.querySelector('#post-content')
+const originalChildren = [...postContent.childNodes]
+const paginator = postContent.querySelector('#paginator')
+const longFixture = document.createElement('section')
+longFixture.id = 'screenshot-long-fixture'
+longFixture.style.minHeight = '20000px'
+longFixture.style.display = 'flex'
+longFixture.style.flexDirection = 'column'
+longFixture.style.justifyContent = 'space-between'
+const topMarker = document.createElement('p')
+topMarker.textContent = 'LONG-CAPTURE-TOP-20260925'
+const bottomMarker = document.createElement('p')
+bottomMarker.textContent = 'LONG-CAPTURE-BOTTOM-20260925'
+longFixture.append(topMarker, bottomMarker)
+postContent.replaceChildren(longFixture)
+if (paginator !== null) postContent.append(paginator)
+console.table({
+  width: postContent.getBoundingClientRect().width,
+  height: postContent.getBoundingClientRect().height,
+  pixelRatio: window.devicePixelRatio
+})
+```
+
+3. 点击截图并等待下载完成；记录下载文件名、PNG 像素宽高、截图前后 `#post-content` 尺寸和页面显示的缩放提示。打开 PNG，确认 `LONG-CAPTURE-TOP-20260925` 与 `LONG-CAPTURE-BOTTOM-20260925` 均在图中，证明首尾全文覆盖且未裁切；不能只凭文件名或 status 判定成功。
+4. 验收后执行 `postContent.replaceChildren(...originalChildren)` 恢复原内容；确认原 `#paginator` 仍在且页面无重复 ID。该 fixture 只存在于当前浏览器页面，不写 `source/`、不新增 Hexo 路由、不产生提交。
 
 无头截图、静态 CSS 检查和 jsdom 都不能替代以上结果。
 
@@ -1225,15 +1678,15 @@ npm run build
 | --- | --- | --- | --- |
 | 5.1 标题 | A1 | 源码无 visibility/冲刺；Pjax selector 保留 | D 浏览器标题往返 |
 | 5.2 评论 | A1、D | 两页 frontmatter；最终产物无评论 | D 文章/项目/数据浏览器 |
-| 5.3 AI 状态 | A1 | handler、六 marker 探针、search/description | D tooltip 四态 |
+| 5.3 AI 状态 | A1 | handler、六个 marker 探针、search/description | D tooltip 四态 |
 | 5.4 AI 动画 | A2 | 160ms/reduced CSS 契约 | D 真实开合与 reduce |
 | 5.5 导航 | A2 | 2.5px 底边、无旧 padding | D 六视口 |
 | 5.5 footer | A2 | 桌面 calc、移动源码不变 | D 769/768 对比 |
 | 6 ProjectTooltip | B | WeakSet、重复扫描、Pjax 新节点 | D hover/Pjax |
-| 7 工具箱五项 | A2、C、D | Pug DOM、data-action 几何、dispatch | D 顺序/键盘/几何 |
-| 8 SnapDOM/截图 | C | vendor hash、Promise、资源、缩放、取消、文件名 | D 真实 PNG/长图/Pjax |
-| 9 BGM | C、D | 根配置、模板 fixture、媒体状态机 | D 播放/循环/错误/Pjax |
-| 10 ARIA/reduced | A2、C | 原生 button 属性、status、mask、CSS | D 键盘/辅助技术/动效 |
+| 7 工具箱五项 | A2、C、D | Pug DOM、toggle+五 action 单次委托、无 inline onclick、data-action 几何 | D 顺序/键盘/几何 |
+| 8 SnapDOM/截图 | C | vendor hash、Promise、edge/pixel 缩放、paginator 条件恢复、`pjax:error`/`send` 取消、文件名 | D 真实 PNG/原位长文/Pjax |
+| 9 BGM | C、D | 根配置、enable=true/false 完整模板、唯一 audio/按钮、媒体状态机 | D 播放/循环/错误/Pjax |
+| 10 ARIA/reduced | A2、C、D | 初始 pressed/busy/label/title/hidden、tooltip 开/关、absolute status 与底缘几何 | D 键盘/辅助技术/动效 |
 | 14 缓存/产物 | B、C、D | 版本 URL、artifact 全部断言 | 部署后另行抽查，本轮不 push |
 | 15 有头浏览器 | D | 不替代 | 明确 pending 后执行 |
 
@@ -1248,10 +1701,12 @@ npm run build
 
 ## Final Completion Checklist
 
-- [ ] A1–C 各有一个独立 Conventional Commit，文件范围与任务表一致。
+- [ ] A1–C 各有一个独立 Conventional Commit，文件范围、依赖和 C 暂存清单一致；C 提交明确包含 `js-data.pug`。
+- [ ] 每个已发现缺陷均由责任任务追加独立 Conventional Commit，未 amend、rebase 或重写既有任务提交。
 - [ ] 主题 TypeScript build 只在 B、C 执行，`package.json`、lockfile、tsconfig 无差异。
 - [ ] 九个 marker 探针、专项 Node/DOM/Pug/CSS 探针均在最终状态退出码 0。
-- [ ] 根级 BGM 四字段和 `url_for(theme.bgm.src)` 默认/临时 source fixture 均通过。
+- [ ] 根级 BGM 四字段和 `url_for(theme.bgm.src)` 默认/临时 source fixture 均通过，enable=true/false 完整模板门禁均覆盖。
+- [ ] 真实长文验收记录原位 fixture 路由、PNG 尺寸及首尾标记覆盖证据，未使用重复 ID 的 `#post-content` clone。
 - [ ] `public/` 不含独立 ProjectTooltip；bundle、SnapDOM、audio、工具箱、搜索和版本断言通过。
 - [ ] `git diff --check` 通过，`.temp/`、`public/`、日志和本地报告未提交。
 - [ ] `AGENTS.md`、marker 规格和主题 UI 规格与最终代码一致。
