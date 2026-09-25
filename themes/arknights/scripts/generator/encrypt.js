@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { resolveConfiguredEncryption } = require('../filters/encryption-policy');
 const log = hexo.log;
 
 const defaultConfig = {
@@ -29,13 +30,8 @@ var silent = false;
 var theme = 'default';
 
 hexo.extend.filter.register('after_post_render', (data) => {
-  const tagEncryptPairs = [];
-
-  let password = data.password;
-  let tagUsed = false;
-
-  // use a empty password to disable category encryption
-  if (password === "") {
+  const encryption = resolveConfiguredEncryption(data, hexo.config.encrypt);
+  if (encryption.disabledByEmptyPassword) {
     return data;
   }
 
@@ -43,26 +39,12 @@ hexo.extend.filter.register('after_post_render', (data) => {
     hexo.config.encrypt = [];
   }
 
-  if(('encrypt' in hexo.config) && ('tags' in hexo.config.encrypt)){
-    hexo.config.encrypt.tags.forEach((tagObj) => {
-      tagEncryptPairs[tagObj.name] = tagObj.password;
-    });
-  }
-
-  if (data.tags) {
-    data.tags.forEach((cTag) => {
-      if (tagEncryptPairs.hasOwnProperty(cTag.name)) {
-        tagUsed = password ? tagUsed : cTag.name;
-        password = password || tagEncryptPairs[cTag.name];
-      }
-    });
-  }
-
-  if(password == undefined){
+  if (!encryption.shouldEncrypt) {
     return data;
   }
 
-  password = password.toString();
+  const password = encryption.password.toString();
+  const tagUsed = encryption.tagUsed;
 
   // make sure toc can work.
   data.origin = data.content;

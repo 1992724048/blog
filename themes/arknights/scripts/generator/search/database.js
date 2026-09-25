@@ -1,13 +1,8 @@
 'use strict';
 
-const { stripHTML } = require('hexo-util');
-const { projectTextByPath } = require('../../markers/pipeline');
+const { consumeSearchText } = require('./snapshot');
 
-function getContent(article) {
-  return projectTextByPath(article.path, 'content') ?? article.content;
-}
-
-function savedb(article, config, isPost) {
+function savedb(article, config, hexo, isPost) {
   const data = {};
   if (article.title) {
     data.title = article.title;
@@ -16,14 +11,7 @@ function savedb(article, config, isPost) {
     data.url = encodeURI(config.root + article.path);
   }
   if (config.content !== false) {
-    if (config.format === 'raw') {
-      data.content = article._content;
-    } else {
-      data.content = getContent(article).replace(/<td class="gutter">.*?<\/td>/g, '');
-      if (config.format === 'striptags') {
-        data.content = stripHTML(data.content);
-      }
-    }
+    data.content = consumeSearchText(article, hexo);
   } else {
     data.content = '';
   }
@@ -39,18 +27,18 @@ function savedb(article, config, isPost) {
   return data;
 }
 
-module.exports = function (locals, config) {
+module.exports = function (locals, config, hexo) {
   const searchfield = config.field;
   const database = [];
   if (searchfield === 'all' || searchfield === 'post') {
     locals.posts.each(post => {
-      const data = savedb(post, config, true);
+      const data = savedb(post, config, hexo, true);
       database.push(data);
     });
   }
   if (searchfield === 'all' || searchfield === 'page') {
     locals.pages.each(page => {
-      const data = savedb(page, config);
+      const data = savedb(page, config, hexo, false);
       database.push(data);
     });
   }
