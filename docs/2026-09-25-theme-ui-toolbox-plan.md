@@ -917,7 +917,8 @@ function createScreenshotHarness({
   toBlobError = null,
   scriptMode = 'load',
   globalMode = 'valid',
-  fontsMode = 'ready'
+  fontsMode = 'ready',
+  fontsPromise
 } = {}) {
   const dom = new JSDOM('<!doctype html><body></body>', {
     url: 'https://issuimo.com/2026/09/25/post/',
@@ -978,7 +979,13 @@ function createScreenshotHarness({
   Object.defineProperty(document, 'fonts', {
     value: fontsMode === 'missing'
       ? undefined
-      : { ready: fontsMode === 'pending' ? new Promise(() => {}) : Promise.resolve() },
+      : {
+          ready: fontsPromise === undefined
+            ? fontsMode === 'pending'
+              ? new Promise(() => {})
+              : Promise.resolve()
+            : fontsPromise
+        },
     configurable: true
   })
   window.HTMLCanvasElement.prototype.toBlob = function(callback) {
@@ -992,6 +999,7 @@ function createScreenshotHarness({
 
   const state = {
     scriptCount: 0,
+    scriptLoadedCount: 0,
     toCanvasCalls: [],
     detachedDuringSnapDom: [],
     navElementsCaptured: 0,
@@ -1030,7 +1038,9 @@ function createScreenshotHarness({
         const snapdom = function() {}
         snapdom.toCanvas = (source, options) => {
           state.toCanvasCalls.push({ source, options })
+          const livePaginator = document.querySelector('#paginator')
           assert.equal(source.contains(paginator), false)
+          assert.equal(livePaginator === null || source.contains(livePaginator), false)
           state.detachedDuringSnapDom.push(true)
           if (options.scale < 1) {
             assert.equal(status.textContent, button.dataset.labelScaled)
@@ -1042,6 +1052,7 @@ function createScreenshotHarness({
         }
         window.snapdom = snapdom
       }
+      state.scriptLoadedCount += 1
       node.dispatchEvent(new window.Event('load'))
     })
     return node
@@ -1091,9 +1102,88 @@ function waitFor(predicate) {
     poll()
   })
 }
+
+function installNewScreenshotPage(harness, { withImage = false } = {}) {
+  const { document, window } = harness
+  const oldArticle = document.querySelector('article')
+  const oldRoot = document.querySelector('#post-content')
+  const oldPaginator = document.querySelector('#paginator')
+  const oldButton = document.querySelector('.toolbox-screenshot')
+  const oldStatus = document.querySelector('.toolbox-status')
+  const oldBounds = oldRoot.getBoundingClientRect()
+  const width = oldBounds.width
+  const height = oldBounds.height
+
+  document.dispatchEvent(new window.Event('pjax:send'))
+
+  const newArticle = document.createElement('article')
+  const newTitle = document.createElement('h1')
+  newTitle.id = 'post-title'
+  newTitle.textContent = '新页截图'
+  const newRoot = document.createElement('div')
+  newRoot.id = 'post-content'
+  const newParagraph = document.createElement('p')
+  newParagraph.textContent = '新页正文'
+  newRoot.append(newParagraph)
+
+  const newImage = withImage ? document.createElement('img') : null
+  if (newImage !== null) {
+    newImage.id = 'lazy-image'
+    newImage.loading = 'lazy'
+    newImage.alt = '新页图'
+    Object.defineProperty(newImage, 'complete', { value: true })
+    Object.defineProperty(newImage, 'naturalWidth', { value: 100 })
+    newRoot.append(newImage)
+  }
+
+  const newPaginator = document.createElement('nav')
+  newPaginator.id = 'paginator'
+  const newPaginatorLink = document.createElement('a')
+  newPaginatorLink.href = '#'
+  newPaginatorLink.textContent = '下一页'
+  newPaginator.append(newPaginatorLink)
+  const newAfterPaginator = document.createElement('p')
+  newAfterPaginator.id = 'after-paginator'
+  newAfterPaginator.textContent = '新页分页器之后'
+  newRoot.append(newPaginator, newAfterPaginator)
+  newRoot.getBoundingClientRect = () => ({
+    width,
+    height,
+    top: oldBounds.top,
+    left: oldBounds.left,
+    right: oldBounds.right,
+    bottom: oldBounds.bottom
+  })
+  newArticle.append(newTitle, newRoot)
+  oldArticle.replaceWith(newArticle)
+
+  const newStatus = oldStatus.cloneNode(true)
+  newStatus.textContent = '新页已有 status'
+  newStatus.hidden = false
+  oldStatus.replaceWith(newStatus)
+
+  const newButton = oldButton.cloneNode(true)
+  newButton.disabled = false
+  newButton.setAttribute('aria-busy', 'false')
+  oldButton.replaceWith(newButton)
+
+  document.dispatchEvent(new window.Event('pjax:success'))
+
+  return {
+    oldRoot,
+    oldPaginator,
+    oldButton,
+    oldStatus,
+    newRoot,
+    newPaginator,
+    newButton,
+    newStatus,
+    newImage
+  }
+}
 ```
 
-测试主体使用独立 harness；每个场景显式定义使用的 button、canvas、root 和 paginator，不依赖前一条场景遗留的变量。以下代码接在上一代码块之后，并由统一入口执行：
+测试主体使用独立 harness；每个场景显式定义使用的 button、canvas、root 和 paginator，不依赖前一条场景遗留的变量。`installNewScreenshotPage()` 通过 `pjax:send`/`pjax:success` 和真实同名 `#post-content`/`#paginator` 替换当前页面；generation 场景再用一次性 fixture listener 把新按钮 `.click()` 转为 `screenshotControl.capture()`，真实 document 分发仍由 `theme-ui-toolbox.test.js` 单独锁定。以下代码接在上一代码块之后，并由统一入口执行：
 
 ```js
 async function main() {
@@ -1299,6 +1389,143 @@ for (const timeoutCase of [
   assert.equal(timeoutCase.harness.timers.pending(), 0, timeoutCase.name)
 }
 
+const sharedFonts = deferred()
+const fontsGenerationHarness = createScreenshotHarness({
+  fontsMode: 'pending',
+  fontsPromise: sharedFonts.promise
+})
+const fontsGenerationControl = loadScreenshotControl(fontsGenerationHarness)
+fontsGenerationHarness.setImageComplete(true)
+const oldFontsCapture = fontsGenerationControl.capture()
+await waitFor(() => fontsGenerationHarness.timers.pending() > 0)
+assert.equal(fontsGenerationHarness.state.scriptCount, 1)
+assert.equal(fontsGenerationHarness.state.scriptLoadedCount, 1)
+assert.equal(fontsGenerationHarness.state.toCanvasCalls.length, 0)
+assert.equal(fontsGenerationHarness.image.getAttribute('loading'), 'lazy')
+assert.equal(fontsGenerationHarness.button.disabled, true)
+assert.equal(fontsGenerationHarness.status.textContent, fontsGenerationHarness.button.dataset.labelPreparing)
+const fontsNavigation = installNewScreenshotPage(fontsGenerationHarness)
+assert.equal(fontsNavigation.oldRoot.contains(fontsNavigation.oldPaginator), true)
+assert.equal(fontsNavigation.oldPaginator.parentNode.isConnected, false)
+assert.equal(fontsGenerationHarness.document.body.contains(fontsNavigation.oldPaginator), false)
+assert.equal(fontsGenerationHarness.document.querySelectorAll('#post-content').length, 1)
+assert.equal(fontsGenerationHarness.document.querySelectorAll('#paginator').length, 1)
+assert.equal(fontsGenerationHarness.document.querySelector('#post-content'), fontsNavigation.newRoot)
+assert.equal(fontsGenerationHarness.document.querySelector('#paginator'), fontsNavigation.newPaginator)
+assert.equal(fontsNavigation.newRoot.contains(fontsNavigation.newPaginator), true)
+assert.equal(fontsNavigation.newStatus.textContent, '新页已有 status')
+assert.equal(fontsNavigation.newStatus.hidden, false)
+assert.equal(fontsNavigation.newButton.disabled, false)
+assert.equal(fontsNavigation.newButton.getAttribute('aria-busy'), 'false')
+sharedFonts.resolve()
+await oldFontsCapture
+assert.equal(fontsGenerationHarness.state.toCanvasCalls.length, 0)
+assert.equal(fontsGenerationHarness.state.downloadCount, 0)
+assert.equal(fontsGenerationHarness.timers.pending(), 0)
+assert.equal(fontsNavigation.oldRoot.contains(fontsNavigation.oldPaginator), true)
+assert.equal(fontsGenerationHarness.document.body.contains(fontsNavigation.oldPaginator), false)
+assert.equal(fontsNavigation.newStatus.textContent, '新页已有 status')
+assert.equal(fontsNavigation.newStatus.hidden, false)
+assert.equal(fontsNavigation.newButton.disabled, false)
+assert.equal(fontsNavigation.newButton.getAttribute('aria-busy'), 'false')
+let newFontsCapture = Promise.resolve()
+fontsNavigation.newButton.addEventListener('click', () => {
+  newFontsCapture = fontsGenerationControl.capture()
+}, { once: true })
+fontsNavigation.newButton.click()
+await newFontsCapture
+assert.equal(fontsGenerationHarness.state.scriptCount, 1)
+assert.equal(fontsGenerationHarness.state.toCanvasCalls.length, 1)
+assert.equal(fontsGenerationHarness.state.toCanvasCalls[0].source, fontsNavigation.newRoot)
+assert.equal(fontsGenerationHarness.state.detachedDuringSnapDom[0], true)
+assert.equal(fontsGenerationHarness.state.navElementsCaptured, 0)
+assert.equal(fontsGenerationHarness.state.downloadCount, 1)
+assert.equal(fontsGenerationHarness.window.lastScreenshotDownload, '新页截图-20260925-143052.png')
+assert.equal(fontsNavigation.newRoot.contains(fontsNavigation.newPaginator), true)
+assert.equal(fontsNavigation.newPaginator.parentElement, fontsNavigation.newRoot)
+assert.equal(fontsNavigation.newPaginator.nextElementSibling.id, 'after-paginator')
+assert.equal(fontsNavigation.newRoot.contains(fontsNavigation.oldPaginator), false)
+assert.equal(fontsGenerationHarness.document.body.contains(fontsNavigation.oldPaginator), false)
+assert.equal(fontsNavigation.newStatus.textContent, fontsNavigation.newButton.dataset.labelSuccess)
+assert.equal(fontsNavigation.newStatus.hidden, false)
+assert.equal(fontsNavigation.newButton.disabled, false)
+assert.equal(fontsNavigation.newButton.getAttribute('aria-busy'), 'false')
+assert.equal(fontsGenerationHarness.timers.pending(), 0)
+
+const imageGenerationHarness = createScreenshotHarness()
+const imageGenerationControl = loadScreenshotControl(imageGenerationHarness)
+const oldImageCapture = imageGenerationControl.capture()
+let oldImageSettled = false
+const oldImageOutcome = oldImageCapture.then(
+  () => {
+    oldImageSettled = true
+    return true
+  },
+  () => {
+    oldImageSettled = true
+    return false
+  }
+)
+await waitFor(() => {
+  return imageGenerationHarness.image.getAttribute('loading') === 'eager'
+    && imageGenerationHarness.timers.pending() > 0
+})
+assert.equal(imageGenerationHarness.state.scriptCount, 1)
+assert.equal(imageGenerationHarness.state.scriptLoadedCount, 1)
+assert.equal(imageGenerationHarness.state.toCanvasCalls.length, 0)
+assert.equal(imageGenerationHarness.button.disabled, true)
+assert.equal(imageGenerationHarness.status.textContent, imageGenerationHarness.button.dataset.labelPreparing)
+const imageNavigation = installNewScreenshotPage(imageGenerationHarness, { withImage: true })
+assert.equal(imageNavigation.oldRoot.contains(imageNavigation.oldPaginator), true)
+assert.equal(imageNavigation.oldPaginator.parentNode.isConnected, false)
+assert.equal(imageGenerationHarness.document.body.contains(imageNavigation.oldPaginator), false)
+assert.equal(imageGenerationHarness.document.querySelectorAll('#post-content').length, 1)
+assert.equal(imageGenerationHarness.document.querySelectorAll('#paginator').length, 1)
+assert.equal(imageGenerationHarness.document.querySelector('#post-content'), imageNavigation.newRoot)
+assert.equal(imageGenerationHarness.document.querySelector('#paginator'), imageNavigation.newPaginator)
+assert.equal(imageNavigation.newRoot.contains(imageNavigation.newPaginator), true)
+assert.equal(imageNavigation.newImage.complete, true)
+assert.equal(imageNavigation.newStatus.textContent, '新页已有 status')
+assert.equal(imageNavigation.newStatus.hidden, false)
+assert.equal(imageNavigation.newButton.disabled, false)
+assert.equal(imageNavigation.newButton.getAttribute('aria-busy'), 'false')
+imageGenerationHarness.setImageComplete(true)
+imageGenerationHarness.image.dispatchEvent(new imageGenerationHarness.window.Event('load'))
+await waitFor(() => oldImageSettled)
+assert.equal(await oldImageOutcome, true)
+assert.equal(imageGenerationHarness.state.toCanvasCalls.length, 0)
+assert.equal(imageGenerationHarness.state.downloadCount, 0)
+assert.equal(imageGenerationHarness.timers.pending(), 0)
+assert.equal(imageNavigation.oldRoot.contains(imageNavigation.oldPaginator), true)
+assert.equal(imageGenerationHarness.document.body.contains(imageNavigation.oldPaginator), false)
+assert.equal(imageNavigation.newStatus.textContent, '新页已有 status')
+assert.equal(imageNavigation.newStatus.hidden, false)
+assert.equal(imageNavigation.newButton.disabled, false)
+assert.equal(imageNavigation.newButton.getAttribute('aria-busy'), 'false')
+let newImageCapture = Promise.resolve()
+imageNavigation.newButton.addEventListener('click', () => {
+  newImageCapture = imageGenerationControl.capture()
+}, { once: true })
+imageNavigation.newButton.click()
+await newImageCapture
+assert.equal(imageGenerationHarness.state.scriptCount, 1)
+assert.equal(imageGenerationHarness.state.toCanvasCalls.length, 1)
+assert.equal(imageGenerationHarness.state.toCanvasCalls[0].source, imageNavigation.newRoot)
+assert.equal(imageGenerationHarness.state.detachedDuringSnapDom[0], true)
+assert.equal(imageGenerationHarness.state.navElementsCaptured, 0)
+assert.equal(imageGenerationHarness.state.downloadCount, 1)
+assert.equal(imageGenerationHarness.window.lastScreenshotDownload, '新页截图-20260925-143052.png')
+assert.equal(imageNavigation.newRoot.contains(imageNavigation.newPaginator), true)
+assert.equal(imageNavigation.newPaginator.parentElement, imageNavigation.newRoot)
+assert.equal(imageNavigation.newPaginator.nextElementSibling.id, 'after-paginator')
+assert.equal(imageNavigation.newRoot.contains(imageNavigation.oldPaginator), false)
+assert.equal(imageGenerationHarness.document.body.contains(imageNavigation.oldPaginator), false)
+assert.equal(imageNavigation.newStatus.textContent, imageNavigation.newButton.dataset.labelSuccess)
+assert.equal(imageNavigation.newStatus.hidden, false)
+assert.equal(imageNavigation.newButton.disabled, false)
+assert.equal(imageNavigation.newButton.getAttribute('aria-busy'), 'false')
+assert.equal(imageGenerationHarness.timers.pending(), 0)
+
 const errorCanvas = deferred()
 const pjaxErrorHarness = createScreenshotHarness({ canvasResult: errorCanvas.promise })
 const pjaxErrorControl = loadScreenshotControl(pjaxErrorHarness)
@@ -1368,6 +1595,8 @@ assert.equal(newStatus.textContent, newPageStatusSentinel)
 assert.equal(newStatus.hidden, false)
 assert.equal(detachedParent.isConnected, false)
 assert.equal(detachedParent.contains(detachedPaginator), false)
+assert.equal(newRoot.contains(detachedPaginator), false)
+assert.equal(pjaxSendHarness.document.body.contains(detachedPaginator), false)
 assert.equal(newRoot.contains(newPaginator), true)
 assert.equal(newButton.disabled, false)
 assert.equal(newButton.getAttribute('aria-busy'), 'false')
@@ -1388,7 +1617,9 @@ main().catch(error => {
 | global 缺失/入口不匹配 | `globalMode='missing'/'invalid'`，script 正常 `load` | rejected Promise 被缓存、下载 0、busy=false、第二次不新增 script |
 | fonts 不支持 | `fontsMode='missing'`，图片预先 complete | 继续到一次 `toCanvas`，下载 1 |
 | fonts 15 秒超时 | `fontsMode='pending'`，调用已展示的 `timers.advance(15000)` | 不调用 `toCanvas`、下载 0、busy=false、status=`labelFailed` |
+| fonts 等待中 Pjax | 外部 deferred `fontsPromise` 保持 pending；`send/success` 替换同名 `#post-content`/`#paginator`，旧等待随后 resolve，再点击新按钮 | 旧 generation 不调用 `toCanvas`、不下载、不改新 status/button；新按钮只以新 root 产生一次下载，旧 paginator 不回到 document |
 | image 15 秒超时 | 字体 resolved、图片保持 incomplete，调用已展示的 `timers.advance(15000)` | 不调用 `toCanvas`、图片 `loading` 恢复 `lazy`、分页器恢复、下载 0 |
+| image 等待中 Pjax | 图片 incomplete 且 `loading=eager`；`send/success` 替换同名 fixture，旧图片随后 load，再点击新按钮 | 旧 generation 不调用 `toCanvas`、不下载、不改新 status/button；新图片已 complete，新按钮只产生一次新 root 下载 |
 | script 加载超时 | `scriptMode='pending'`，首次使用同一 `timeoutCase.harness.timers.advance(15000)` | 首次失败后直接 `await timeoutControl.capture()` 复用 cached rejected Promise；再次断言 `scriptCount=1`、下载 0、`disabled=false`、`aria-busy=false`、完整 `labelFailed` status、`hidden=false`、`pending()=0`，不新增 script/timer |
 
 `installFakeTimers()` 是本文件展示的最小、无外部依赖测试实现；测试必须使用它，不得再引用未声明的 Sinon fake timer，也不得让 15 秒真实等待拖慢门禁。三个 timeout fixture 统一使用循环内已定义的 `timeoutCase.harness` 与首次调用中的 `timers.advance(15000)`；script 超时首轮 settle 后，第二次 `await timeoutControl.capture()` 必须直接取得同一失败路径，不能等待 `pending() > 0` 或推进不存在的第二个 timer。第二次 await 后仍须完整重断言 `scriptCount=1`、下载 0、`disabled=false`、`aria-busy=false`、完整失败 status、`status.hidden=false` 与 `timers.pending()=0`；每个 timeout fixture 最终都断言 `timers.pending()=0`。
@@ -1875,14 +2106,14 @@ git diff --cached --check
 
 - [ ] **4.1（4 分钟）写 vendor RED。** 创建 vendor 探针；先因两个文件不存在失败，锁定 hash、MIT 文本与 `window.snapdom.toCanvas`。
 - [ ] **4.2（3 分钟）落盘官方资源。** 从 npm 3.1.1 tarball 复制 `dist/snapdom.js` 为 `snapdom.min.js`、复制根 LICENSE；不编辑内容，运行 vendor GREEN。
-- [ ] **4.3（5 分钟）写截图 RED。** 创建 `theme-ui-screenshot.test.js`，按上述独立 harness 写全资源等待、单例、执行期 `button.disabled === true`、edge/pixel 两种超预算缩放、paginator、文件名、blob/error，以及 `pjax:error` 恢复旧分页器、`pjax:send` 断开 parent 后不恢复且旧任务不写新页共享 status 两组取消断言。script 超时的第二次 `await timeoutControl.capture()` 直接取得 cached rejection；使用同一 `timeoutCase.harness` 的已定义 15 秒 fake time，断言无第二个 script/timer，并再次完整验证按钮可用、busy 结束、失败 status 可见及下载为 0。
+- [ ] **4.3（5 分钟）写截图 RED。** 创建 `theme-ui-screenshot.test.js`，按上述独立 harness 写全资源等待、单例、执行期 `button.disabled === true`、edge/pixel 两种超预算缩放、paginator、文件名、blob/error，以及三类 generation 取消断言：字体等待和图片等待阶段经 `pjax:send`/`pjax:success` 替换真实同名 `#post-content`/`#paginator` 后，旧 capture 不下载且不改新 status/button，点击新按钮只下载新 root；canvas 阶段另行覆盖 `pjax:error` 恢复旧分页器、`pjax:send` 断开 parent 后不恢复且旧任务不写新页共享 status。script 超时的第二次 `await timeoutControl.capture()` 直接取得 cached rejection；使用同一 `timeoutCase.harness` 的已定义 15 秒 fake time，断言无第二个 script/timer，并再次完整验证按钮可用、busy 结束、失败 status 可见及下载为 0。
 - [ ] **4.4（5 分钟）写 BGM RED。** 创建 `theme-ui-bgm.test.js`，覆盖 play resolve/reject、成功播放/暂停/失败后的完整 status 文案、label/title 同步与 `hidden === false`、pause/continue、media error 后失败 label/title/status 与可重试、retry resolve 后 playing/busy/pressed 完整状态、ended、Pjax、Pug source fixture 和唯一 audio 属性。Pjax 导航后必须重新 `document.querySelector('#bgm')`，比较导航前后 identity，断言两者 connected 且全局 `querySelectorAll('#bgm').length === 1`。
 - [ ] **4.5（4 分钟）写 Toolbox RED。** 创建 `theme-ui-toolbox.test.js`，覆盖 toggle+五 action 的 document 分发、点击 SVG 后一次只调用一次、Pjax 替换后单次绑定、分享与收藏保存/取消的完整 status，以及 toggle/五项均无内联 onclick。
 - [ ] **4.6（3 分钟）写根配置 RED。** 在 BGM 探针解析 `_config.arknights.yml`，断言四个字段精确值；失败应只显示 `enable false`/`autoplay true` 差异。
 - [ ] **4.7（3 分钟）实现全局类型与 ScreenshotControl 骨架。** 先在 `include/environment.d.ts` 声明 `Window.snapdom`、`SnapDomGlobal` 和 `SnapDomToCanvasOptions`，再建立常量、generation、Promise 单例、script load/timeout/global shape 校验和 current DOM 查询；禁止局部重复声明或 `any` 逃逸。
 - [ ] **4.8（5 分钟）实现资源稳定等待。** 依次等待 fonts、图片；完整图片立即成功，未完成图片临时设 `loading=eager`，load/error 均 settle，15 秒超时失败；每个 await 后校验 generation。
 - [ ] **4.9（5 分钟）实现 capture 与长图缩放。** 校验当前 generation，开始执行时禁用当前截图按钮，detach paginator，调用 `toCanvas(root,{scale,dpr:1})`，`toBlob` PNG，临时 anchor 下载；finally 在 generation 未变或原 parent 仍 connected 时恢复 paginator，并恢复 lazy loading、busy、`button.disabled` 和 URL。
-- [ ] **4.10（4 分钟）实现 generation 取消。** `pjax:send`、`pjax:error` 立即递增；`pjax:success` 再递增并只绑定新按钮。`pjax:error` 保持原 parent connected 时旧分页器必须恢复但不得下载；`pjax:send` fixture 先断开原 parent，generation 变化后不恢复，旧节点不得挂回新文章，不得改写新按钮状态或新页共享 `role=status` 文本。
+- [ ] **4.10（4 分钟）实现 generation 取消。** `pjax:send`、`pjax:error` 立即递增；`pjax:success` 再递增并只绑定新按钮。字体、图片和 canvas 三个 await 边界都必须证明旧 generation 被取消：旧任务不得下载、不得改写新按钮或新页共享 `role=status`，字体/图片 fixture 还必须用真实同名 `#post-content`/`#paginator` 模拟新文章并证明新按钮可独立成功下载。`pjax:error` 保持原 parent connected 时旧分页器必须恢复但不得下载；`pjax:send` fixture 先断开原 parent，generation 变化后不恢复，旧节点不得挂回新文章或 document。
 - [ ] **4.11（4 分钟）重构 BgmControl。** 用长生命周期 class 替换 13 行函数；保存唯一 audio，绑定媒体事件和 `pjax:success`，实现 pending/reject/error-retry/pause/continue。
 - [ ] **4.12（4 分钟）接入 Toolbox 分发。** 删除 `#to-toolbox` 与五项工具的内联 onclick；增加一次 document click 委托和 `data-action` switch，toggle 与工具项各只分发一次。截图/BGM 业务只委托控制器，分享及收藏保存/取消只做共享 status 的最小写入；不在本任务拆分或新增 Highlight/Favorites/Status 业务模块。
 - [ ] **4.13（3 分钟）移动唯一 audio。** 从 `bottom-btn.pug` 删除 audio；仅在 C 将 `audio#bgm` 放到 `layout.pug` 的 `main`/Pjax 替换区外，`src=url_for(theme.bgm.src)`、`preload="metadata"`、`loop=theme.bgm.loop`，不输出 controls/autoplay。
@@ -1896,7 +2127,7 @@ git diff --cached --check
 
 ### 验证边界
 
-- C 的 jsdom 探针证明状态机、DOM、Promise、超时、缩放参数、文件名和 Pjax generation；其中 `pjax:error` 明确证明“取消下载但恢复仍 connected 的旧 paginator”，`pjax:send` 明确证明“generation 变化且旧 parent 脱离时不恢复，旧节点不得挂回新文章”。它不证明真实 PNG 像素或真实音频输出。
+- C 的 jsdom 探针证明状态机、DOM、Promise、超时、缩放参数、文件名和 Pjax generation；字体等待、图片等待与 canvas 等待均覆盖旧 generation 取消，字体/图片场景还用真实同名 `#post-content`/`#paginator` 证明新按钮可独立完成一次下载。`pjax:error` 明确证明“取消下载但恢复仍 connected 的旧 paginator”，`pjax:send` 明确证明“generation 变化且旧 parent 脱离时不恢复，旧节点不得挂回新文章或 document”。它不证明真实 PNG 像素或真实音频输出。
 - C 不运行完整 Hexo build；实际 `public/`、真实 SnapDOM 长图、音频和 Pjax 留给 D 构建与有头浏览器门禁。
 - SnapDOM 跨域资源失败按固定失败反馈处理；不增加代理、CDN、worker 或插件。
 
@@ -2281,7 +2512,7 @@ npm run build
 5. 展开五项工具，核对顺序、66px 五角度、40px 命中区和桌面 hover 抽出；分别记录 status 隐藏/显示前后 `#to-toolbox` 的 rect，确认宽高与底缘不变；Tab、Enter、Space 可操作，status/pressed/busy 可感知。
 6. 点击截图，打开下载 PNG，确认只有正文，无 header、aside、bottom tools 或 paginator。
 7. 在代表性文章 `/2026/08/14/ai-programming-journey/` 按下方“长文截图 fixture”原位替换 `#post-content` 内容，确认先显示整体缩小提示，PNG 覆盖全文且未裁切。
-8. 截图等待 canvas 时分别模拟 `pjax:error` 与 `pjax:send`：前者保持原 parent connected，确认不下载但分页器恢复；后者先让旧 parent 脱离文档，确认 generation 变化后不恢复、不下载且旧节点不得挂回新文章，新页按钮和共享 status 不被旧任务改写。
+8. 截图分别停在字体、图片和 canvas 阶段触发 Pjax：字体/图片阶段进入同名 `#post-content`/`#paginator` 的新文章后，先确认旧任务不下载且不改新 status/button，再点击新按钮确认只下载新文章；canvas 阶段分别模拟 `pjax:error` 与 `pjax:send`，前者保持原 parent connected，确认不下载但分页器恢复，后者先让旧 parent 脱离文档，确认 generation 变化后不恢复、不下载且旧节点不得挂回新文章或 document。
 9. 确认首击前 `play()` 未调用；点击后播放，第二次暂停，第三次从当前时间继续并循环。Pjax 跨页时 audio 节点 identity、currentTime 和播放状态不变。
 10. 用 DevTools 临时令媒体请求失败，确认 label/status 报失败；恢复资源后下一次点击先 load 再成功重试。
 11. 用搜索触发 Pjax，在文章、项目、数据页往返；ProjectTooltip、Screenshot、BGM 和 Toolbox 均无重复 listener。
@@ -2330,10 +2561,10 @@ console.table({
 | 5.3 AI 状态 | A1 | handler、六个 marker 探针、search/description | D tooltip 四态 |
 | 5.4 AI 动画 | A2 | 160ms/reduced CSS 契约 | D 真实开合与 reduce |
 | 5.5 导航 | A2 | 2.5px 底边、无旧 padding | D 六视口 |
-| 5.5 footer | A2 | 桌面 calc、移动源码不变 | D 769/768 对比 |
+| 5.6 footer | A2 | 桌面 calc、移动源码不变 | D 769/768 对比 |
 | 6 ProjectTooltip | B | WeakSet、重复扫描、Pjax 新节点 | D hover/Pjax |
 | 7 工具箱五项 | A2、C、D | Pug DOM、toggle+五 action 单次委托、无 inline onclick、data-action 几何 | D 顺序/键盘/几何 |
-| 8 SnapDOM/截图 | C | vendor hash、Promise、edge/pixel 缩放、paginator 条件恢复、`pjax:error`/`send` 取消、timeout cached rejection 重入 UI 状态、文件名 | D 真实 PNG/原位长文/Pjax |
+| 8 SnapDOM/截图 | C | vendor hash、Promise、edge/pixel 缩放、paginator 条件恢复、字体/图片/canvas 三阶段 generation 取消、同名新 fixture 新按钮独立下载、`pjax:error`/`send` 取消、timeout cached rejection 重入 UI 状态、文件名 | D 真实 PNG/原位长文/Pjax |
 | 9 BGM | C、D | 根配置、enable=true/false 完整模板、唯一 audio/按钮、播放/暂停/失败 label+title+status、media error/retry 完整状态、Pjax 导航后重新查询 identity/connected/唯一性 | D 播放/循环/错误/Pjax |
 | 10 ARIA/reduced | A2、C、D | 初始 pressed/busy/label/title/hidden、tooltip 开/关、absolute status 与底缘几何 | D 键盘/辅助技术/动效 |
 | 14 缓存/产物 | B、C、D | 版本 URL、artifact 全部断言 | 部署后另行抽查，本轮不 push |
@@ -2354,6 +2585,7 @@ console.table({
 - [ ] 每个已发现缺陷均由责任任务追加独立 Conventional Commit，未 amend、rebase 或重写既有任务提交。
 - [ ] 主题 TypeScript build 只在 B、C 执行，`package.json`、lockfile、tsconfig 无差异。
 - [ ] 九个 marker 探针、专项 Node/DOM/Pug/CSS 探针均在最终状态退出码 0。
+- [ ] 截图 generation 门禁覆盖字体、图片、canvas 三个等待阶段；字体/图片场景证明旧任务不污染新 status/button，同名 `#post-content`/`#paginator` 新 fixture 的按钮只产生一次新下载，旧 paginator 不回到 document。
 - [ ] 根级 BGM 四字段和 `url_for(theme.bgm.src)` 默认/临时 source fixture 均通过，enable=true/false 完整模板门禁均覆盖；media error/retry 状态和 Pjax 后重新查询的 audio identity/connected/唯一性断言通过。
 - [ ] 真实长文验收记录原位 fixture 路由、PNG 尺寸及首尾标记覆盖证据，未使用重复 ID 的 `#post-content` clone。
 - [ ] `public/` 不含独立 ProjectTooltip；bundle、SnapDOM、audio、工具箱、搜索和版本断言通过。
