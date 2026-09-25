@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 AI / Project / Alerts / Editor / LinkCard 五类内容工具统一到严格 block-only 按行协议 `[#]>NAME|`，一次性删除四个旧 Hexo tag 与其死 CSS，重写 marker lexer/parser/token/registry/pipeline 并按职责拆分 `pipeline.js` 与 `Toolbox.ts`，修复 GitHub Alert 暗色交互态对比度、桌面导航宽度稳定性与 BGM/status 生命周期，并交付覆盖 9 个既有 marker 探针与 11 个新增 `line-marker-*` 探针的最终门禁。
+**Goal:** 把 AI / Project / Alerts / Editor / LinkCard 五类内容工具统一到严格 block-only 按行协议 `[#]>NAME|`，一次性删除四个旧 Hexo tag 与其死 CSS，重写 marker lexer/parser/token/registry/pipeline 并按职责拆分 `pipeline.js` 与 `Toolbox.ts`，修复 GitHub Alert 暗色交互态对比度、桌面导航宽度稳定性与 BGM/status 生命周期，并交付覆盖 9 个既有 marker 探针、10 个新增 `line-marker-*.test.js` 探针与 1 个新增 `line-marker-artifacts.js` 产物脚本的最终门禁。
 
 **Architecture:** 捕获层（lexer 逐字保留 CR/CRLF 的 `raw`/`physicalLines[].terminator`/`sourceRange`）与恢复层（`normalizeLineEndings` 把 CR/CRLF 折叠为 LF 的字段值、失败 DOM 与所有投影）严格分离；before 4 建立私有 carrier 并按 `sourceRange` 从后向前替换为 opaque token，Marked 15 单个 `level:'block'` 扩展名为 `arknights-line-marker`，其 renderer 只输出唯一 `<div data-arknights-line-marker="arknights-line-marker-v1:<nonce>:<checksum>"></div>`，after 9 只按 `renderedPlaceholderRange`（content）或 `tokenRange`（显式 excerpt）替换，连续 Project 只按 `sourceRange` 邻接分组。`pipeline.js` 只做阶段编排，物化/失败恢复/Project 分组/投影拆为 `pipeline/{materialize,failure,project-grid,projection}.js`；`Toolbox.ts` 降为 facade，标注/持久化/分享/收藏/共享 status lease 各归独立文件。`filters/alerts.js` 从 `data.encrypt || data.password` 迁移为复用 `filters/encryption-policy.js` 的 `inspectSearchEncryption`，marker/search/加密生成三条链路的加密判定语义本身不变，残留自判点见 §2.5 裁决记录。最终门禁固定 `hexo generate --bail`，并以真实有头浏览器人工清单兜底 UI 验收。
 
@@ -108,7 +108,7 @@
 | `.temp/line-marker-marked.test.js` | 新增 | A2 | block token / placeholder / metadata / symbol 清理 |
 | `.temp/line-marker-registry.test.js` | 新增 | A2 | 五 handler 注册与受控接口 + `defaultPipeline` 同一引用 |
 | `.temp/line-marker-handlers.test.js` | 新增 | A2 | Alerts/Editor/LinkCard 三类终态 + Expands 重绑幂等 |
-| `.temp/line-marker-pipeline.test.js` | 新增 | A2 | occurrence / Project 分组 / fallback / projection + 规模依赖门禁 |
+| `.temp/line-marker-pipeline.test.js` | 新增 | A1/A2/B2 | occurrence / Project 分组 / fallback / projection + 规模依赖门禁 + 样式导入回归 |
 | `.temp/line-marker-hexo.test.js` | 新增 | A2 | 真实 filter alias/store、拒绝重试、加密同源、priority 5 透传 |
 | `.temp/line-marker-memory-fixture.js` | 新增 | A2 | 规格 18.2 内存 Alerts/Editor/LinkCard 终态 fixture 的单一来源模块（`line-marker-handlers.test.js` 与 `line-marker-hexo.test.js` 共用，只存在于测试进程） |
 | `.temp/marker-core.test.js` 等 9 个既有探针 | 修改 | A2 | 按 block-only 契约更新断言后保留 |
@@ -187,7 +187,7 @@ module.exports = {
   markerFailureProjection,     // (raw) => normalizeLineEndings(raw)
   fieldFallbackHtml,           // (originalField) => '<pre class="arknights-marker-source">' + escapeMarkerHtml(normalizeLineEndings(originalField)) + '</pre>'
   fieldFallbackProjection,     // (originalField) => normalizeLineEndings(originalField)
-  createSharedFailureHelpers   // (injected) => Object.freeze({ markerFailureHtml, markerFailureProjection, fieldFallbackHtml, fieldFallbackProjection })
+  createSharedFailureHelpers   // () => Object.freeze({ markerFailureHtml, markerFailureProjection, fieldFallbackHtml, fieldFallbackProjection })
 }
 ```
 
@@ -296,7 +296,18 @@ registerMarkerFilters(hexoContext, pipeline = defaultPipeline)
 
 `projectGridHelpers` 是 `pipeline.js` 显式注入 `project-grid.js` 的共享值，形状固定为 `Object.freeze({ isAdjacent, escapeHtmlText })`：
 
-依赖规则（静态门禁断言）：`pipeline.js` → 子模块；子模块之间零 `require`；子模块零 `require('pipeline.js')`；子模块只可依赖 `token.js`/`carrier.js`/`registry.js`/handler/纯工具，不得 `require` Hexo context、`fs`、`net`。
+**环境获取点（`createMarkerPipeline` / `registerMarkerFilters` 的职责分界）**
+
+| 能力 | 获取点 | 说明 |
+| --- | --- | --- |
+| `handlers` / `tokenStoreFactory` | `createMarkerPipeline({ handlers, tokenStoreFactory })` 构造参数 | pipeline 自身不接触 hexo：两个字段都缺失、handler 重复或 `tokenStoreFactory` 非函数一律抛 `INVALID_PIPELINE_OPTIONS` |
+| `hexo.config.encrypt`（before 4 加密判定） | `registerMarkerFilters(hexoContext, pipeline)` 内捕获的 hexo 快照 | 注册时把 `hexoContext.config.encrypt` 交给被绑定的 pipeline，`beforePostRender` 只读该快照；生产路径的判定语义因此一律来自真实 `hexo.config.encrypt` |
+| 受控 Markdown services（`renderMarkdown` / `markdownToPlainText`） | 同一次 `registerMarkerFilters` 调用注入 | `marked:use` 0 的扩展安装与 pipeline 编排共享同一份 services，保证 handler 的 detached render 与纯文本投影同源 |
+| 默认（未注册 context 的探针实例） | 缺省 `encryptConfig` 等价于「未配置加密」 | `createMarkerPipeline` 单独构造时没有 hexo 环境，缺省判定为 `public`；这只是探针与单测的构造路径，不得被生产 `register.js` 依赖 |
+
+因此「生产 `beforePostRender` 走带 config 的路径」由 A2-7 的 `test_production_pipeline_reads_registered_hexo_config` 断言：同一个 `defaultPipeline` 绑到 `config.encrypt = {}` 的 context 时 `beforePostRender` 放行并安装 carrier bridge，绑到 `config.encrypt = { tags: 'not-an-array' }` 的 context 时在读取正文前抛 `ENCRYPTION_STATE_AMBIGUOUS` 且不留下任何 `markdown` descriptor；两条判定都必须由注册时捕获的快照驱动。
+
+依赖规则（静态门禁断言）：`pipeline.js` → 子模块；子模块之间零 `require`；子模块零 `require('pipeline.js')`（含 `../pipeline` 与任何 `path.resolve` 归一后等于 `markers/pipeline.js` 的写法）；子模块只可依赖 `token.js`/`carrier.js`/`registry.js`/handler/纯工具，不得 `require` Hexo context、`fs`、`net`。
 
 ### 2.5 加密判定
 
@@ -335,7 +346,7 @@ hexo.extend.filter.register('after_post_render', function (data) {
 | 基线实测 | `filters/alerts.js:7`、`filters/spoiler.js:8`、`filters/meta-description.js:9`、`filters/terms.js:8` 共四处 `if (data.encrypt \|\| data.password) return data`；`generator/encrypt.js` 与 `generator/search/snapshot.js` 已走 `encryption-policy.js` |
 | 本轮不变量 | marker pipeline（before 4）、search sidecar（捕获/自愈/消费）、`generator/encrypt.js`、`filters/alerts.js` 四处共用 `encryption-policy.js`；四条链路的 `public`/`encrypted`/`ambiguous` 判定与 fail-closed 语义逐字一致 |
 | 显式残留 | `spoiler.js` / `meta-description.js` / `terms.js` 三处仍自判。三者是纯 `after_post_render` 内容改写 filter，不读写 marker token、carrier 或 placeholder，与本轮 marker 物化链路无数据依赖；A 不改它们可保持「marker/search/加密生成」三条链路的同源判定，A 的边界因此仍是单文件改动 |
-| 为什么不在本轮一并迁移 | 规格第 12.6 节第 4 条把 `alerts.js` 固定为「第四个调用方」，第 14.2 节、第 15 节 A 批次行与 AGENTS 待更新第 10 条、第 20.2 节风险行都按「三处收敛为四处」措辞；把范围扩到七个调用方需要改写上述五处规格表述，超出本次「只修 4 处已证伪规格内容」的授权边界 |
+| 为什么不在本轮一并迁移 | 规格第 12.6 节第 4 条把 `alerts.js` 固定为「第四个调用方」，**第 15 节 AGENTS 活文档待更新范围第 10 条**的措辞是「A 批次把 `filters/alerts.js` 从 `data.encrypt \|\| data.password` 迁移为复用 `inspectSearchEncryption`，`inspectSearchEncryption` 的调用方由三处收敛为四处（marker pipeline、search sidecar、GitHub Alert filter，加上原本就存在的 `generator/encrypt.js` 对 `resolveConfiguredEncryption` 的同模块调用）」；第 14.2 节、第 15 节 A 批次行与第 20.2 节风险行都按「三处收敛为四处」措辞。**本轮授权只覆盖「收敛第 4 个调用方」这一处**（`filters/alerts.js`），把范围扩到七个调用方需要改写上述五处规格表述，超出「只修 4 处已证伪规格内容」的授权边界 |
 | 零命中断言范围 | `node .temp/line-marker-hexo.test.js` 只对 `filters/alerts.js` 断言 `data.encrypt`/`data.password` 直读为 0 命中、`inspectSearchEncryption` 调用存在；**不得**写成 `filters/` 目录级零命中 |
 | 后续工作项 | 迁移 `spoiler.js` / `meta-description.js` / `terms.js` 需要先更新上述五处规格表述，再把断言升级为目录级零命中；该项不属于 A/B/C/D 任一批次，作为独立后续任务处理 |
 
@@ -490,19 +501,39 @@ function stripComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 }
 
+// 调用型标识符：统计 `name(` 形态（函数、setTimeout 等）
 function countCalls(text, callee) {
   const pattern = new RegExp(`\\b${callee}\\s*\\(`, 'g')
   return (stripComments(text).match(pattern) ?? []).length
 }
 
+// 成员型标识符：统计 `\bname\b` 全部出现（定义 + 注册/挂载/摘除），不要求带括号
+function countReferences(text, name) {
+  return (stripComments(text).match(new RegExp(`\\b${name}\\b`, 'g')) ?? []).length
+}
+
 function test_toolbox_dependency_edges() {
   const facade = fs.readFileSync(path.join(includeDir, 'Toolbox.ts'), 'utf8')
+  const facadeText = stripComments(facade)
   const allowed = [
     'ToolboxAnnotationController.ts', 'ToolboxShareController.ts', 'ToolboxFavoriteController.ts',
-    'ScreenshotControl.ts', 'BgmControl.ts', 'MonacoEditor.ts', 'Expands.ts'
+    'ScreenshotControl.ts', 'BgmControl.ts'
   ]
   for (const match of facade.matchAll(/^\/\/\/ <reference path="([^"]+)" \/>$/gm)) {
     assert.ok(allowed.includes(match[1]), `unexpected reference: ${match[1]}`)
+  }
+  assert.ok(!/^\/\/\/ <reference path="common\/base\.ts" \/>$/m.test(facade),
+    'the dead common/base.ts reference must be deleted from the facade')
+  for (const dead of ['MonacoEditor.ts', 'Expands.ts']) {
+    assert.ok(!facade.includes(`/// <reference path="${dead}" />`), `facade must not reference ${dead}`)
+  }
+  for (const [name, other] of [
+    ['ToolboxAnnotationController.ts', 'ToolboxShareController.ts'],
+    ['ToolboxAnnotationController.ts', 'ToolboxFavoriteController.ts'],
+    ['ToolboxShareController.ts', 'ToolboxFavoriteController.ts']
+  ]) {
+    const text = fs.readFileSync(path.join(includeDir, name), 'utf8')
+    assert.ok(!stripComments(text).includes(other), `${name} must not reference the sibling ${other}`)
   }
   for (const name of ['ToolboxPersistence.ts', 'ToolboxStatusLease.ts']) {
     const text = fs.readFileSync(path.join(includeDir, name), 'utf8')
@@ -513,13 +544,14 @@ function test_toolbox_dependency_edges() {
   assert.equal(countCalls(share, 'setTimeout'), 1, 'share controller owns exactly one timer')
   const favorite = fs.readFileSync(path.join(includeDir, 'ToolboxFavoriteController.ts'), 'utf8')
   assert.equal(countCalls(favorite, 'setTimeout'), 0, 'favorite controller must not create a timer')
-  const lease = fs.readFileSync(path.join(includeDir, 'ToolboxStatusLease.ts'), 'utf8')
-  assert.equal(countCalls(lease, 'setTimeout'), 1, 'status lease owns exactly one timer')
-  const facadeText = stripComments(facade)
   assert.equal(countCalls(facadeText, 'setTimeout'), 0, 'facade must not own a status timer')
-  for (const marker of ['onDocumentClick', 'onOutsideClick']) {
-    assert.equal(countCalls(facade, marker), 1, `facade keeps exactly one ${marker} definition`)
-  }
+  // 两种形态分别断言：onDocumentClick 是「定义 + 静态注册」2 次；
+  // onOutsideClick 是「定义 + applyState 动态挂载 + 动态摘除」3 次。
+  // 这两个标识符不是调用型（都不带括号），因此用 countReferences 而不是 countCalls。
+  assert.equal(countReferences(facadeText, 'onDocumentClick'), 2,
+    'onDocumentClick: one definition plus one static document click registration')
+  assert.equal(countReferences(facadeText, 'onOutsideClick'), 3,
+    'onOutsideClick: one definition plus the dynamic mount and unmount pair')
 }
 
 function test_expands_contract() {
@@ -551,6 +583,11 @@ console.log('ok line-marker-pipeline structure')
 ```
 
 A1-1 的 `test_module_size()` 调用与 `ok line-marker-pipeline structure` 留在 A1-1 代码块内以便独立运行；本段只追加依赖、Expands 与 owner 归属断言并复用同一条 ok 行，**不再重复调用** `test_module_size()`（A1-16 的门禁说明中的执行序列同样以 A2-19 追加后的最终顺序为准）。计数类断言先经 `stripComments` 剥离 `//` 与 `/* */` 注释再统计，避免注释或文档字符串里的同名字符串造成假命中；`stripComments` 保留 `https://` 这类含 `//` 但前面不是行首的协议串（`(^|[^:])\/\/` 的 `[^:]` 分支只在前一个字符不是 `:` 时才截断）。运行 → 期望 `ENOENT ... ToolboxAnnotationController.ts`（仍 RED）。
+
+- **reference 白名单只列 5 项**：facade 直接触及的是三个同层 controller（Annotation / Share / Favorite）与两个 `window.*` 控制器适配（`ScreenshotControl.ts` / `BgmControl.ts`）；`ToolboxPersistence.ts` 由同层 controller 引用、`ToolboxStatusLease.ts` 由 `BgmControl.ts` 引用（Global Constraints 第 14 条的依赖方向），facade 不得直接引用。`MonacoEditor.ts` / `Expands.ts` 与 facade 无依赖关系，既不在白名单里，也额外断言 facade 不含这两条 reference。
+- **已死的 `common/base.ts` reference 必须删除**：基线 `Toolbox.ts` 与拆出的 facade 只用 `document.querySelector` 与 `window.*`，不调用 `common/base.ts` 的 `getElement` / `isParent` / `getParent` / `format` 任何一个；`outFile` 拼接下 reference 只影响类型检查阶段，删除无运行时影响。
+- **同层 controller 两两不互引**：`Annotation` / `Share` / `Favorite` 三个文件之间任一方向出现对方文件名即失败，保证三者只能经 `ToolboxPersistence.ts` 交换数据。
+- **`ToolboxStatusLease.ts` 的 `setTimeout` 断言不在 A 阶段**：A1-7 的三个 lease 函数体是空实现 no-op（见 A1-7），此时 `setTimeout` 调用数必然为 0；真实计时器由 C3-2 落地，该条 `=== 1` 断言随 C3-2 一并加入本探针（持有 `countCalls` 的文件只有本探针）。
 
 - [ ] **A1-3 新建 `ToolboxPersistence.ts`**，把 `Toolbox.ts` 第 84-104、775-835、866-881、754-757 行的 `read`/`write`/`highlightKey`/`persistHighlights` 的纯数据部分/`restoreHighlights` 的纯数据部分/`readFavorites`/`currentAnnotateColor` 搬迁为零 DOM、零事件、零 timer 的数据层：
 
@@ -650,7 +687,15 @@ declare namespace ToolboxModules {
 }
 ```
 
-> **`declare namespace` 只贡献类型，不产生运行时对象。** 主题用 `outFile` 把 `include/**/*.ts` 拼接成单一作用域脚本，因此 `claimStatus` / `invalidateStatusLease` / `clearStatus` 必须作为**真实的顶层声明**（顶层 `function` / `const`，与 `declare namespace ToolboxModules` 中的类型声明并存）出现在拼接产物里，`ToolboxStatusLease.ts`、`BgmControl.ts`、`Toolbox.ts` 才能共享同一份实现；把实现体写进 `declare namespace` 会既编译不过又在运行时得到 `ReferenceError`。A1-2 的 `countCalls(lease, 'setTimeout') === 1` 断言的是这个真实顶层声明体内唯一的 timer。
+A 阶段的三个真实顶层函数体固定为**空实现 no-op**——不读 DOM、不写 status、不创建 `MutationObserver`、不创建 timer：
+
+```typescript
+function claimStatus(_message: string, _delay: number): void {}
+function invalidateStatusLease(): null { return null }
+function clearStatus(): void {}
+```
+
+> **`declare namespace` 只贡献类型，不产生运行时对象。** 主题用 `outFile` 把 `include/**/*.ts` 拼接成单一作用域脚本，因此 `claimStatus` / `invalidateStatusLease` / `clearStatus` 必须作为**真实的顶层声明**（顶层 `function` / `const`，与 `declare namespace ToolboxModules` 中的类型声明并存）出现在拼接产物里，`ToolboxStatusLease.ts`、`BgmControl.ts`、`Toolbox.ts` 才能共享同一份实现；把实现体写进 `declare namespace` 会既编译不过又在运行时得到 `ReferenceError`。A 阶段这三个顶层声明体内 `setTimeout` 调用数为 **0**（空实现 no-op），因此 A1-2 不落 `setTimeout` 断言；真实计时器与它对应的 `countCalls(lease, 'setTimeout') === 1` 静态断言由 **C3-2** 落地。
 
 - [ ] **A1-8 把 `Toolbox.ts` 降为 facade**：只保留 `toolbox` / `toggleButton` 等自身 DOM getter、`applyState`、`toggle()`、`dispatchAction`、`onToolboxClick`、**`onDocumentClick`（色板自动关闭，唯一 owner）**、`onOutsideClick`、`onKeyup`、`onPjaxSuccess`、`onPjaxSend`；标注相关的 `mousedown` / `selectionchange` / mark click / toolbar click / color click 与 `main` scroll 改由 `ToolboxAnnotationController` 注册，**静态 9 个 `document` listener 净计数不变**（归属见 A1-6 的 owner 表）。`applyState` 相对基线**只新增打开分支的 `clearStatus()` 一行**，其余契约逐字保留：`classList.toggle('toolbox-open', open)`、`aria-expanded` 同步、关闭分支丢弃待标注选区。**`clearStatus()` 位于 `applyState(true)`（打开）分支**——规格第 12.1.1 节与第 16.3 节末段都写明是打开分支，且实测打开才是 lease 释放点：工具箱打开期间截图/分享/收藏会写共享 status，打开动作必须让旧 BGM lease 失效；关闭时无人写 status，无需释放：
 
@@ -694,6 +739,8 @@ private onDocumentClick = (event: MouseEvent): void => {
 | 打开分支 | 挂载 `onOutsideClick` | 追加 `window.bgmControl?.clearStatus()` | 规格第 12.1.1 节第 1015 行 / 第 16.3 节第 1651 行 |
 | 关闭分支 | 摘除 `onOutsideClick` + `this.pendingRange = null` | 改为 `this.annotation.dismissPendingSelection()` | `pendingRange` 已随标注逻辑搬入 controller，语义逐字等价 |
 | `onDocumentClick` | facade 内联 `closeColors()` | 改为 `this.annotation.closeColors()`，listener 仍由 facade 注册 | 色板自动关闭的 owner 归 facade（A1-6） |
+
+**显式删除已死的 `/// <reference path="common/base.ts" />`**：拆完后的 facade 只用 `document.querySelector` 与 `window.*`（`window.screenshotControl` / `window.bgmControl` / `window.toolbox`），不调用 `common/base.ts` 的 `getElement` / `isParent` / `getParent` / `format` 任何一个，`outFile` 拼接下 reference 只参与类型检查阶段，删除无运行时影响。A1-8 必须把该行从 `Toolbox.ts` 删掉（A1-2 的 `assert.ok(!/^\/\/\/ <reference path="common\/base\.ts" \/>$/m.test(facade), …)` 与这条一一对应），facade 的 reference 白名单因此收敛为 A1-2 列出的 5 项。
 
 - [ ] **A1-9 修改 `BgmControl.ts`**：只做 status lease 组合与 `clearStatus()` 暴露；A 阶段**保留**既有唯一 `pjax:success`（`syncButton`）listener 与 4 个原生 media listener，不新增 `pjax:send` / `pjax:error`：
 
@@ -812,6 +859,8 @@ let expand = new expands();
 ```bash
 npm --prefix themes/arknights run build
 node --check themes/arknights/source/js/arknights.js
+node --check .temp/line-marker-pipeline.test.js
+node --check .temp/theme-ui-bgm.test.js
 node .temp/line-marker-pipeline.test.js
 node .temp/theme-ui-toolbox.test.js
 node .temp/theme-ui-screenshot.test.js
@@ -819,7 +868,7 @@ node .temp/project-tooltip.test.js
 node .temp/theme-ui-bgm.test.js
 ```
 
-`.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_size()` 在 A2 完成前不调用（A2-19 追加时再启用），A1 阶段只运行 `test_module_size()` / `test_toolbox_dependency_edges()` / `test_expands_contract()` / `test_annotation_controller_surface()`。`npm --prefix themes/arknights run build` 会同时重生成 `source/js/arknights.js` 与 `source/js/search.js`（§1 已把后者登记为副产物；本轮无 `_src/search/search.ts` 改动，其 diff 应为空）。
+`.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_size()` 在 A2 完成前不调用（A2-19 追加时再启用），A1 阶段只运行 `test_module_size()` / `test_toolbox_dependency_edges()` / `test_expands_contract()` / `test_annotation_controller_surface()`。两条 `node --check` 是**后续批次要改动这两个探针的语法门禁**：`.temp/line-marker-pipeline.test.js` 在 A2-19 追加 pipeline 段、并在 C3-2 追加 lease timer 断言，`.temp/theme-ui-bgm.test.js` 在 C3-1 追加 `loadBgmProbe()` 并把第 51、164 行两处 `loadTypeScript(window, path)` 改为 `transpile` + `join('\n')` 后单次 `window.eval`（两处调用点：`loadTypeScript(window, '…/BgmControl.ts')` 与 `loadTypeScript(disabledDom.window, '…/BgmControl.ts')`），因此这两个文件在本序列里同时带 `node --check` 与实际执行两行。`npm --prefix themes/arknights run build` 会同时重生成 `source/js/arknights.js` 与 `source/js/search.js`（§1 已把后者登记为副产物；本轮无 `_src/search/search.ts` 改动，其 diff 应为空）。
 
 ---
 
@@ -882,7 +931,7 @@ console.log('ok failure serialization')
 
 运行 → 期望 `Cannot find module '.../pipeline/failure'`（RED）。
 
-- [ ] **A2-2 新建 `pipeline/failure.js`**，按 §2.1 逐字实现六个函数与 `createSharedFailureHelpers(injected)`。运行 → GREEN。
+- [ ] **A2-2 新建 `pipeline/failure.js`**，按 §2.1 逐字实现六个函数与零参数的 `createSharedFailureHelpers()`（工厂不接受注入参数：四个共享函数就定义在本模块内，注入没有来源；调用方只 `Object.freeze` 结果）。运行 → GREEN。
 
 - [ ] **A2-3 写 `lexer.js` 的 RED 探针**（`.temp/line-marker-lexer.test.js`）：
 
@@ -1135,11 +1184,28 @@ function test_invalid_pipeline_options() {
 }
 
 function test_duplicate_pipeline_binding() {
-  const context = { extend: { filter: { register: () => {} } } }
+  const context = { config: { encrypt: {} }, extend: { filter: { register: () => {} } } }
   const other = createMarkerPipeline({ handlers: PRODUCTION, tokenStoreFactory: createTokenStore })
   registerMarkerFilters(context, defaultPipeline)
   assert.doesNotThrow(() => registerMarkerFilters(context, defaultPipeline), 'same pipeline rebinding is idempotent')
   assert.throws(() => registerMarkerFilters(context, other), error => error.code === 'DUPLICATE_MARKER_PIPELINE')
+}
+
+function test_production_pipeline_reads_registered_hexo_config() {
+  const makeContext = encrypt => ({ config: { encrypt }, extend: { filter: { register: () => {} } } })
+  const publicData = { content: '[#]>TEST|\n[state] PASS\n', path: 'probe.md', type: 'post' }
+  const publicBinding = registerMarkerFilters(makeContext({}), defaultPipeline)
+  assert.doesNotThrow(() => publicBinding.pipeline.beforePostRender(publicData),
+    'a public binding must read its own hexo.config.encrypt and proceed to tokenization')
+  assert.notEqual(Object.getOwnPropertyDescriptor(publicData, 'markdown'), undefined,
+    'a public binding installs the carrier bridge')
+  const ambiguousData = { content: 'x', path: 'probe.md', type: 'post' }
+  const ambiguousBinding = registerMarkerFilters(makeContext({ tags: 'not-an-array' }), defaultPipeline)
+  assert.throws(() => ambiguousBinding.pipeline.beforePostRender(ambiguousData),
+    error => error.code === 'ENCRYPTION_STATE_AMBIGUOUS',
+    'the ambiguous verdict must be derived from the registered config snapshot')
+  assert.equal(Object.getOwnPropertyDescriptor(ambiguousData, 'markdown'), undefined,
+    'an ambiguous verdict must fail before any bridge is installed')
 }
 
 function test_shared_default_pipeline() {
@@ -1149,9 +1215,23 @@ function test_shared_default_pipeline() {
 test_production_allowlist()
 test_invalid_pipeline_options()
 test_duplicate_pipeline_binding()
+test_production_pipeline_reads_registered_hexo_config()
 test_shared_default_pipeline()
 console.log('ok line-marker-registry')
 ```
+
+本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-registry.test.js` 的全部错误码**（共 6 条，缺一条即门禁不完整）：
+
+| 错误码 | 本文件中的断言入口 |
+| --- | --- |
+| `UNKNOWN_MARKER` | `test_production_allowlist`（`registry.dispatch('TEST', {}, {}).code`） |
+| `INVALID_HANDLER` | `test_production_allowlist`（`mode: 'inline'` 与 `null` 两次注册） |
+| `DUPLICATE_HANDLER` | `test_production_allowlist`（同一 `aiHandler` 二次注册） |
+| `INVALID_PIPELINE_OPTIONS` | `test_invalid_pipeline_options`（缺 `tokenStoreFactory`、handler 重复、`tokenStoreFactory: null`） |
+| `DUPLICATE_MARKER_PIPELINE` | `test_duplicate_pipeline_binding` |
+| `ENCRYPTION_STATE_AMBIGUOUS` | `test_production_pipeline_reads_registered_hexo_config`（注册时快照的 `encrypt.tags` 非数组） |
+
+`test_production_pipeline_reads_registered_hexo_config` 是 §2.4「环境获取点」的可核对落点：同一个 `defaultPipeline` 绑到 `config.encrypt = {}` 时 `beforePostRender` 放行并安装 carrier bridge，绑到 `config.encrypt = { tags: 'not-an-array' }` 时在读取正文前抛 `ENCRYPTION_STATE_AMBIGUOUS` 且不留下任何 `markdown` descriptor；两条判定都必须由 `registerMarkerFilters` 捕获的 hexo 快照驱动（`inspectSearchEncryption` 对非法 `encrypt.tags` 返回 `ambiguous`）。
 
 运行 → RED（`handlers/alerts.js` 不存在）。
 
@@ -1236,6 +1316,22 @@ test_restore_from_data_is_idempotent()
 console.log('ok line-marker-carrier')
 ```
 
+本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-carrier.test.js` 的全部错误码**（共 9 条，缺一条即门禁不完整）：
+
+| 错误码 | 断言入口 |
+| --- | --- |
+| `CARRIER_BRIDGE_DESCRIPTOR` | 已有 accessor（零调用）；own value 为 `undefined` / `null` / primitive / array；原子回滚失败 |
+| `CARRIER_BRIDGE_READ` | `data.markdown` 为 `Proxy(get)` 抛错，或 descriptor Proxy 的 `get` 抛错 |
+| `CARRIER_BRIDGE_DEFINE` | `data.markdown` 为 `Proxy(defineProperty)` 抛错或部分写入后抛错 |
+| `CARRIER_FIELD_WRITE` | bridge 安装后字段写回抛错，无法恢复全部原字段 |
+| `CARRIER_STATE_INVALID` | `bindContext` 在非 `issued` 状态上调用；`markConsumed` 重复 |
+| `CARRIER_BINDING_ERROR` | `getCarrierFromOptions(options, otherCarrier)` 同一引用校验失败 |
+| `CARRIER_AUDIT_FAILED` | 结束后仍有非终态 occurrence / token |
+| `TOKEN_COLLISION` | 源字段预置 `arknights-line-marker-v1:` 前缀或 `data-arknights-line-marker` |
+| `TOKEN_GENERATION_EXHAUSTED` | 注入 32 次 token 生成全部碰撞的 token store stub |
+
+上列代码块给出的是 RED 首段（bridge 安装/回滚、accessor 零调用、同引用校验、`restoreCarrierBridgeFromData` 幂等），即本表 `CARRIER_BRIDGE_DESCRIPTOR` 与 `CARRIER_BINDING_ERROR` 两条的首段形态；其余 7 条的 fixture 随 A2-9 实现逐段追加到同一文件。
+
 - [ ] **A2-9 修改 `token.js` / `carrier.js`**：状态机固定为 `content: issued -> pending-render -> consumed | failed` 与 `explicit excerpt: excerpt-pending -> consumed | failed`；`bindContext(id, 'block-placeholder')` 只允许 `issued -> pending-render`，其余迁移抛 `CARRIER_STATE_INVALID`；`audit()` 断言字段完成后无 occurrence 停留在非终态。`carrier.js` 保留现有 descriptor 反射/Proxy/原子回滚实现，只把状态与 namespace 收为 block-only。运行 → GREEN。
 
 - [ ] **A2-10 新建 `handlers/editor.js`**：
@@ -1298,7 +1394,7 @@ function toPlainText(node, context, services) {
 
 - [ ] **A2-14 重写 `handlers/ai.js`** 为按行字段消费：`state` enum 四态，越界返回 `AI_INVALID_STATE`；`text` 显式文本 trim 后 1..40 UTF-16 code unit，否则 `AI_INVALID_TEXT`；`render` 保持 `.ai-badge.ai-badge--pass|edit|unkn|none`、`tabindex="0"`、`aria-describedby="arknights-ai-tip-${sourceField}-${pathHash}-${occurrenceId}"`（`pathHash` 为 `sourcePath` UTF-8 SHA-256 前 16 个小写 hex，无 path 时 `anonymous`）、SVG `aria-hidden="true"`、四行 tooltip；`toPlainText` 为 `state` 或 `state + ' ' + text`。
 
-- [ ] **A2-15 修改 `registry.js`**：`validateHandler` 改为检查 `name`（区分大小写、UpperAlpha 起）、`mode === 'block'`（`SUPPORTED_MODES = new Set(['block'])`，注册 inline handler 抛 `INVALID_HANDLER`）、`positions` 为非空字符串数组、`fields` 为对象、三个函数存在；`dispatch(name, input, context)` 调 `handler.parse(input, context)` 并把 throw 映射为 `HANDLER_ERROR`。运行 `node .temp/line-marker-registry.test.js` → GREEN。
+- [ ] **A2-15 修改 `registry.js`**：`validateHandler` 改为检查 `name`（区分大小写、UpperAlpha 起）、`mode === 'block'`（`SUPPORTED_MODES = new Set(['block'])`，注册 inline handler 抛 `INVALID_HANDLER`）、`positions` 为非空字符串数组、`fields` 为对象、三个函数存在；**显式删除现有的 `UNSUPPORTED_MODE` 分支**（block-only 之后不存在第二形态，该分支的判定条件恒不可达，保留即死代码），判定改由 `mode !== 'block'` 归入 `INVALID_HANDLER`；`register` 的顺序固定为**先 `validateHandler` 再查重**——因此 `register({ ...aiHandler, mode: 'inline' })` 抛 `INVALID_HANDLER` 而不抛 `DUPLICATE_HANDLER`，A2-7 的两条断言顺序不可对调；`dispatch(name, input, context)` 调 `handler.parse(input, context)` 并把 throw 映射为 `HANDLER_ERROR`。运行 `node .temp/line-marker-registry.test.js` → GREEN。
 
 - [ ] **A2-16 写 `marked-extension.js` 的 RED 探针**（`.temp/line-marker-marked.test.js`）：
 
@@ -1366,6 +1462,16 @@ test_metadata_descriptor_is_frozen()
 console.log('ok line-marker-marked')
 ```
 
+本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-marked.test.js` 的全部错误码**（共 3 条，缺一条即门禁不完整）：
+
+| 错误码 | 断言入口 |
+| --- | --- |
+| `CARRIER_BINDING_ERROR` | `getCarrierFromOptions` 收到非本 parse 的 carrier / sibling 重复认领同一 occurrence（经 `processAllTokens` 在真实 `Marked` 上触发） |
+| `CARRIER_AUDIT_FAILED` | `this.options` 上 `CARRIER_SYMBOL` 删除失败（不可删 `options` 副本） |
+| `INVALID_MARKED_USE` | `installMarkedExtension` 收到非函数，或 `marked.use` 后未出现 `arknights-line-marker` 扩展 |
+
+上列代码块给出的是 RED 首段（block tokenizer/renderer、`start` 零基 offset、冻结 metadata descriptor）；A2-17 随实现追加这 3 条的 fixture。
+
 - [ ] **A2-17 重写 `marked-extension.js`**：只安装**一个** `level: 'block'` 扩展 `arknights-line-marker`；`start(src)` 返回 `src` 中 token 零基 offset（Marked 15 实际传入 `src.slice(1)`，**不得 +1**）；`tokenizer(src, tokens)` 只在第一物理行严格等于一个已签发 token 时返回 `{ type: 'arknights-line-marker', raw: token, text: token }`；renderer 只输出 §2.4 的 `placeholderHtml(token)` 加一个 LF（LF 不属于 `renderedPlaceholderRange`）；`processAllTokens` 从 `this.options` 取 carrier，在 `finally` 删除 `CARRIER_SYMBOL`（删除失败返回 `CARRIER_AUDIT_FAILED`）并把深度冻结单元素数组附为非枚举/不可写/不可配置 `arknights` metadata；`walkTokens` 只做 token-local 检查。删除全部 inline/autolink ownership 路径。运行 → GREEN。
 
 - [ ] **A2-18 拆分 `pipeline.js`**：把现有 `makeFailure`/`createFieldFallback`/`materializeField`/`composeCardGroups`/`deriveExcerptProjection`/`readProjectedText` 分别搬进四个子模块，`pipeline.js` 只保留 `createMarkerPipeline`（before 4 / after 9 编排、carrier 生命周期、字段进入与退出顺序、抛错边界）与 `registerMarkerFilters`；`sentinel.js` 逻辑全部删除，连续 Project 改由 `project-grid.js` 的 `sourceRange` 邻接判定：
@@ -1380,9 +1486,8 @@ function isAdjacent(source, leftEnd, rightStart) {
 `pipeline.js` 显式注入共享值：
 
 ```js
-const { markerFailureHtml, markerFailureProjection, fieldFallbackHtml, fieldFallbackProjection } =
-  require('./pipeline/failure')
-const failureHelpers = Object.freeze({ markerFailureHtml, markerFailureProjection, fieldFallbackHtml, fieldFallbackProjection })
+const { createSharedFailureHelpers } = require('./pipeline/failure')
+const failureHelpers = createSharedFailureHelpers()
 const projectGridHelpers = Object.freeze({ isAdjacent, escapeHtmlText })
 ```
 
@@ -1392,6 +1497,11 @@ before 4 的加密判定改为调用共享 policy：`inspectSearchEncryption(dat
 
 ```js
 const PIPELINE_SUBMODULES = ['materialize', 'failure', 'project-grid', 'projection']
+// before 源字段 NUL 用与 line-marker-memory-fixture.js 相同的构造方式取字面 U+0000：
+// 本探针早于 A2-21 的共享 fixture 模块，不能 require 它，因此就地用 String.fromCharCode(0)
+// 构造（handler 侧的探针则统一从该模块导出取 NUL，见 A2-22）
+const NUL = String.fromCharCode(0)
+const PIPELINE_JS = path.join(root, 'themes/arknights/scripts/markers/pipeline.js')
 
 function test_pipeline_submodule_dependencies() {
   const dir = path.join(root, 'themes/arknights/scripts/markers/pipeline')
@@ -1406,6 +1516,8 @@ function test_pipeline_submodule_dependencies() {
       assert.ok(!PIPELINE_SUBMODULES.includes(targetModule) || targetModule === self,
         `${name} must not require sibling submodule ${target}`)
       assert.ok(!target.includes('pipeline.js') && target !== './pipeline', `${name} must not require pipeline.js`)
+      // 字符串形态之外的写法（../pipeline、../pipeline.js、../../markers/pipeline…）由归一化兜住
+      assert.notEqual(path.resolve(dir, target), PIPELINE_JS, `${name} must not require pipeline.js via ${target}`)
     }
     for (const forbidden of ["require('hexo')", 'require("hexo")', "require('fs')", 'require("fs")',
       "require('node:fs')", 'require("node:fs")', "require('net')", 'require("net")',
@@ -1452,17 +1564,23 @@ function test_failure_and_projection_are_lf_only() {
 }
 
 function test_project_grid_adjacency() {
-  const adjacent = '[#]>Project|\n[name] A\n[link] https://a.example.com/\n[image] /images/a.png\n' +
-    '[#]>Project|\n[name] B\n[link] https://b.example.com/\n[image] /images/b.png\n'
-  const spaced = adjacent.replace('\n[#]>Project|\n[name] B', '\n\n[#]>Project|\n[name] B')
+  const first = '[#]>Project|\n[name] A\n[link] https://a.example.com/\n[image] /images/a.png\n'
+  const second = '[#]>Project|\n[name] B\n[link] https://b.example.com/\n[image] /images/b.png\n'
+  const adjacent = first + second
+  const spaced = first + '\n' + second
   const run = source => runPostRender(pipeline, marked, source, { path: 'projects/index.md', type: 'projects' }).content
+  const gridCount = html => (html.match(/<div class="projects-grid">/g) ?? []).length
+  const cardCount = html => (html.match(/<a class="project-card"/g) ?? []).length
+  const lone = run(first)
+  assert.equal(gridCount(lone), 1, 'a lone Project still renders exactly one grid')
+  assert.equal(cardCount(lone), 1)
   const single = run(adjacent)
-  assert.equal((single.match(/<div class="projects-grid">/g) ?? []).length, 1)
-  assert.equal((single.match(/<a class="project-card"/g) ?? []).length, 2)
+  assert.equal(gridCount(single), 1, 'two adjacent Projects share one grid')
+  assert.equal(cardCount(single), 2)
   assert.ok(!single.includes('<p></p>'), 'no empty paragraph wrapper')
-  const two = run(spaced)
-  assert.equal((two.match(/<div class="projects-grid">/g) ?? []).length, 0)
-  assert.equal((two.match(/<a class="project-card"/g) ?? []).length, 2)
+  const split = run(spaced)
+  assert.equal(gridCount(split), 2, 'a blank line breaks the group, so each Project gets its own grid')
+  assert.equal(cardCount(split), 2)
 }
 
 function test_before_source_field_nul_is_fail_closed() {
@@ -1505,9 +1623,15 @@ const { Marked } = require(path.join(root, 'node_modules/marked'))
 const { installMarkedExtension } = require(path.join(root, 'themes/arknights/scripts/markers/marked-extension'))
 const { createTokenStore } = require(path.join(root, 'themes/arknights/scripts/markers/token'))
 const { createMarkerPipeline } = require(path.join(root, 'themes/arknights/scripts/markers/pipeline'))
+const { aiHandler } = require(path.join(root, 'themes/arknights/scripts/markers/handlers/ai'))
+const { projectHandler } = require(path.join(root, 'themes/arknights/scripts/markers/handlers/project'))
+const { alertsHandler } = require(path.join(root, 'themes/arknights/scripts/markers/handlers/alerts'))
+const { editorHandler } = require(path.join(root, 'themes/arknights/scripts/markers/handlers/editor'))
+const { linkCardHandler } = require(path.join(root, 'themes/arknights/scripts/markers/handlers/link-card'))
 const PRODUCTION = [aiHandler, projectHandler, alertsHandler, editorHandler, linkCardHandler]
 
-// 独立实例：既不替换 defaultPipeline，也不触碰全局 marked 单例的 defaults
+// 独立实例：既不替换 defaultPipeline，也不触碰全局 marked 单例的 defaults；
+// 未注册 hexo context，encryptConfig 走 §2.4 的缺省（等价未启用加密 -> public）
 const pipeline = createMarkerPipeline({ handlers: PRODUCTION, tokenStoreFactory: createTokenStore })
 const marked = new Marked()
 installMarkedExtension(marked.use.bind(marked))
@@ -1515,7 +1639,24 @@ installMarkedExtension(marked.use.bind(marked))
 
 `installMarkedExtension` 接收的正是 `hexo-renderer-marked` 通过 `execFilterSync('marked:use', marked.use, …)` 传入的 `marked.use` 绑定，因此 `marked.use.bind(marked)` 与真实构建同源；A2-16 探针的 `captureExtension()` 用同一条安装路径。`renderPostThroughMarked` **不可省略**：不经过真实 renderer 时 opaque token 不会被换成 placeholder `<div>`、CR 也不会被当作物理行终止符折叠，`test_failure_and_projection_are_lf_only` 的 LF 断言与 `test_project_grid_adjacency` 的网格分组都不成立。
 
-`test_before_source_field_nul_is_fail_closed` 与 `test_unsupported_markdown_sanitizer` 分别落地规格第 18.2 节「before 源字段 NUL」与「sanitizer」两行门禁：前者要求 before 4 在写入 carrier 前终止、`data.markdown` descriptor 不存在、`projectText` 返回 `null`；后者要求 `dompurify: true` 抛 `MARKDOWN_SANITIZER_UNSUPPORTED`，而缺省与逐字 `false` 通过。
+`test_before_source_field_nul_is_fail_closed` 与 `test_unsupported_markdown_sanitizer` 分别落地规格第 18.2 节「before 源字段 NUL」与「sanitizer」两行门禁：前者要求 before 4 在写入 carrier 前终止、`data.markdown` descriptor 不存在、`projectText` 返回 `null`；后者要求 `dompurify: true` 抛 `MARKDOWN_SANITIZER_UNSUPPORTED`，而缺省与逐字 `false` 通过。`test_pipeline_submodule_dependencies` 除了字符串形态的 `pipeline.js` 判据，还用 `path.resolve(dir, target)` 归一化兜住 `../pipeline`、`../pipeline.js`、`../../markers/pipeline` 等一切等价写法。
+
+本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-pipeline.test.js` 的全部错误码**（共 10 条，缺一条即门禁不完整）：
+
+| 错误码 | 断言入口 |
+| --- | --- |
+| `UNKNOWN_MARKER` | `test_failure_and_projection_are_lf_only`（未注册 `TEST` 落到 `<pre class="arknights-marker-source">`） |
+| `PIPELINE_AUDIT_FAILED` | 注入非终态 occurrence 后 after 9 审计失败 |
+| `PLACEHOLDER_AUDIT_FAILED` | 篡改 placeholder 数量 / 精确 DOM / 顺序 |
+| `MARKDOWN_SANITIZER_UNSUPPORTED` | `test_unsupported_markdown_sanitizer` |
+| `UNEXPECTED_NUL` | `test_before_source_field_nul_is_fail_closed`（**before 源字段路径**；handler 路径在 A2-22） |
+| `ENCRYPTION_STATE_AMBIGUOUS` | before 4 的 `inspectSearchEncryption` 三态判定的 `ambiguous` 分支 |
+| `PROJECT_INVALID_PAGE` | Project marker 出现在非 `type: 'projects'` 的 data |
+| `PROJECT_INVALID_FIELD` | `[name]` 缺失或 `[image]` 为非 string |
+| `PROJECT_INVALID_URL` | `[link] javascript:alert(1)` |
+| `LINK_CARD_INVALID_URL` | LinkCard `[link] javascript:` / `[img] data:` |
+
+上列代码块给出的是首段骨架（子模块规模与依赖门禁、LF 恢复、Project 分组、before 源字段 NUL、sanitizer 五组）；`PIPELINE_AUDIT_FAILED` / `PLACEHOLDER_AUDIT_FAILED` / `ENCRYPTION_STATE_AMBIGUOUS` 与四条 Project/LinkCard handler 码的 fixture 随 A2-18 实现逐段追加到同一文件。
 
 - [ ] **A2-20 更新 9 个既有 `marker-*.test.js` 与 `search-projection-lifecycle.test.js`**：把 `[#]<NAME>{...}` fixture 换成按行 fixture；把 inline / autolink ownership / sentinel / `arknights-marker-v1:` 断言换成 block-only 断言；保留全部 AI / Project / carrier / 搜索行为断言。逐个运行确认 GREEN：
 
@@ -1584,9 +1725,15 @@ const NUL = String.fromCharCode(0)
 const MEMORY_RENDER_NUL = MEMORY_SOURCE.replace('[title] 协议提示', `[title] 提示${NUL}`)
 const MEMORY_PROJECTION_NUL = MEMORY_SOURCE.replace('正文包含 **Markdown**', `正文${NUL}包含 **Markdown**`)
 
-// 规格 17.1 安全转义矩阵：五个上下文各一条恶意字段。
+// 规格 17.1 安全转义矩阵。每一项都是**完整的带标签字段行**（`[标签] 恶意值`），
+// 探针的 replace 目标也必须是 MEMORY_SOURCE 里同形态的完整行，
+// 这样既不会漏掉标签、也不会拼出双 `[style]` 前缀。
 // monaco 上下文的载体是 MEMORY_ESCAPE_MONACO（替换 Editor body 内的原文），
-// 它不由 handler 的单行字段直接消费，因此矩阵内没有对应的行内字段项
+// 它不由 handler 的单行字段直接消费，因此矩阵内没有对应的行内字段项。
+// Markdown 上下文**不在本矩阵内**：规格 17.1 的 Markdown 规则只约束「把 Alerts body 交给
+// detached renderMarkdown」，其危险输入判定发生在 service 层而非字段序列化层，
+// 负例已由 MEMORY_JAVASCRIPT_LINK 覆盖（javascript: link -> HANDLER_SERVICE_ERROR
+// + escaped marker source，见 A2-22 的 6 条硬断言第 5 条）。
 const MEMORY_ESCAPE_MATRIX = Object.freeze({
   htmlText: '[title] <script>alert(1)</script> & "\' 尾注',
   htmlAttribute: '[descr] " onmouseover="alert(1)',
@@ -1614,6 +1761,12 @@ U+0000 在本模块中一律由 `String.fromCharCode(0)` 构造并注入，不�
 - [ ] **A2-22 写 `.temp/line-marker-handlers.test.js`**：`require('./line-marker-memory-fixture')` 引入共享 fixture，经真实 `Hexo#post.render` 断言规格第 18.2 节的 6 条硬断言（五个 occurrence 全 `consumed`、无 placeholder/token/NUL；Alerts 为 `.admonition.adm-note.open` 且投影 `NOTE 协议提示\n正文包含 Markdown 与 链接。`；Editor 的 `pre.monaco-editor-source[hidden][aria-hidden="true"]` 的 `textContent` 与 body 逐字相同；三张 LinkCard 的 DOM/`.link-simple`/空 `.link-descr` 与三条投影；`javascript:` 负例得到 escaped marker source 与 `HANDLER_SERVICE_ERROR`；`[descr] null` 为 `INVALID_VALUE` 而 `[descr]` 走空串成功路径）。随后追加三段：Expands 重绑幂等、handler 生成 NUL、规格第 17.1 安全转义矩阵。
 
 ```js
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const { JSDOM } = require('jsdom')
+const Hexo = require('hexo')
+const root = path.resolve(__dirname, '..')
 const {
   NUL,
   MEMORY_SOURCE,
@@ -1699,15 +1852,26 @@ function test_handler_generated_nul_is_marker_scoped() {
 }
 ```
 
-**规格 17.1 安全转义矩阵段**：五个上下文各跑一次真实 `Post#render`，断言「上下文校验拒绝或逐字转义后仍安全」，并且**不使用任何正则删除** `<script>`、事件属性或危险协议：
+**规格 17.1 安全转义矩阵段**：五个字段级上下文（HTML text / HTML attribute / URL / CSS declaration / Monaco source）各跑一次真实 `Post#render`，断言「上下文校验拒绝或逐字转义后仍安全」，并且**不使用任何正则删除** `<script>`、事件属性或危险协议。规格第 17.1 节的第六个上下文 Markdown **不在本段**：它的规则只约束「把 Alerts body 交给 detached `renderMarkdown`」，危险输入在 service 层判定为 `HANDLER_SERVICE_ERROR`（负例见上面 6 条硬断言第 5 条的 `MEMORY_JAVASCRIPT_LINK`），不进入字段序列化矩阵；该排除同时写在本段与 A2-21 的 fixture 注释里。
 
 ```js
+// payload 只允许出现在 escaped marker source 内：活动上下文（style 元素、attribute、
+// 正文元素）里不得出现原始 payload，payload 的唯一合法位置是失败回退的 <pre>。
+function assertPayloadOnlyInMarkerSource(html, payload, name) {
+  for (let cursor = html.indexOf(payload); cursor >= 0; cursor = html.indexOf(payload, cursor + payload.length)) {
+    const prefix = html.slice(0, cursor)
+    assert.ok(prefix.lastIndexOf('<pre class="arknights-marker-source">') > prefix.lastIndexOf('</pre>'),
+      `${name}: ${payload} may only surface inside an escaped marker source`)
+  }
+}
+
 function test_security_escaping_matrix() {
   const cases = [
     { name: 'htmlText', source: MEMORY_SOURCE.replace('[title] 协议提示', MEMORY_ESCAPE_MATRIX.htmlText), forbid: ['<script>alert(1)</script>'] },
     { name: 'htmlAttribute', source: MEMORY_SOURCE.replace('[descr] 纯文本说明', MEMORY_ESCAPE_MATRIX.htmlAttribute), forbid: ['onmouseover="alert(1)"'] },
-    { name: 'url', source: MEMORY_SOURCE.replace('[link] https://example.com/', '[link] javascript:alert(1)'), forbid: ['href="javascript:'] },
-    { name: 'css', source: MEMORY_SOURCE.replace('--card-title: #fff;', MEMORY_ESCAPE_MATRIX.css), forbid: ['url(javascript:'] },
+    { name: 'url', source: MEMORY_SOURCE.replace('[link] https://example.com/', MEMORY_ESCAPE_MATRIX.url), forbid: ['href="javascript:'] },
+    // css 的 forbid 留空：payload 合法地出现在 escaped marker source 内，判据见本函数末尾两行
+    { name: 'css', source: MEMORY_SOURCE.replace('[style] --card-title: #fff; --card-bg: #123456;', MEMORY_ESCAPE_MATRIX.css), forbid: [] },
     { name: 'monaco', source: MEMORY_ESCAPE_MONACO, forbid: ['<script>'] }
   ]
   for (const item of cases) {
@@ -1723,14 +1887,37 @@ function test_security_escaping_matrix() {
     'html text context must be escaped or rejected, never stripped by regex')
   const monaco = renderMemoryFixture(MEMORY_ESCAPE_MONACO).data.content
   assert.ok(monaco.includes('&lt;script&gt;'), 'Monaco source must be escaped as HTML text before textContent reading')
+  // CSS 上下文：payload 被 style 解析器否决后只允许出现在 escaped marker source，
+  // 活动上下文的判据是「不存在携带 payload 的 <style data-arknights-link-card-style>」
+  // （attr 值与元素文本两处都查），而不是对 payload 做全文缺席断言。
+  const css = renderMemoryFixture(cases[3].source).data.content
+  assert.ok(!/<style data-arknights-link-card-style="[^"]*"[^>]*>[^<]*url\(javascript:/g.test(css),
+    'css payload must never reach an active style element')
+  assertPayloadOnlyInMarkerSource(css, 'url(javascript:', 'css')
 }
 ```
 
 `renderMemoryFixture(source)` 是本文件的共用 helper：创建隔离 Hexo 实例、注册 `defaultPipeline` 与五 handler、执行真实 `Post#render`，并返回 `{ data, store }`，其中 `store` 是包住 handler 的计数 wrapper，提供 `countState('render'|'toPlainText')`、`occurrences`（`{ name, state }` 快照）与 `data.projection`（`defaultPipeline.projectText(data, 'content')`）。
 
+本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-handlers.test.js` 的全部错误码**（共 20 条，缺一条即门禁不完整）：
+
+| 来源 | 错误码 |
+| --- | --- |
+| 规格第 13.1 节（4 条） | `INVALID_VALUE`、`HANDLER_ERROR`、`HANDLER_SERVICE_ERROR`、`UNEXPECTED_NUL`（**handler 生成路径**；before 源字段路径在 A2-19） |
+| `AI`（2 条） | `AI_INVALID_STATE`、`AI_INVALID_TEXT` |
+| `Alerts`（6 条） | `ALERTS_INVALID_TYPE`、`ALERTS_INVALID_OPEN`、`ALERTS_INVALID_TITLE`、`ALERTS_INVALID_COLOR`、`ALERTS_EMPTY_BODY`、`ALERTS_MARKDOWN_ERROR` |
+| `Editor`（4 条） | `EDITOR_INVALID_LANGUAGE`、`EDITOR_INVALID_NUMBER`、`EDITOR_INVALID_THEME`、`EDITOR_EMPTY_BODY` |
+| `LinkCard`（4 条） | `LINK_CARD_INVALID_NAME`、`LINK_CARD_INVALID_URL`、`LINK_CARD_INVALID_STYLE`、`LINK_CARD_STYLE_RESOURCE` |
+
+（Project 的 3 条 handler 码由 A2-19 承载，见该探针的错误码表；`LINK_CARD_INVALID_URL` 两个探针各有一份 fixture。）
+
 - [ ] **A2-23 写 `.temp/line-marker-hexo.test.js`**：真实 alias/store 探针 + 真实 `Post#render` 拒绝重试 + priority 5 透传 + `filters/alerts.js` 加密同源：
 
 ```js
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const Hexo = require('hexo')
+const root = path.resolve(__dirname, '..')
 const { MEMORY_SOURCE } = require('./line-marker-memory-fixture')
 
 function test_filter_alias_and_store() {
@@ -1837,7 +2024,7 @@ node -e "const{execSync}=require('node:child_process');const out=execSync('git g
 ```
 
 - [ ] **A3-4 递增缓存版本**：`meta-data.pug` 的 `- var cssVersion = "20260952"` → `"20260953"`；`js-data.pug` 的 `- var jsVersion = "20260950"` → `"20260951"`。
-- [ ] **A3-5 同步 `AGENTS.md`**（规格第 15 节条目 1/2/3/5/6/10/11/12）：Architecture 写入 `after_render:html` → `_after_html_render` alias 事实与实测优先级表（含 `footnotes.js` 恒等 no-op 说明）；priority 5 placeholder 可见性；Source Tree 登记 `handlers/{project,alerts,editor,link-card}.js` 与 `pipeline/{materialize,failure,project-grid,projection}.js`，删除 `sentinel.js`/`projects.js` 条目与旧 inline/autolink 描述；Toolbox 模块树与 ≤500 行门禁（含 `ScreenshotControl.ts` 排除理由只限「A 仅 facade 委托」）；`Expands.ts` 定点口径；本地定制地图的样式导入变更；加密策略单一来源四条链路与 §2.5 裁决记录列出的三处显式残留自判（必须写成「marker/search/加密生成三条链路 + GitHub Alert filter 已同源，`spoiler.js`/`meta-description.js`/`terms.js` 为显式残留」，不得写成全站零残留）；`.temp/` 探针清单（九个既有 + 11 个新增 + `line-marker-memory-fixture.js` 共享 fixture 模块）；删除旧 filters 条目。
+- [ ] **A3-5 同步 `AGENTS.md`**（规格第 15 节条目 1/2/3/5/6/10/11/12）：Architecture 写入 `after_render:html` → `_after_html_render` alias 事实与实测优先级表（含 `footnotes.js` 恒等 no-op 说明）；priority 5 placeholder 可见性；Source Tree 登记 `handlers/{project,alerts,editor,link-card}.js` 与 `pipeline/{materialize,failure,project-grid,projection}.js`，删除 `sentinel.js`/`projects.js` 条目与旧 inline/autolink 描述；Toolbox 模块树与 ≤500 行门禁（含 `ScreenshotControl.ts` 排除理由只限「A 仅 facade 委托」）；`Expands.ts` 定点口径；本地定制地图的样式导入变更；加密策略单一来源四条链路与 §2.5 裁决记录列出的三处显式残留自判（必须写成「marker/search/加密生成三条链路 + GitHub Alert filter 已同源，`spoiler.js`/`meta-description.js`/`terms.js` 为显式残留」，不得写成全站零残留）；`.temp/` 探针清单（九个既有 + 10 个新增 `line-marker-*.test.js` + 1 个新增 `line-marker-artifacts.js` 产物脚本 + `line-marker-memory-fixture.js` 共享 fixture 模块）；删除旧 filters 条目。
 - [ ] **A3-6 运行批次 A 完整门禁**：
 
 ```bash
@@ -2149,8 +2336,9 @@ function test_desktop_navigation_geometry() {
     'desktop navBlock min-width must be 72px')
   assert.ok(hasDeclaration(desktopHeader, 'height 36px') || hasDeclaration(desktopFlex, 'height 36px'),
     'desktop navBlock must be 36px tall')
-  assert.ok(hasDeclaration(desktopHeader, 'box-sizing border-box') || hasDeclaration(desktopFlex, 'box-sizing border-box'),
-    'desktop navBlock must use border-box')
+  // `box-sizing border-box` 不做断言：它已经是 header/flex_layout 的既有基线属性，
+  // 断言它无法区分「新规则已落地」与「基线本来就写」，反而是恒真门禁。
+  // 桌面几何由上面的 width / min-width / height 三条新声明 + 下面的 justify-content 锁定。
   assert.ok(hasDeclaration(desktopHeader, 'justify-content center') || hasDeclaration(desktopFlex, 'justify-content center'),
     'desktop navBlock must center its content')
   assert.ok(header.includes('.navItem.active > .navBlock .navItemLabel'), 'active label rule must remain')
@@ -2168,7 +2356,7 @@ test_desktop_navigation_geometry()
 console.log('ok theme-ui-nav')
 ```
 
-- [ ] **C2-2 执行样式修改**：在 `header.styl` 的 `@media ( min-width 1024px )` 块与 `flex_layout.styl` 的 `@media ( min-width 1024px )` 块内为一级 `:is(.navBlock, .navSecond)` 统一 `width 72px` / `min-width 72px` / `height 36px` / `box-sizing border-box` / `justify-content center`（写在哪个块由 C2-2 的实现者按导入顺序决定，探针对两块取并集断言）；`.navBlockIcon > .navItemTitle` 在桌面一级占满按钮可用宽度并水平居中；`.navItem.active > .navBlock .navItemLabel` 的 `margin-left` 归零（名称在固定宽度内居中）；在 `flex_layout.styl` 的 `@media ( max-width 1023px )` 块内覆盖为 `width 100%` / `min-width 0` / `justify-content flex-start`，移动端 active 名称与图标保持 6px 间距。搜索输入仍按顶栏内容区契约 35px，按钮本身不改 35px；二级菜单展开行为、tooltip、hover、focus-visible 与 Pjax active 重绑不变。
+- [ ] **C2-2 执行样式修改**：在 `header.styl` 的 `@media ( min-width 1024px )` 块与 `flex_layout.styl` 的 `@media ( min-width 1024px )` 块内为一级 `:is(.navBlock, .navSecond)` 统一 `width 72px` / `min-width 72px` / `height 36px` / `box-sizing border-box` / `justify-content center`（写在哪个块由 C2-2 的实现者按导入顺序决定，探针对两块取并集断言；`box-sizing border-box` 是实施项但**不进门禁**，因为它同时存在于基线，探针无法据此区分新旧，见 C2-1 的注释）；`.navBlockIcon > .navItemTitle` 在桌面一级占满按钮可用宽度并水平居中；`.navItem.active > .navBlock .navItemLabel` 的 `margin-left` 归零（名称在固定宽度内居中）；在 `flex_layout.styl` 的 `@media ( max-width 1023px )` 块内覆盖为 `width 100%` / `min-width 0` / `justify-content flex-start`，移动端 active 名称与图标保持 6px 间距。搜索输入仍按顶栏内容区契约 35px，按钮本身不改 35px；二级菜单展开行为、tooltip、hover、focus-visible 与 Pjax active 重绑不变。
 - [ ] **C2-3 运行**：
 
 ```bash
@@ -2187,6 +2375,8 @@ node .temp/theme-ui-nav.test.js
 步骤：
 
 - [ ] **C3-1 写 `.temp/theme-ui-bgm.test.js` 的 RED 段**（在既有 probe 上追加）。`loadBgmProbe()` 复用文件里已有的 `deferred()` 与模块级 `ts`，用 `ts.transpileModule` **按 `outFile` 的真实模型**把 `ToolboxStatusLease.ts` 与 `BgmControl.ts` 拼成同一作用域后 `window.eval`：TypeScript 的 `private` 在转译后不存在，epilogue 因此可以在同作用域内读 `bgmControl` 的私有字段与私有方法，不需要任何新增公开导出。计数一律取**可观测面**（DOM 写入、timer 创建、media listener 增删差值、observer `disconnect`），不新增 `window.bgmControl` 之外的 API：
+
+**同文件的两处 `loadTypeScript` 必须一并改成 join 转译**：既有 `loadTypeScript(window, path)`（第 10 行）自行 `window.eval` 且不返回值，因此无法参与 join。本任务把第 **51** 行 `loadTypeScript(window, 'themes/arknights/source/js/_src/include/BgmControl.ts')` 与第 **164** 行 `loadTypeScript(disabledDom.window, 'themes/arknights/source/js/_src/include/BgmControl.ts')` 两处调用都改为「新 `transpile` helper + `join('\n')` + 一次 `window.eval`」形态（`transpile` 只转译不求值，与 `loadBgmProbe` 内共用同一份实现），随后删除 `loadTypeScript` 本身。这两处改动与新增 `loadBgmProbe()` 一起进入 A1-16 门禁序列的 `node --check .temp/theme-ui-bgm.test.js` + `node .temp/theme-ui-bgm.test.js` 两行。
 
 ```js
 const BGM_PROBE_HTML = `<!doctype html><body>
@@ -2216,8 +2406,9 @@ const MEDIA_EVENTS = new Set(['play', 'pause', 'ended', 'error'])
 const PERSISTENT_MEDIA_LISTENERS = 4
 
 // 既有 loadTypeScript(window, path) 会自行 window.eval 且不返回值，无法参与 join；
-// 这里另取一个只做转译、不求值的同源 helper，保证两个文件在同一次 eval 中按序求值
-const transpile = relativePath => ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
+// 这里另取一个只做转译、不求值的同源 helper（复用文件里已有的 read），
+// 保证多个文件在同一次 eval 中按序求值
+const transpile = relativePath => ts.transpileModule(read(relativePath), {
   compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None, strict: true }
 }).outputText
 
@@ -2306,6 +2497,9 @@ function loadBgmProbe() {
   ].join('\n') + BGM_PROBE_EPILOGUE)
   const internals = window.__bgmInternals
   assert.equal(typeof internals, 'object', 'the BGM epilogue must resolve inside the shared outFile scope')
+  // 构造末尾的 reconcile({ publishStatus: false }) 会写一次 aria-busy 作为初值；
+  // 基线取自构造之后，ariaBusyWrites() 只报 delta，避免把这条初始化写入算进任何操作路径。
+  const ariaBusyBaseline = counters.ariaBusyWrites
 
   const settle = async () => {
     for (let index = 0; index < 4; index += 1) {
@@ -2322,7 +2516,7 @@ function loadBgmProbe() {
     persistentRebinds: () => counters.persistentRebinds,
     statusWrites: () => counters.statusWrites,
     timerCreates: () => counters.timerCreates,
-    ariaBusyWrites: () => counters.ariaBusyWrites,
+    ariaBusyWrites: () => counters.ariaBusyWrites - ariaBusyBaseline,
     leaseDisconnects: () => counters.leaseDisconnects,
     pjaxErrorHandlerCount: () => counters.pjaxHandlers.get('pjax:error') ?? 0,
     bgmLeaseOwned: () => internals.statusLeaseOwned(),
@@ -2358,7 +2552,8 @@ function loadBgmProbe() {
 | `operationGeneration()` / `lifecycleGeneration()` | 私有字段直读 | generation 精确增量 |
 | `operationScopedListenerCount()` | audio `addEventListener` / `removeEventListener` 净余额减去四个常驻 media listener | 构造后为 0，`retireOperation` 后仍为 0 |
 | `persistentRebinds()` | audio media listener 新增次数 | `invalidateLifecycle` 每次重绑的增量恒定 |
-| `statusWrites()` / `timerCreates()` / `ariaBusyWrites()` | status `textContent` setter、`setTimeout`、`aria-busy` 写入计数 | 被拒绝路径写入计数为 0 |
+| `statusWrites()` / `timerCreates()` | status `textContent` setter、`setTimeout` 写入计数 | 被拒绝路径写入计数为 0 |
+| `ariaBusyWrites()` | `aria-busy` 写入计数相对**构造后基线快照**的 delta | 排除 `reconcile({ publishStatus: false })` 的初始化写入，只看后续操作路径 |
 | `leaseDisconnects()` | BGM `MutationObserver.disconnect` 计数 | lease 失效次数 |
 | `bgmLeaseOwned()` | `bgmControl.statusLease !== null` | lease 归属 |
 | `pjaxErrorHandlerCount()` | `document` 上 `pjax:error` 注册数 | 唯一 owner |
@@ -2386,7 +2581,7 @@ async function test_lifecycle_generation_per_pjax_dispatch() {
   const initial = probe.lifecycleGeneration()
   assert.equal(probe.snapshotLifecycleToken().lifecycle, initial, 'snapshot must not advance any generation')
   await probe.toggleFromPaused()
-  assert.equal(probe.bgmLeaseOwned(), true, 'a published paused status must hold the BGM lease')
+  assert.equal(probe.bgmLeaseOwned(), true, 'a published playing status must hold the BGM lease')
   const rebindsBefore = probe.persistentRebinds()
   await probe.dispatch('pjax:send')
   const rebindsPerLifecycle = probe.persistentRebinds() - rebindsBefore
@@ -2409,7 +2604,7 @@ async function test_lifecycle_generation_per_pjax_dispatch() {
 async function test_status_lease_rejects_identical_external_write() {
   const probe = loadBgmProbe()
   await probe.toggleFromPaused()
-  assert.equal(probe.bgmLeaseOwned(), true, 'a published paused status must hold the BGM lease')
+  assert.equal(probe.bgmLeaseOwned(), true, 'a published playing status must hold the BGM lease')
   const message = probe.statusNodeText()
   assert.equal(probe.lastStatusMessage(), message)
   probe.externalStatusWrite(message)
@@ -2428,6 +2623,16 @@ async function test_status_lease_rejects_identical_external_write() {
 ```
 
 - [ ] **C3-2 实现 `ToolboxStatusLease.ts`**，按规格 16.3 伪代码逐字实现 `claimStatus(message, delay)` / `invalidateStatusLease()` / `clearStatus()`，observer 精确观察 `{ attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true }`；`claimStatus` 第 4 步先 `observer.takeRecords()` 丢弃本次自有写入；observer callback 即使外部写入与 `lease.message` 相同文本也视为其它 owner 接管。
+
+  **A1-7 推迟到本任务的 lease timer 静态门禁在此落地**（A 阶段函数体是空实现 no-op，`setTimeout` 调用数必然为 0，所以 A1-2 不落这条断言）：`.temp/line-marker-pipeline.test.js`（全仓唯一持有 `countCalls` 的探针）在其 A1-2 段 `test_toolbox_dependency_edges()` 末尾追加
+
+  ```js
+  const lease = fs.readFileSync(path.join(includeDir, 'ToolboxStatusLease.ts'), 'utf8')
+  assert.equal(countCalls(lease, 'setTimeout'), 1, 'C3-2 lands the single real status timer')
+  ```
+
+  `ToolboxShareController.ts` 的 `=== 1` 与 `ToolboxFavoriteController.ts` 的 `=== 0` 两条断言保持不变；本任务不新增探针文件，只在既有 `.temp/line-marker-pipeline.test.js` 上追加这一条（因此 C3-7 的门禁序列必须包含该探针）。
+
 - [ ] **C3-3 重写 `BgmControl.ts` 状态机**（§2.6 签名）：六态 `paused / starting / playing / failed / retrying-load / retrying-play`；`retireOperation` 只接受 `OperationToken`（`LifecycleToken`、旧 `O`、非 token 一律返回 `false` 且写入计数为 0）；成功终态写回前恰好调用一次 `retireOperation(O)`；`retrying-load -> retrying-play` 中途不 retire；`enterFailed` 按 token 类型分别调用 `retireOperation(token)` 或 `advanceOperationGeneration()` 恰好一次并同步置 `mediaFailed = true`；`invalidateLifecycle(reason)` 递增 lifecycle 恰好 1 次、调用 `invalidateStatusLease()` 恰好 1 次、重绑 persistent listener 恰好 1 次、自身不改 operation；三个 Pjax 事件各注册**一个** listener，其中 `pjax:error` 仅由 `BgmControl.ts` 处理。
 - [ ] **C3-4 确认 `Toolbox.ts` 的 `applyState(true)`（打开）分支**调用 `window.bgmControl?.clearStatus()`（A1-8 已加入，C 只回归；关闭分支不得出现该调用）。
 - [ ] **C3-5 递增版本**：`meta-data.pug` `"20260954"` → `"20260955"`；`js-data.pug` `"20260951"` → `"20260952"`。
@@ -2437,6 +2642,9 @@ async function test_status_lease_rejects_identical_external_write() {
 ```bash
 npm --prefix themes/arknights run build
 node --check themes/arknights/source/js/arknights.js
+node --check .temp/line-marker-pipeline.test.js
+node --check .temp/theme-ui-bgm.test.js
+node .temp/line-marker-pipeline.test.js
 node .temp/theme-ui-bgm.test.js
 node .temp/theme-ui-toolbox.test.js
 node .temp/theme-ui-screenshot.test.js
@@ -2449,7 +2657,7 @@ node .temp/theme-ui-nav.test.js
 git diff --check
 ```
 
-本块中的 `npm run build` 是 C 批收尾的中间编译检查；C 批最终生成门禁在 D3-1（`npx hexo generate --bail` + artifact 完整性）。
+本块中的 `npm run build` 是 C 批收尾的中间编译检查；C 批最终生成门禁在 D3-1（`npx hexo generate --bail` + artifact 完整性）。`node .temp/line-marker-pipeline.test.js` 在本批承载 C3-2 追加的 lease timer 静态断言（`countCalls(lease, 'setTimeout') === 1`），不能省。
 
 - [ ] **C3-8 提交批次 C**：
 
@@ -2762,7 +2970,7 @@ finally {
 | --- | --- | --- |
 | 主题 TS 编译 | `npm --prefix themes/arknights run build` | 退出 0，重生成 `arknights.js` / `search.js` |
 | 产物语法 | `node --check themes/arknights/source/js/arknights.js` | 退出 0 |
-| 新增探针 | `node .temp/line-marker-lexer.test.js`（其余 10 个同形） | 退出 0，末行 `ok ...` |
+| 新增探针 | `node .temp/line-marker-lexer.test.js`（其余 9 个 `line-marker-*.test.js` 同形） | 退出 0，末行 `ok ...` |
 | 共享 fixture 模块 | `node --check .temp/line-marker-memory-fixture.js` | 退出 0；由 `line-marker-handlers.test.js` 与 `line-marker-hexo.test.js` 共用，不单独运行 |
 | 既有探针 | `node .temp/marker-core.test.js`（其余 8 个 + `search-projection-lifecycle.test.js`） | 退出 0 |
 | 主题 UI 探针 | `node .temp/theme-ui-toolbox.test.js` / `theme-ui-bgm.test.js` / `theme-ui-screenshot.test.js` / `theme-ui-a1.test.js` / `theme-ui-a2.test.js` / `ai-badge-tooltip-table.test.js` / `snapdom-vendor.test.js` / `project-tooltip.test.js` | 退出 0 |
@@ -2863,6 +3071,25 @@ finally {
 
 规格第 13.1 节的 36 个 lexer/parser/pipeline 错误码与第 13.2 节的 19 个 handler 错误码逐条给出触发 fixture 与承载探针，共 55 条。「本轮新增」列标出此前无独立门禁、本次由 I-4 补齐的条目。
 
+**本表是可核对门禁清单，不是映射说明。** 三条核对规则：
+
+1. 「探针」列是**归属清单**：一个错误码可以出现在多个探针里，但每处必须断言**不同的失败路径**（同一路径不得在两个探针里重复断言）；两个探针断言同一码时，两条断言的 fixture 必须在形态上可区分。
+2. 每个探针**必须逐条实现**本表指派给它的全部错误码，缺一条即该探针门禁不完整；A2-7 / A2-8 / A2-16 / A2-19 / A2-22 五个探针在各自的步骤里已把清单写成常驻表格（见各自的「逐条实现」段），实施时以那五处表格为准，本表与之必须一致。
+3. 「触发 fixture」列是可执行断言的目标文本/形态，不得改写成描述性说明；新增错误码必须同时补 fixture 与探针归属，禁止只在代码里 `throw` 而无门禁。
+
+**按探针汇总（55 个唯一错误码，展开为 63 个「错误码 × 探针」归属；差额 8 来自 6 个双探针归属 + `ENCRYPTION_STATE_AMBIGUOUS` 的三探针归属）**
+
+| 探针 | 负责的错误码常量 | 条数 |
+| --- | --- | ---: |
+| `line-marker-lexer.test.js` | `INVALID_MARKER_SOURCE` | 1 |
+| `line-marker-parser.test.js` | `INVALID_HEADER`、`INVALID_FIELD_LINE`、`INVALID_FIELD_NAME`、`DUPLICATE_FIELD`、`UNKNOWN_FIELD`、`UNEXPECTED_POSITIONAL_FIELD`、`MISSING_REQUIRED_FIELD`、`INVALID_VALUE`、`MULTILINE_INVALID_OPEN`、`MULTILINE_NOT_ALLOWED`、`MULTILINE_UNCLOSED`、`MULTILINE_UNEXPECTED_END` | 12 |
+| `line-marker-carrier.test.js` | `TOKEN_COLLISION`、`TOKEN_GENERATION_EXHAUSTED`、`CARRIER_BINDING_ERROR`、`CARRIER_STATE_INVALID`、`CARRIER_AUDIT_FAILED`、`CARRIER_BRIDGE_READ`、`CARRIER_BRIDGE_DEFINE`、`CARRIER_BRIDGE_DESCRIPTOR`、`CARRIER_FIELD_WRITE` | 9 |
+| `line-marker-marked.test.js` | `CARRIER_BINDING_ERROR`、`CARRIER_AUDIT_FAILED`、`INVALID_MARKED_USE` | 3 |
+| `line-marker-registry.test.js` | `UNKNOWN_MARKER`、`INVALID_HANDLER`、`DUPLICATE_HANDLER`、`INVALID_PIPELINE_OPTIONS`、`DUPLICATE_MARKER_PIPELINE`、`ENCRYPTION_STATE_AMBIGUOUS` | 6 |
+| `line-marker-pipeline.test.js` | `UNKNOWN_MARKER`、`PIPELINE_AUDIT_FAILED`、`PLACEHOLDER_AUDIT_FAILED`、`MARKDOWN_SANITIZER_UNSUPPORTED`、`UNEXPECTED_NUL`、`ENCRYPTION_STATE_AMBIGUOUS`、`PROJECT_INVALID_PAGE`、`PROJECT_INVALID_FIELD`、`PROJECT_INVALID_URL`、`LINK_CARD_INVALID_URL` | 10 |
+| `line-marker-hexo.test.js` | `INVALID_EXCERPT_FIELD`、`ENCRYPTION_STATE_AMBIGUOUS` | 2 |
+| `line-marker-handlers.test.js` | `INVALID_VALUE`、`HANDLER_ERROR`、`HANDLER_SERVICE_ERROR`、`UNEXPECTED_NUL`、`AI_INVALID_STATE`、`AI_INVALID_TEXT`、`ALERTS_INVALID_TYPE`、`ALERTS_INVALID_OPEN`、`ALERTS_INVALID_TITLE`、`ALERTS_INVALID_COLOR`、`ALERTS_EMPTY_BODY`、`ALERTS_MARKDOWN_ERROR`、`EDITOR_INVALID_LANGUAGE`、`EDITOR_INVALID_NUMBER`、`EDITOR_INVALID_THEME`、`EDITOR_EMPTY_BODY`、`LINK_CARD_INVALID_NAME`、`LINK_CARD_INVALID_URL`、`LINK_CARD_INVALID_STYLE`、`LINK_CARD_STYLE_RESOURCE` | 20 |
+
 **第 13.1 节（lexer / parser / pipeline，36 条）**
 
 | 错误码 | 触发 fixture | 探针 | 本轮新增 |
@@ -2901,7 +3128,7 @@ finally {
 | `INVALID_MARKED_USE` | `installMarkedExtension` 收到非函数，或未安装 block 扩展 | `line-marker-marked.test.js` | 是 |
 | `MARKDOWN_SANITIZER_UNSUPPORTED` | `data.marked.dompurify: true` 或自定义 sanitizer | `line-marker-pipeline.test.js` `test_unsupported_markdown_sanitizer` | 是 |
 | `INVALID_EXCERPT_FIELD` | frontmatter 有 own `excerpt` 但非 string | `line-marker-hexo.test.js` | 是 |
-| `ENCRYPTION_STATE_AMBIGUOUS` | `encrypt` 非 boolean、`tags` 不可迭代、`origin` 无法判定 | `line-marker-hexo.test.js`、`line-marker-pipeline.test.js` | 否 |
+| `ENCRYPTION_STATE_AMBIGUOUS` | `encrypt` 非 boolean、`tags` 不可迭代、`origin` 无法判定；注册时快照的 `hexo.config.encrypt.tags` 不是数组（配置驱动路径） | `line-marker-hexo.test.js`、`line-marker-pipeline.test.js`、`line-marker-registry.test.js` | 否 |
 | `UNEXPECTED_NUL` | before 源字段 NUL（`content` / 显式 `excerpt`）；handler `render` / `toPlainText` 生成 NUL | `line-marker-pipeline.test.js` `test_before_source_field_nul_is_fail_closed`、`line-marker-handlers.test.js` `test_handler_generated_nul_is_marker_scoped` | 是 |
 
 `UNEXPECTED_NUL` 的两条路径作用域不得混用（规格第 12.5 节）：before 路径不创建 carrier/token/occurrence/failure DOM，`projectText` 返回 `null`；handler 路径只让该 occurrence `failed`，DOM 精确 `markerFailureHtml(raw)`、投影精确 `markerFailureProjection(raw)`。两条断言分别落在上表列出的两个探针中，不合并。
@@ -2949,7 +3176,7 @@ finally {
 | `<!-- PLAN-PART-* -->` | 0 处（分块写入标记已全部替换） |
 | 唯一保留的“待填” | §12「实施状态」表，由批次 D 的执行 Agent 在 D3-2 按实际 commit 与门禁输出回填；这是刻意的执行记录槽，不是规格占位 |
 | 代码片段中的空字符串 / `null` / `defaultValue: null` | 是协议语义（空 title 合法节点、缺省 `descr` 有效值 `null`），非占位 |
-| 字面 U+0000 | 0 处；NUL fixture 一律由 `String.fromCharCode(0)` 构造后注入（`line-marker-memory-fixture.js` 导出 `NUL`） |
+| 字面 U+0000 | 0 处；NUL fixture 一律由 `String.fromCharCode(0)` 构造后注入。`line-marker-memory-fixture.js` 构造并导出 `NUL`，handler 侧探针（A2-22 / A2-23）统一从该导出取；A2-19 早于该模块（步骤顺序 A2-19 < A2-21），因此就地用同一条 `String.fromCharCode(0)` 构造，不 require 尚未创建的模块 |
 
 ### 13.4 类型 / 签名一致性
 
@@ -2978,16 +3205,18 @@ finally {
 | `isAdjacent` / `escapeHtmlText` | 规格 8.3 的“恰好一个物理换行”判定与规格 17.1 的 HTML text 转义；二者合成 `projectGridHelpers` 注入值 |
 | `installMarkedExtension` | 规格第 12.1 节表中 `marked-extension.js` 的单一对外动作，接 `hexo-renderer-marked` 的 `marked:use` 绑定 |
 | `dismissPendingSelection` / `closeColors` | 搬运基线 `applyState(false)` 的 `pendingRange = null` 与 `onDocumentClick` 的色板自动关闭下沉入口；facade 仍是唯一 listener owner |
-| `stripComments` / `countCalls` | A1-2 的注释剥离与调用计数探针 helper |
+| `stripComments` / `countCalls` / `countReferences` | A1-2 的注释剥离、调用计数（`name(`）与标识符出现次数（`\bname\b`）探针 helper；C3-2 追加的 lease timer 断言复用同一个 `countCalls` |
+| `test_production_pipeline_reads_registered_hexo_config` | A2-7 新增的注册时 hexo 快照断言（§2.4 环境获取点的可核对落点） |
 | `renderPostThroughMarked` / `runPostRender` | A2-19 的真实 renderer 等价入口与 before→render→after 封装 |
-| `loadBgmProbe` 及其 19 个方法 | C3-1 的 BGM 计数探针；方法面与映射见 C3-1 的对照表 |
+| `assertPayloadOnlyInMarkerSource` | A2-22 CSS 上下文判据：payload 只允许出现在 escaped marker source 内 |
+| `loadBgmProbe` 及其 19 个方法 | C3-1 的 BGM 计数探针；方法面与映射见 C3-1 的对照表（`ariaBusyWrites()` 是相对构造后基线快照的 delta） |
 | `renderMemoryFixture` / `renderThroughRealPostRender` | A2-22 / A2-23 的真实 `Post#render` 执行 helper；返回 `{ content, projection, occurrences }` |
-| `.temp/line-marker-pipeline.test.js` 承载规格 12.1.1 第 5 条样式导入回归 | 规格 18.4 的 probe 映射表未单列该条，该 probe 已承载 12.1.1 的规模与依赖门禁 |
+| `.temp/line-marker-pipeline.test.js` 承载规格 12.1.1 第 5 条样式导入回归与 C3-2 的 lease timer 静态门禁 | 规格 18.4 的 probe 映射表未单列该条，该 probe 已承载 12.1.1 的规模与依赖门禁；C3-2 的 `countCalls` 也只能落在同一文件（全仓唯一持有该 helper 的探针） |
 | `A1_MODULES` / `sliceFrom` / `createTokenStoreStub` / `scanMarkersFixture` | 探针内部局部辅助函数，不进入任何交付物 |
 
 ### 13.5 命令可执行性
 
-- 所有 `node .temp/*.test.js` 路径与 §1 文件清单逐字一致（11 个 `line-marker-*.test.js` + `line-marker-memory-fixture.js` + 9 个既有 `marker-*.test.js` + `marker-artifacts.js` + `search-projection-lifecycle.test.js` + 8 个主题 UI 探针 + 3 个 smoke 探针）。
+- 所有 `node .temp/*.test.js` 路径与 §1 文件清单逐字一致（10 个 `line-marker-*.test.js` + 1 个 `line-marker-artifacts.js` 产物脚本（非 test，只按 §2.7 的 CLI 契约运行）+ `line-marker-memory-fixture.js` 共享 fixture 模块 + 9 个既有 `marker-*.test.js` + `marker-artifacts.js` + `search-projection-lifecycle.test.js` + 8 个主题 UI 探针 + 3 个 smoke 探针）。
 - `npm --prefix themes/arknights run build` 与仓库 `themes/arknights/package.json` 的 `build` 脚本一致（`tsc -p source/js/_src/tsconfig.json && tsc -p source/js/_src/search/tsconfig.json`），一次 build 同时产出 `arknights.js` 与 `search.js`。
 - `npx hexo generate --bail` 与 D3-1 规格 18.4 逐字一致；B4-5 / C1-3 / C2-3 / C3-7 中的 `npm run build` 只是**中间批次编译检查**（B/C 尚未定稿，不带 `--bail` 也不作为失败门禁），最终门禁一律走 D3-1 的 `--bail`。
 - PowerShell 内 `Invoke-Checked npm 'run' 'clean'` 与 `Invoke-Checked npx 'hexo' 'generate' '--bail'` 使用参数数组形式，避免 `npm run clean --bail` 的参数歧义。
