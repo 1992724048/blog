@@ -1,6 +1,11 @@
 'use strict';
 
 const { stripHTML } = require('hexo-util');
+const { projectTextByPath } = require('../../markers/pipeline');
+
+function getContent(article) {
+  return projectTextByPath(article.path, 'content') ?? article.content;
+}
 
 function savedb(article, config, isPost) {
   const data = {};
@@ -14,7 +19,7 @@ function savedb(article, config, isPost) {
     if (config.format === 'raw') {
       data.content = article._content;
     } else {
-      data.content = article.content.replace(/<td class="gutter">.*?<\/td>/g, '');
+      data.content = getContent(article).replace(/<td class="gutter">.*?<\/td>/g, '');
       if (config.format === 'striptags') {
         data.content = stripHTML(data.content);
       }

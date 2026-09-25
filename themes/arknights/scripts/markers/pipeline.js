@@ -487,6 +487,28 @@ function deriveExcerptProjection(contentProjection) {
   return match === null ? contentProjection : contentProjection.slice(0, match.index).trim()
 }
 
+function readProjectedText(projection, sourceField) {
+  if (projection === undefined) {
+    return null
+  }
+  if (sourceField === 'content') {
+    return typeof projection.content === 'string' ? projection.content : null
+  }
+  if (projection.explicitExcerpt) {
+    return typeof projection.excerpt === 'string' ? projection.excerpt : null
+  }
+  return typeof projection.content === 'string' ? deriveExcerptProjection(projection.content) : null
+}
+
+function getStablePath(data) {
+  try {
+    const path = data.path
+    return typeof path === 'string' && path.length > 0 ? path : null
+  } catch {
+    return null
+  }
+}
+
 function createPipelineError(code, reason) {
   return Object.assign(new Error(code), { code, reason })
 }
@@ -521,6 +543,7 @@ function createMarkerPipeline(options = {}) {
 
   const renderStates = new WeakMap()
   const projectionStates = new WeakMap()
+  const projectionByPath = new Map()
 
   const beforePostRender = data => {
     if (!isDataObject(data)) {
@@ -528,6 +551,10 @@ function createMarkerPipeline(options = {}) {
     }
 
     const previousState = renderStates.get(data)
+    const stablePath = previousState?.identity ?? getStablePath(data)
+    if (stablePath !== null) {
+      projectionByPath.delete(stablePath)
+    }
     if (previousState !== undefined) {
       restoreCarrierBridge(data, previousState.carrier)
       for (const field of previousState.fields) {
@@ -591,6 +618,7 @@ function createMarkerPipeline(options = {}) {
     renderStates.set(data, {
       store: tokenized.store,
       carrier,
+      identity: stablePath,
       fields: tokenized.transformedFields.map(field => field.field),
       explicitFields: new Set(
         tokenized.transformedFields.filter(field => field.explicit).map(field => field.field)
@@ -700,6 +728,9 @@ function createMarkerPipeline(options = {}) {
       if (typeof projection.content === 'string' && projection.explicitExcerpt === false) {
         projection.excerpt = deriveExcerptProjection(projection.content)
       }
+      if (state.identity !== null) {
+        projectionByPath.set(state.identity, projection)
+      }
       projectionStates.set(data, projection)
       return data
     } finally {
@@ -712,20 +743,17 @@ function createMarkerPipeline(options = {}) {
     if (!isDataObject(data) || !SOURCE_FIELDS.includes(sourceField)) {
       return null
     }
-    const projection = projectionStates.get(data)
-    if (projection === undefined) {
-      return null
-    }
-    if (sourceField === 'content') {
-      return typeof projection.content === 'string' ? projection.content : null
-    }
-    if (projection.explicitExcerpt) {
-      return typeof projection.excerpt === 'string' ? projection.excerpt : null
-    }
-    return typeof projection.content === 'string' ? deriveExcerptProjection(projection.content) : null
+    return readProjectedText(projectionStates.get(data), sourceField)
   }
 
-  return Object.freeze({ beforePostRender, afterPostRender, projectText })
+  const projectTextByPath = (path, sourceField) => {
+    if (typeof path !== 'string' || path.length === 0 || !SOURCE_FIELDS.includes(sourceField)) {
+      return null
+    }
+    return readProjectedText(projectionByPath.get(path), sourceField)
+  }
+
+  return Object.freeze({ beforePostRender, afterPostRender, projectText, projectTextByPath })
 }
 
 const defaultPipeline = createMarkerPipeline({
@@ -788,6 +816,7 @@ function registerMarkerFilters(hexoContext, pipeline = defaultPipeline) {
 const beforePostRender = defaultPipeline.beforePostRender
 const afterPostRender = defaultPipeline.afterPostRender
 const projectText = defaultPipeline.projectText
+const projectTextByPath = defaultPipeline.projectTextByPath
 
 module.exports = {
   createMarkerPipeline,
@@ -795,5 +824,6 @@ module.exports = {
   registerMarkerFilters,
   beforePostRender,
   afterPostRender,
-  projectText
+  projectText,
+  projectTextByPath
 }
