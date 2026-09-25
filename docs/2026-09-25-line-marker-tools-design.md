@@ -1295,7 +1295,7 @@ content/excerpt/description 契约：
 1. before 4 在读取 `data.content`、`data.excerpt` 或创建 carrier 前调用一次共享 policy；`encryptConfig` 来自同一 Hexo 配置快照。
 2. `public` 才进入 tokenization。`encrypted` 原样跳过 content/excerpt 扫描、carrier、handler 和公开 projection，`projectText` 对该 data 返回 `null`。
 3. `ambiguous`（无效 data、encrypt、tag 或 origin 无法判定）在读取正文前抛 `ENCRYPTION_STATE_AMBIGUOUS`，使构建 fail-closed；不得猜测为 public 或 encrypted。
-4. search 捕获、自愈和消费继续调用同一 policy。frontmatter/tag/origin/ambiguous 的空 sidecar、禁止 `_content/content/origin` 读取和 render count 边界不变。
+4. search 捕获、自愈和消费继续调用同一 policy。frontmatter/tag/origin/ambiguous 的空 sidecar、禁止 `_content/content/origin` 读取和 render count 边界不变。本 policy 的第四个调用方是 priority 5 的 `filters/alerts.js`，它按第 14.2 节在 A 批次完成迁移；迁移后三态语义与本节完全一致，alerts 不再自判 `encrypt/password`，也不得因为早于 encrypt 1000 执行就放宽判定。
 
 递归边界：
 
@@ -1396,7 +1396,7 @@ content/excerpt/description 契约：
 
 | 当前路径或能力 | 保留契约 |
 | --- | --- |
-| `themes/arknights/scripts/filters/alerts.js` | 保留 GitHub Alert 的显式 priority 5；与 marker/search 共用 `inspectSearchEncryption`，只处理 public，`encrypted` 跳过，`ambiguous` fail-closed。因 5 < 9，它在 after 9 之前执行、看到的是未物化 placeholder，必须按第 12.2 节原样透传 placeholder 与 opaque token；不得因新增 Alerts marker 而改其 priority、输入语法或输出类名 |
+| `themes/arknights/scripts/filters/alerts.js` | 保留 GitHub Alert 的显式 priority 5、`alerts-core.js` 输入语法与 `.alert-*` 输出类名。**加密判定是 A 批次的强制迁移项，不是“共用”的既有事实**：当前第 7 行 `if (data.encrypt \|\| data.password) return data` 只看 frontmatter `encrypt` 与 `password`，不覆盖 tag 命中密码、`origin` 残留与任何 `ambiguous`，是继 marker pipeline、search sidecar 之后的第三套判定，并把无法判定的数据静默当作 public 继续改写 content/excerpt/more。A 之后该文件必须 `require('./encryption-policy')` 并调用同一 `inspectSearchEncryption(data, hexo.config.encrypt)`（与 `generator/encrypt.js`、`generator/search/snapshot.js` 同一 Hexo 配置快照）：`public` 才执行 `replaceAlerts`；`encrypted`（含 tag 命中密码与 `origin` 残留）原样返回、content/excerpt/more 逐字节不改写；`ambiguous` 在读取或改写任何字段前抛 `ENCRYPTION_STATE_AMBIGUOUS` 使构建 fail-closed，覆盖面与第 12.6 节第 3、4 条及 search sidecar 的 frontmatter/tag/origin/ambiguous 判定完全一致。迁移后 `alerts.js` 不得再出现 `data.encrypt`/`data.password` 直读、自行调用 `resolveConfiguredEncryption` 或任何猜测性 fallback。因 5 < 9，它在 after 9 之前执行、看到的是未物化 placeholder，必须按第 12.2 节原样透传 placeholder 与 opaque token；加密判定迁移不得顺带改动其 priority |
 | `themes/arknights/scripts/filters/alerts-core.js` | 保留 GitHub Alert 解析 |
 | `.alert` / `.alert-*` | 仅服务 GitHub Alert |
 | `.admonition` / `.expand-box` | 服务新的 Alerts marker |
@@ -1437,7 +1437,7 @@ content/excerpt/description 契约：
 
 | 批次 | 原子范围 | 独立门禁 | 建议提交信息 |
 | --- | --- | --- | --- |
-| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`、Toolbox facade/标注/持久化/分享/收藏/StatusLease 拆分与 BGM status adapter、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；逐模块 ≤500 行、依赖/事件所有权；标注/分享/收藏拆分前后行为一致，且 `BgmControl.ts` 既有唯一 `pjax:success` listener 与 facade 既有 `pjax:send/success` 计数均不变（A 不新增 Pjax listener）；priority 5 alerts/spoiler 对 placeholder 逐字节透传；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
+| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`、Toolbox facade/标注/持久化/分享/收藏/StatusLease 拆分与 BGM status adapter、Alerts/Editor/LinkCard 契约、`filters/alerts.js` 加密判定从 `data.encrypt \|\| data.password` 迁移为复用 `encryption-policy.js` 的 `inspectSearchEncryption`、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；逐模块 ≤500 行、依赖/事件所有权；标注/分享/收藏拆分前后行为一致，且 `BgmControl.ts` 既有唯一 `pjax:success` listener 与 facade 既有 `pjax:send/success` 计数均不变（A 不新增 Pjax listener）；priority 5 alerts/spoiler 对 placeholder 逐字节透传；`filters/alerts.js` 与 pipeline/search 三处同源加密判定（tag 命中密码、`origin` 残留、`ambiguous` fail-closed，且 `alerts.js` 内 `data.encrypt`/`data.password` 直读零命中）；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
 | B | 删除四个旧 tag、`hide.styl`、light/dark 的无消费者 `--theme-hide`、`link-card.styl` 的 `.link-ico` 整块与三处 `&.link-full` 死规则、旧 Project handler/分组模块/死代码；把 `modules.styl` 的 `cards/*` 精确替换为显式 admonition/link-card imports；README 与 AGENTS 本地定制地图/删除清单/缓存版本同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中；最终 CSS 保留 `.admonition/.link-card`、`.link-background/.link-main/.link-title/.link-descr` 与 `.link-main.link-simple`，旧 cards 顶层 `.hide`、`--theme-hide`、`.link-ico` 与 `link-full` 均零命中（Gitalk 自身 `.hide` 允许保留），`cssVersion` 已递增 | `refactor(tags): 删除旧标签并同步内容文档` |
 | C | GitHub Alert、导航、BGM 修复（含 `retireOperation`、`pjax:error` 生命周期与共享 status，复用 A 的 `ToolboxStatusLease` adapter）；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/retire 终态/mediaFailed/MutationObserver lease、三个 Pjax 事件、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
 | D | 最终门禁与 AGENTS 验证矩阵/当前版本/filter 注册 alias 与路由生命周期/`--bail` 构建失败语义收口，不再引入功能 | 第 18 节 source/unit（含 ownership/build-failure）→ `hexo generate --bail` → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
@@ -1455,6 +1455,7 @@ content/excerpt/description 契约：
 7. **缓存版本**：按第 15 节递增链更新当前值，最终固定 `cssVersion=20260955`、`jsVersion=20260952`；artifact 探针必须核对 meta-data/js-data 与 public 查询串一致。
 8. **Verification / 测试命令**：保留九个既有 `marker-*.test.js`，加入本节全部 `line-marker-*`、Toolbox/BGM/截图/ProjectTooltip、ownership/build-failure、Alerts/Nav、artifact 与 smoke 探针；最终生成命令写为 `TZ=Asia/Shanghai hexo generate --bail`（Windows 脚本等价设置 `$env:TZ` 后执行 `npx hexo generate --bail`），不得继续记录未加 bail 的根站点 `npm run build` 为最终失败门禁。
 9. **Conventions / ownership fixture**：记录 synthetic/browser receipt 文件、外层生成并传入的 nonce、install `--nonce`/remove `--expected-nonce`、receipt 传播、跨进程 remove、nonce/receipt 不匹配保留作者文件，以及 Ctrl+C/硬中断后的恢复命令；`.temp/` 仍不提交。
+10. **Architecture / 加密策略单一来源**：登记 `filters/encryption-policy.js` 的 `inspectSearchEncryption(data, hexo.config.encrypt)` 是全站唯一加密判定入口，并写明 A 批次把 `filters/alerts.js` 从 `data.encrypt || data.password` 迁移为复用该 policy：调用方由三处收敛为四处（marker pipeline、search sidecar、`generator/encrypt.js`、GitHub Alert filter），`public` 才改写正文、`encrypted`（frontmatter password、tag 命中密码、`origin` 残留）跳过、`ambiguous` 抛 `ENCRYPTION_STATE_AMBIGUOUS` fail-closed；同时把现行“Alerts 与 search 共用 `inspectSearchEncryption`”这类把待迁移项写成既有事实的表述改正。Source Tree 保留 `encryption-policy.js` 在 `filters/` 下的现有位置与职责说明，不得为迁就 alerts 新建第二份 policy 副本。
 
 原子性与文档边界：
 
@@ -1739,7 +1740,7 @@ timer callback / clearStatus()
 | handler 生成 NUL | render 输出 NUL 与 projection 输出 NUL 分开断言：前者 `render=1/toPlainText=0`，后者 `render=1/toPlainText=1` 且先丢弃 render；两者都只调用一次 marker fallback，DOM 精确为 `markerFailureHtml(raw)`、projection 精确为 `markerFailureProjection(raw)` 即 `normalizeLineEndings(raw)`、occurrence=`failed`，最终 DOM/projection NUL 为 0 |
 | 通用失败 | 未知/重复/缺字段、单枚 escaped pre、字段安全 fallback、原文 projection、内部 placeholder/token/NUL 清零；LF/CRLF/CR 三种物理终止符下的失败恢复文本与投影均已 LF 化 |
 | content/excerpt | content、显式 excerpt tokenRange、派生 excerpt、无 more 分隔符逐字等值、description、renderer 拒绝边界 |
-| 加密 | 共享 policy 的 public/encrypted/ambiguous；before 读取正文前判定；encrypted/ambiguous 不扫描、不创建公开 projection |
+| 加密 | 共享 policy 的 public/encrypted/ambiguous；before 读取正文前判定；encrypted/ambiguous 不扫描、不创建公开 projection。另需在真实 `Post#render` 中启用真实 `filters/alerts.js` 断言它与 pipeline/search 同源：仅 frontmatter `password` 的 public data 正常把 `> [!NOTE]` 转成 `.alert`；tag 命中密码、frontmatter `encrypt: true`、`origin` 残留三类 encrypted data 的 content/excerpt/more 逐字节不被 alerts 改写；`encrypt` 非 boolean、`tags` 不可迭代等 ambiguous data 抛 `ENCRYPTION_STATE_AMBIGUOUS` 且字段未被改写；并对 `alerts.js` 源码断言 `data.encrypt`/`data.password` 直读零命中、改为 `inspectSearchEncryption` 调用 |
 | more | 抛异常 getter/setter 配独立计数，before/after/projectText 读写均为 0 |
 
 #### 内存 Alerts/Editor/LinkCard handler 终态 fixture
@@ -2050,11 +2051,11 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | `line-marker-registry.test.js` | 五 handler 注册与受控接口 | 无；source/unit |
 | `line-marker-handlers.test.js` | Alerts/Editor/LinkCard 三类 DOM/投影、LinkCard ABNF/descr 三态、失败恢复 | 内存 Hexo HTML；不读取 public |
 | `line-marker-pipeline.test.js` | occurrence、Project 分组、fallback、projection；第 12.1.1 节模块规模与依赖门禁 | 内存 Hexo；不读取 public |
-| `line-marker-hexo.test.js` | 真实 `filter.register` alias/store、Post 内容空 store 与 route `_after_html_render` 单次执行；Post 实际公共阶段拒绝与修复；Alerts/Editor/LinkCard 三类终态 | 内存 source→内容 HTML→route stream |
+| `line-marker-hexo.test.js` | 真实 `filter.register` alias/store、Post 内容空 store 与 route `_after_html_render` 单次执行；Post 实际公共阶段拒绝与修复；Alerts/Editor/LinkCard 三类终态；`filters/alerts.js` 与 pipeline/search 同源的加密判定（tag/origin/ambiguous） | 内存 source→内容 HTML→route stream |
 | `line-marker-fixture-ownership.test.js` | receipt/nonce 跨进程；install 成功/失败/中断；目标篡改与作者文件保护 | 隔离 `.temp` 子进程沙箱；不读真实 public |
 | `line-marker-build-failure.test.js` | Post/filter reject、route stream 默认吞错与 `--bail` 非零、artifact 独立失败 | 隔离最小 Hexo site 子进程 |
 | 九个旧 `marker-*.test.js` | 既有 AI/Project/carrier/search 行为按 block-only 回归 | 无；source/unit |
-| `search-projection-lifecycle.test.js` | 五类 sidecar、加密/ambiguous、失败原文 | Warehouse `db.json` fixture；无 public |
+| `search-projection-lifecycle.test.js` | 五类 sidecar、加密/ambiguous、失败原文；与 `filters/alerts.js` 共用同一 `inspectSearchEncryption` 时，tag/origin/ambiguous 三类数据在 search 与 alerts 两侧得到相同判定 | Warehouse `db.json` fixture；无 public |
 | `project-tooltip.test.js`、截图、toolbox 门禁 | 现有 Project/截图 lease/五项工具箱 | source/DOM fixture；无 public |
 | `theme-ui-a1/a2`、AI tooltip、SnapDOM、BGM | 主题既有行为与新 BGM 状态机 | TS/CSS/DOM fixture；无 public |
 | `line-marker-artifacts.js` | 真实 source→public 映射；synthetic receipt/source/output 成对；跨进程 remove 与篡改保护 | 三篇 AI、Project、GitHub Alert、search；synthetic Alerts/Editor/LinkCard page |
@@ -2147,6 +2148,7 @@ BROWSER_RECEIPT   = ".temp/line-marker-browser-fixture.ownership.json"
 | BGM 过期 Promise/media 回调或 status lease 覆盖新状态 | 单一 playback state machine、operation/lifecycle 双 generation 与类型化 token、`retireOperation` 终态 retire + listener 归零、每次 Pjax dispatch 精确一次失效、`mediaFailed` load 重试边界、MutationObserver lease（含相同文本 mutation） |
 | marker 内容泄漏到搜索 | handler 纯文本投影、sidecar hash、内部串拒绝、无效 sidecar 不回退 |
 | 加密文档意外读取正文 | 加密空 sidecar、字段 getter 计数、render count 与搜索输出回归 |
+| `filters/alerts.js` 仍直判 `data.encrypt \|\| data.password`，与 pipeline/search 判定分叉 | A 批次强制迁移为复用 `encryption-policy.js` 的 `inspectSearchEncryption`；tag 命中密码、`origin` 残留、ambiguous 三类 encrypted/fail-closed 行为在真实 `Post#render` 中逐项断言，并对 `alerts.js` 源码做旧直读零命中扫描，防止退化为第三套判定 |
 | vendored 主题同步覆盖本地实现 | 修改点集中在 handler、控制器、局部 Stylus 和 README；同步上游时按本规格逐项复核 |
 | `pipeline.js` / `Toolbox.ts` 继续膨胀或事件归属漂移 | 第 12.1.1 节冻结模块树：pipeline 四子模块；Toolbox facade、标注/持久化、分享/收藏与 StatusLease；逐文件 ≤500 行、依赖方向、事件唯一 owner、Pjax 计数和全量行为回归均为门禁 |
 | Hexo filter alias 被误判为内容/路由双 dispatch | 真实探针断言 `register('after_render:html')` 只进入 `_after_html_render` store；Post 内字面名调用不执行公共注册 filter，route 的 `_after_html_render` 才执行一次。Post 拒绝边界改用实际公共 filter，route 失败仍由 `--bail` 门禁判定 |
