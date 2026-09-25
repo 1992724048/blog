@@ -1710,7 +1710,7 @@ timer callback / clearStatus()
 | 边界 | 空行、`// comment`、普通行、其它 header、`EndOfSource` 终止 marker；边界行不吞入；普通字段与多行 closing 的有/无终止符 fixture 均断言“有终止符则排除、无终止符则 `end===source.length`” |
 | 字段 | `[]`、命名、混用、顺序、未知、重复、越界、缺必填与 field-level `sourceRange` 全部覆盖 |
 | 注释顺序 | `PASS // 状态` 先删注释再分类；`https://a//b`、`//cdn/a`、`foo//x`、未知 `custom://` 保留；`42 // x` 分类为 integer |
-| pipe/trim | 只 trim 普通值两端水平空白；`A \| B -> A \| B`，普通反斜杠保持 |
+| pipe/trim | 只 trim 普通值两端水平空白；值内的「反斜杠 + U+007C」序列解码为单个 U+007C（竖线），解码后该位置不再保留反斜杠；除该序列外的反斜杠是普通字符，原样保留，与第 4.4 节第 4 条一致。本行刻意不写竖线字面量：GFM 表格内用反斜杠转义竖线会把它渲染成竖线，因而无法在同一行里区分「解码前」与「解码后」 |
 | 词法类型 | `null`、boolean、`0x` 6/8 hex、安全整数、string、multiline-string；`0X`、前导零整数、浮点和裸 `0x` 归 string |
 | schema 消费 | `[text] 42/0x2A/true/null` 对单行 string 字段均失败；多行 `[body] \|$[\n42\n]$` 可得到字面文本；`color=8B5CF6` 合法而 `0x8B5CF6/#8B5CF6` 失败；LinkCard `[descr]`/`[descr]   ` 合法为空串，`[descr] null` 为 `INVALID_VALUE` |
 | Alerts open | 缺省为 true；显式 true/false 合法；显式 null 稳定 `INVALID_VALUE`，不得套用默认 |
