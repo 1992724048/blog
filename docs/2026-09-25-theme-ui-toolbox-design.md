@@ -1,10 +1,10 @@
 # 主题 UI 清理、项目悬停合并与工具箱扩展规格
 
-- 文档状态：A1、A2、B、C 已实施并完成自动化源码门禁；D 活文档、全量自动化、完整构建、artifact、geometry、nav 与 HTTP smoke 已完成；真实有头浏览器验收 pending，未完成前不得声称通过。
+- 文档状态：A1、A2、B、C 与搜索 sidecar 修复均已实施；D 已在搜索 snapshot 修复后的当前 HEAD 重新完成活文档与最终全量门禁；真实有头浏览器验收 pending，未完成前不得声称通过。
 - 文档日期：2026-09-25
 - 适用仓库：遂沫'Blog（Hexo 8.1.2，主题 `themes/arknights`）
 - 文档目的：固定页面清理、AI 状态硬切换、导航与侧栏视觉契约、项目卡片悬停脚本合并、工具箱五项化、截图与背景音乐控制器，以及四批实施和验收边界。
-- 本次文档修订边界：只同步本文档的最终实施状态；不修改 runtime、`source/`、`AGENTS.md`、配置、既有设计文档或计划，不执行 `git push`。
+- 本次文档修订边界：D 只同步 `AGENTS.md` 与本设计文档的最终事实和验收口径；不修改 runtime、`source/`、配置、TypeScript、CSS、既有其它设计文档或计划，不执行 `git push`。
 - 实施配置授权：C 批次已按用户授权只修改根级 `_config.arknights.yml` 的 `bgm.enable`、`bgm.autoplay`、`bgm.loop`、`bgm.src` 四个字段；未修改 `_config.yml`、主题默认 `themes/arknights/_config.yml` 或其它配置。
 
 ## 1. 背景与最终来源
@@ -31,6 +31,7 @@
 | BGM 资源 | `themes/arknights/source/audio/bgm.mp3`、`themes/arknights/source/icons/sound.svg` | 本地 MP3 与 sound SVG 继续复用；audio 位于 Pjax 替换区外。 |
 | BGM 配置 | `_config.arknights.yml` | 根级最终值为 `enable: true`、`autoplay: false`、`loop: true`、`src: /audio/bgm.mp3`；Pug 通过 `url_for(theme.bgm.src)` 消费。 |
 | SnapDOM | `themes/arknights/source/lib/snapdom/3.1.1/` | 已 vendored classic 3.1.1 资源与 LICENSE，控制器首次点击懒加载；无 package/lock/tsconfig 改动。 |
+| 搜索 sidecar | `themes/arknights/scripts/generator/search/snapshot.js`、`database.js`、`generator.js` | 搜索侧在同一原 post 捕获 marker 纯文本投影并叠加 Terms；快照 document-private、内容寻址并持久化于当前 Warehouse 文档，按 schema/身份/hash/加密状态 fail-closed，缓存构建可安全自愈。 |
 | 构建产物探针 | `.temp/marker-artifacts.js` | 已反向锁定三篇 AI、四行 tooltip、项目卡、评论、唯一 audio、五项工具箱、search、vendor/hash 与实际缓存版本。 |
 | 正式 marker 规格 | `docs/2026-09-24-marker-interpreter-design.md` | 已同步 `PASS/EDIT/UNKN/NONE` 协议；旧状态仅保留负例。 |
 | 项目活文档 | `AGENTS.md` | 已同步 2.5px 导航底边、ProjectTooltip bundle、五项工具箱/SnapDOM/BGM、评论与最终门禁口径。 |
@@ -62,7 +63,7 @@
 8. 不对长文章截图分片、裁切或只截首屏；超出安全尺寸时必须整体缩放。
 9. 默认站点启用 BGM，但 `theme.bgm.autoplay` 固定为 `false`；首次播放必须由用户点击触发。
 10. 不把无障碍状态仅编码为颜色；截图结果、BGM 状态和工具箱反馈必须同时具有文本或语义状态。
-11. 不借本轮 UI 改造调整搜索、Terms、Alert、Spoiler、文章加密、评论服务选择或 Giscus 主题策略。
+11. A—C 的 UI 改造本身不改变搜索、Terms、Alert、Spoiler、文章加密、评论服务选择或 Giscus 主题策略；D 审查发现的搜索投影跨 Warehouse 问题由独立 `fix(search)` 提交修复，且不改变上述 UI 契约。
 12. 无头截图不作为布局、位置、动画或截图功能验收证据。
 
 ## 4. 总体架构与数据流
@@ -121,6 +122,25 @@ defer arknights.js
 | `BgmControl.ts` | 唯一 audio 引用、播放/暂停、媒体事件、错误恢复、Pjax 按钮同步 | 工具箱展开、截图、页面内容修改 |
 | `ProjectTooltip.ts` | 项目卡 mousemove 与 CSS 变量更新、Pjax 重绑、重复绑定防护 | PJ 解析、卡片 DOM、CSS、项目数据修改 |
 
+### 4.4 搜索 sidecar 最终数据流
+
+搜索侧最终架构不依赖 path 作为跨构建交接键。A—C UI 实施后发现并修复的既有搜索投影问题，以独立 `fix(search)` 提交固化为以下数据流：
+
+1. marker pipeline 在原 post 对象身份对应的私有投影中保存 `content` 的纯文本结果；`after_post_render` priority 1100 在同一原 post 上取得该投影，不从渲染 HTML 反向解析。
+2. 搜索投影叠加与 `terms.js` 相同的纯 `replaceTerms` / `buildTermsList` 变换，保留正文、术语替换和底部术语表，再去除 HTML；marker 状态保持 `STATE + 单空格 + 可选文案`。
+3. 结果封装为 document-private、content-addressed sidecar，并作为当前 Warehouse 文档自身字段持久化。sidecar 固定 schema/version，绑定 `documentId/documentSource/path`，记录 `sourceHash` / `renderedHash` / `termsHash`；`snapshotHash` 覆盖包括 `searchText` 在内的全部受保护字段。
+4. `before_generate` priority 20 在 Hexo 核心 priority 10 后执行：公开文档的有效 sidecar 直接复用；缺失、损坏、身份/hash 过期时从 `_content` 重渲染一次并保存。Terms 配置变化改变 `termsHash`，因此同样触发公开 sidecar 自愈。
+5. frontmatter password、配置 tag、`encrypt`、`origin` 或类型歧义判为加密/模糊状态。缺失、损坏或 Terms 过期的加密 sidecar 只写入字段完整的加密空快照；`sourceHash/renderedHash` 为 `null`、`searchText` 为空，不读取 `_content` / `content` / `origin`，不再次渲染，也不把内部 render count 传给后续过滤器。
+6. 搜索数据库只消费当前文档身份、schema、加密状态及全部 hash 均通过校验的 sidecar；任何失效或模糊状态都输出空搜索内容，绝不回退 `content` / `_content` / `origin`，也不维护跨构建的全局 path 投影索引。
+
+| 缓存/消费状态 | 处理 | 搜索结果 |
+| --- | --- | --- |
+| 公开文档，sidecar 完整且当前 | 直接复用，不重渲染 | 已保存的 marker + Terms 纯文本 |
+| 公开文档，sidecar 缺失/损坏/过期 | 从 `_content` 重渲染一次，捕获并保存新 sidecar | 新 sidecar 的纯文本 |
+| 加密或模糊文档，sidecar 完整且当前 | 直接复用加密空快照 | 空字符串 |
+| 加密或模糊文档，sidecar 缺失/损坏/过期 | Warehouse `update` 保存字段完整的加密空快照，不读取正文 | 空字符串 |
+| 消费时任一身份、schema、hash 或加密判定失败 | fail closed | 空字符串 |
+
 ## 5. 清理与视觉契约
 
 ### 5.1 页面标题
@@ -174,7 +194,7 @@ defer arknights.js
 4. tooltip 行顺序固定为 `PASS`、`EDIT`、`UNKN`、`NONE`。
 5. `.ai-badge--ignore` 与 `.ai-badge--notreview` 从样式和最终 DOM 契约中删除。
 6. 纯文本投影仍只包含状态和可选文案，不包含 tooltip、SVG 或说明句。
-7. meta description 和 `search.json` 继续通过既有 marker 投影得到新状态值，不新增专用正则。
+7. meta description 继续使用同一 marker 投影；`search.json` 在同一原 post 的 marker 纯文本投影上叠加 Terms 后写入当前文档 sidecar，不从 tooltip HTML 反向解析，也不以 path 作为跨构建投影键。
 8. 所有 marker 探针中的旧状态正例改为新枚举；旧状态必须增加“恢复原文且不生成 badge”的负例。
 9. `AGENTS.md` 与 `docs/2026-09-24-marker-interpreter-design.md` 中的当前协议、示例、DOM class 和投影同步更新。
 10. handler 的稳定错误码 `AI_INVALID_STATE` 保持不变，reason 更新为只列新四态。
@@ -698,14 +718,14 @@ C 可独立回滚两个控制器、工具箱 DOM/CSS、audio 位置、根级 BGM
 
 #### 依赖关系
 
-1. D 依赖 A、B、C 全部完成并提交。
-2. D 默认不再新增 runtime 功能；测试发现问题时只允许修复 A—C 已批准范围内的缺陷。
-3. D 不改 marker carrier runtime、package 或其它配置，也不重复修改 C 已完成的根级 BGM 四字段；不触碰无关文件。
+1. D 依赖 A、B、C 及搜索投影审查修复全部完成并提交；最终全量门禁必须覆盖当前 HEAD，而非仅覆盖原 D 提交 `2f79a2b`。
+2. D 默认不再新增 runtime 功能；测试发现问题时停止 D，并把 A—C UI 缺陷退回对应责任任务，把搜索投影/Warehouse 生命周期缺陷交给独立 `fix(search)` 任务。
+3. D 的跟踪提交只含 `AGENTS.md` 与本设计文档；不改 marker/search runtime、`source/`、package、配置、TypeScript、CSS 或其它文档，也不重复修改 C 已完成的根级 BGM 四字段。
 4. 真实有头浏览器由外部验收者执行；未收到结果时状态保持 pending。
 
 #### 回滚边界
 
-D 的文档或探针修正可独立提交；若自动化失败，回到 A—C 对应批次修复根因，不在 D 中引入新设计。
+D 的文档修正可独立提交；若自动化失败，UI 缺陷回到 A—C 对应批次，搜索投影或 Warehouse 生命周期缺陷交给独立 `fix(search)` 任务，D 不在自身提交中夹带 runtime 修复。
 
 ## 12. 错误处理规则
 
@@ -758,6 +778,8 @@ D 的文档或探针修正可独立提交；若自动化失败，回到 A—C �
 | AI 样式 | 深浅主题、四状态 | PASS 绿、EDIT 紫、UNKN 灰、NONE 橙；旧 class 不存在。 |
 | AI tooltip | 正常动画 | 关闭/打开均为 160ms，含 visibility、opacity、translate、scale；原点 top left。 |
 | AI reduced motion | reduce | 无位移/缩放动画，tooltip 仍正确隐藏和显示。 |
+| 搜索 sidecar | 真实 Warehouse save/load、locals clone、缓存构建、Terms、path 删除/复用 | 捕获同一原 post 的 marker 纯文本投影；sidecar schema/version/身份/hash 完整且 document-private/content-addressed；公开损坏项只自愈一次，加密/模糊项不读取正文、不渲染并保持空搜索。 |
+| 搜索 fail-closed | 缺失/损坏 sidecar、frontmatter/tag/origin/模糊加密、Terms 变化 | 搜索只消费完整有效的当前文档 sidecar；保留 Terms 变换，无 tooltip/四态说明/加密明文/内部串，也不回退 `content` / `_content` / `origin`。 |
 | 导航 active | 一级/二级、320/768/769/1023/1024/1440px | 无左边框和旧 padding 补偿；所有项始终有 2.5px 透明底边，active 为高亮底边。 |
 | 导航交互 | active 图标/名称、hover、focus、二级展开 | 现有展开和焦点契约不变，切换无高度跳变。 |
 | aside footer | 769/1023/1024/1440px | 桌面 footer 相对底部下移约 1lh 且不裁切。 |
@@ -845,18 +867,24 @@ node .temp/marker-e2e.test.js
 
 ### 14.4 D 最终自动化与构建
 
-A1—C 自动化源码门禁已在各责任任务完成；D 负责在同一最终源码状态执行主题 TypeScript build、主题 UI 专项、九个 marker 探针、语法/Git 检查、一次完整 Hexo build、artifact、geometry、nav smoke 与 HTTP smoke。最终产物门禁如下。
+A1—C 自动化源码门禁已在各责任任务完成，搜索 sidecar 修复也必须纳入当前 HEAD 的最终状态。D 负责在同一最终源码状态执行主题 TypeScript build（或在 TS 未变时明确记录沿用 C 产物）、8 个主题 UI 专项、9 个 marker 探针、搜索投影生命周期、语法/Git 检查、一次 clean + 完整 Hexo build、artifact、geometry、nav smoke 与 HTTP smoke。最终产物门禁如下。
 
 构建前执行：
 
-最终只对同一最终状态运行一次完整 Hexo 构建，随后立即执行三项产物门禁：
+```powershell
+node .temp/search-projection-lifecycle.test.js
+```
+
+最终只对同一最终状态运行一次 clean + 完整 Hexo 构建，随后立即执行四项产物门禁：
 
 ```powershell
 $env:TZ = 'Asia/Shanghai'
+npm run clean
 npm run build
 node .temp/marker-artifacts.js
 node .temp/r10-toolbox-geometry.js
 node .temp/nav-smoke.js
+node .temp/http-smoke.js
 ```
 
 HTTP smoke 使用本地静态服务器对最终 `public/` 的代表性文章、项目、数据、搜索 JSON、Arklights bundle、CSS、MP3 与 SnapDOM 资源执行 `HEAD`/`GET`，记录路由、状态码、content-type 与资源长度。
@@ -873,7 +901,7 @@ artifact 探针必须检查：
 8. 模板/专项 fixture 探针读取 `themes/arknights/layout/includes/layout.pug` 并断言源码使用 `url_for(theme.bgm.src)`；以临时 `theme.bgm.src=/audio/bgm-fixture.mp3` 渲染时，输出 `src` 必须等于 `url_for('/audio/bgm-fixture.mp3')` 且不同于默认 `/audio/bgm.mp3`；fixture 不修改根级配置，也不替代默认产物断言。
 9. `public/audio/bgm.mp3` 存在且对应 `bgm.src=/audio/bgm.mp3`；`public/css/arknights.css` 通过 mask 引用 sound.svg，右列没有独立 BGM 按钮。
 10. `public/lib/snapdom/3.1.1/snapdom.min.js` 与 `LICENSE` 存在且版本正确。
-11. `public/search.json` 使用新 AI 状态纯文本，不含旧状态、tooltip、SVG 或内部串。
+11. `public/search.json` 的三篇 AI 条目分别以 `PASS 本文由AI辅助生成`、`PASS 本文由AI辅助生成`、`EDIT 测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改` 开头，状态与文案之间恰为一个空格；全文件不含 tooltip/四态说明、加密明文、旧协议、SVG 或 marker 内部串。
 12. 项目页、数据页无评论容器，文章页评论契约未被全局关闭。
 13. 产物 URL 使用 `cssVersion=20260952`、`jsVersion=20260949`。
 14. 专项 `enable=false` fixture 的关闭分支可单独通过，但不得影响或替代上述默认站点产物断言。
@@ -954,6 +982,8 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 | 删除 visibility 脚本时误删 Pjax 初始化 | 标题切换或评论初始化回归 | 只删除 layout 末尾 IIFE；保留 js-data Pjax selector、History 和 reset 代码。 |
 | 页面级 comments 误改全局配置 | 文章评论消失 | 只改两个 source frontmatter；文章 fixture 与文章产物同时验收。 |
 | AI 旧枚举残留于探针或文档 | 搜索、描述、badge 文案出现两套协议 | handler 正例全换新枚举，旧值只保留负例；同步 AGENTS 和正式 marker 规格。 |
+| Warehouse clone 读取旧投影或旧 HTML | 缓存构建、path 删除/复用时泄露或错配搜索文本 | 搜索只消费当前文档私有、内容寻址 sidecar；身份/schema/hash 全部通过才使用，否则 fail closed，禁止回退 `content` / `_content` / `origin`。 |
+| Terms 配置变化或加密文档缓存自愈 | 搜索遗漏新术语，或自愈读取加密正文 | `termsHash` 触发过期；公开项重渲染一次，Terms 文本保留；加密/模糊项只保存完整空 sidecar，正文读取和渲染计数必须为 0。 |
 | tooltip 关闭时立即 hidden | 160ms 退出动画不可见 | visibility 延迟到 160ms，打开立即 visible；不使用 display。 |
 | 透明底边改变顶栏高度 | 导航垂直抖动 | 2.5px border 始终占位，保留固定 36px header 与 box sizing。 |
 | footer 下移造成裁切 | 桌面版权文字被切 | 减少 padding-bottom 而不是 transform；在 769px 以上真实浏览器检查。 |
@@ -971,9 +1001,9 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 
 ## 18. 完成定义
 
-1. A—C 每批独立提交，文件范围与本规格一致；实际主提交为 A1 `8147ea2`、A2 `b0f86d1`（样式修复 `4395c87`）、B `ccd6745`、C `ef3f43f`（活文档 `eff00f1`、资源完成判定修复 `b30fe85`）。
-2. 主题 TypeScript build、九个 marker 探针、专项 UI 探针和最终 Hexo build 全部退出码 0。
-3. 根级 BGM 四字段与第 9.1 节完全一致，其中 `bgm.src=/audio/bgm.mp3`，模板通过 `url_for(theme.bgm.src)` 消费；模板/专项 fixture 证明 source 随 `theme.bgm.src` 改变而改变；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际唯一 audio/音乐按钮、`controls` 属性缺失、无 autoplay、首击播放、Pjax 持久化和版本号正确。
+1. A—C 每批独立提交，文件范围与本规格一致；实际主提交为 A1 `8147ea2`、A2 `b0f86d1`（样式修复 `4395c87`）、B `ccd6745`、C `ef3f43f`（活文档 `eff00f1`、资源完成判定修复 `b30fe85`）。原 D 活文档提交为 `2f79a2b`；其后搜索投影审查修复为 `0393030`、`8df6da1`、加密缓存自愈修复 `6e56e02`，本轮 D 只重新同步 `AGENTS.md` 与本文档。
+2. 主题 TypeScript build、8 个主题 UI 专项、9 个 marker 探针、搜索投影生命周期、专项 UI/产物探针和最终 Hexo build 全部退出码 0。
+3. 根级 BGM 四字段与第 9.1 节完全一致，其中 `bgm.src=/audio/bgm.mp3`，模板通过 `url_for(theme.bgm.src)` 消费；模板/专项 fixture 证明 source 随 `theme.bgm.src` 改变而改变；artifact 证明新 AI 协议、ProjectTooltip bundle、工具箱五项、SnapDOM 资源、默认站点实际唯一 audio/音乐按钮、`controls` 属性缺失、无 autoplay、首击播放、Pjax 持久化、搜索 sidecar 纯文本和版本号正确。
 4. `git diff --check` 通过，工作区不含无关文件。
 5. 真实有头浏览器逐项完成第 15 节验收；在此之前状态只能记录为 pending。
 6. `AGENTS.md`、本文档和正式 marker 设计规格与最终代码一致。
@@ -981,6 +1011,8 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 
 ## 19. 实施与验收结论
 
-A1、A2、B、C 已按本规格完成：A1 删除页面隐藏标题改写、仅在项目/数据页关闭评论，并把 AI 状态硬切换为 `PASS/EDIT/UNKN/NONE`；A2 落地 160ms tooltip、2.5px 导航底边、桌面 footer 与五项工具箱静态契约；B 将项目悬停并入 `arknights.js`；C 以独立 `ScreenshotControl`、长生命周期 `BgmControl` 和本地 SnapDOM 3.1.1 完成截图/音乐接线。最终版本为 `cssVersion=20260952`、`jsVersion=20260949`，根级 BGM 为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，Pug 通过 `url_for(theme.bgm.src)` 生成 Pjax 区外唯一 audio。
+A1、A2、B、C 已按本规格完成：A1 删除页面隐藏标题改写、仅在项目/数据页关闭评论，并把 AI 状态硬切换为 `PASS/EDIT/UNKN/NONE`；A2 落地 160ms tooltip、2.5px 导航底边、桌面 footer 与五项工具箱静态契约；B 将项目悬停并入 `arknights.js`；C 以独立 `ScreenshotControl`、长生命周期 `BgmControl` 和本地 SnapDOM 3.1.1 完成截图/音乐接线。随后搜索审查把 Warehouse clone 的搜索交接改为当前文档私有、内容寻址的 sidecar：marker 纯文本与 Terms 在同一原 post 捕获，schema/身份/hash/加密状态严格校验，公开缓存可一次自愈，加密/模糊缓存不读取正文且始终 fail closed。最终版本仍为 `cssVersion=20260952`、`jsVersion=20260949`，根级 BGM 为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，Pug 通过 `url_for(theme.bgm.src)` 生成 Pjax 区外唯一 audio。
 
-自动化、构建与 HTTP smoke 证据记录在本轮 D 报告。主题 TypeScript build、8 个主题 UI 专项、9 个 marker 探针、最终语法/Git 检查均退出码 0；Hexo 以 `TZ=Asia/Shanghai` 生成 32 个文件，artifact/geometry/nav/HTTP smoke 均退出码 0，nav 共 119 项检查通过。真实 PNG 首尾覆盖、音频实际播放/错误重试、tooltip 动画、六档断点、Pjax 标题/搜索/收藏/标注/工具箱交互及 reduce-motion 仍须真实有头浏览器逐项验收，当前状态明确为 pending。
+本轮在包含 `6e56e02` 的当前 HEAD 上完成最终复核：主题 TypeScript 双 `tsc`、8 个主题 UI 专项、9 个 marker 探针、搜索 snapshot 生命周期及全部相关 `node --check` 均退出码 0；`TZ=Asia/Shanghai` 下 `npm run clean` 删除数据库与 `public/` 后，唯一最终 `npm run build` 生成 77 个文件，紧接着的 artifact、geometry、119 项 nav smoke 与 9 个 HTTP 请求均退出码 0。额外 `public/search.json` 审计确认三篇 AI 条目分别以单空格的 `PASS`、`PASS`、`EDIT` 投影开头，且全文件无 tooltip/四态说明、加密测试明文、旧协议或 marker 内部串；主题两个 JS 产物经 TypeScript build 后无差异。完整原始摘录记录在本轮 D 报告。
+
+真实有头浏览器仍未执行；真实 PNG 首尾覆盖、音频实际播放/错误重试、tooltip 动画、六档断点、Pjax 标题/搜索/收藏/标注/工具箱交互及 reduce-motion 当前状态明确为 pending，不得表述为浏览器验收通过。
