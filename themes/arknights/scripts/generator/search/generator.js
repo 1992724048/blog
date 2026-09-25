@@ -10,8 +10,8 @@ hexo.extend.filter.register('after_post_render', function (data) {
   return data;
 }, 1100);
 
-hexo.extend.filter.register('before_generate', function () {
-  return repairSearchSnapshots(hexo);
+hexo.extend.filter.register('before_generate', async function () {
+  await repairSearchSnapshots(hexo);
 }, 20);
 
 hexo.extend.generator.register('json', function (locals) {

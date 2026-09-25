@@ -112,6 +112,21 @@ function buildSnapshot(payload) {
   });
 }
 
+function createEncryptedSnapshot(hexo, document, identity, termsHash) {
+  const resolvedIdentity = identity === undefined ? getDocumentIdentity(document) : identity;
+  if (resolvedIdentity === null) return null;
+  return buildSnapshot({
+    schema: SNAPSHOT_SCHEMA,
+    version: SNAPSHOT_VERSION,
+    ...resolvedIdentity,
+    sourceHash: null,
+    renderedHash: null,
+    termsHash: termsHash === undefined ? getTermsHash(hexo) : termsHash,
+    encrypted: true,
+    searchText: ''
+  });
+}
+
 function validateSnapshotIntegrity(snapshot, payload) {
   return typeof snapshot.snapshotHash === 'string' &&
     snapshot.snapshotHash === getSnapshotIntegrity(payload)
@@ -139,40 +154,34 @@ function captureSearchSnapshot(hexo, document) {
     let payload
 
     if (encryption.state !== 'public') {
-      payload = {
-        schema: SNAPSHOT_SCHEMA,
-        version: SNAPSHOT_VERSION,
-        ...identity,
-        sourceHash: null,
-        renderedHash: null,
-        termsHash,
-        encrypted: true,
-        searchText: ''
-      };
-    } else {
-      const source = document._content;
-      const rendered = document.content;
-      const projection = projectText(document, 'content');
-      if (
-        typeof source !== 'string' ||
-        typeof rendered !== 'string' ||
-        typeof projection !== 'string'
-      ) {
-        return false;
-      }
-      const searchText = projectSearchText(projection, getTermList(hexo));
-      if (typeof searchText !== 'string') return false;
-      payload = {
-        schema: SNAPSHOT_SCHEMA,
-        version: SNAPSHOT_VERSION,
-        ...identity,
-        sourceHash: hashText(source),
-        renderedHash: hashText(rendered),
-        termsHash,
-        encrypted: false,
-        searchText
-      };
+      const encryptedSnapshot = createEncryptedSnapshot(hexo, document, identity, termsHash);
+      if (encryptedSnapshot === null) return false;
+      document[SNAPSHOT_KEY] = encryptedSnapshot;
+      return true;
     }
+
+    const source = document._content;
+    const rendered = document.content;
+    const projection = projectText(document, 'content');
+    if (
+      typeof source !== 'string' ||
+      typeof rendered !== 'string' ||
+      typeof projection !== 'string'
+    ) {
+      return false;
+    }
+    const searchText = projectSearchText(projection, getTermList(hexo));
+    if (typeof searchText !== 'string') return false;
+    payload = {
+      schema: SNAPSHOT_SCHEMA,
+      version: SNAPSHOT_VERSION,
+      ...identity,
+      sourceHash: hashText(source),
+      renderedHash: hashText(rendered),
+      termsHash,
+      encrypted: false,
+      searchText
+    };
 
     document[SNAPSHOT_KEY] = buildSnapshot(payload);
     return true;
@@ -261,10 +270,15 @@ async function repairSearchSnapshots(hexo) {
     const documents = hexo.model(modelName).toArray();
     for (const document of documents) {
       const encryption = inspectSearchEncryption(document, hexo.config.encrypt);
-      const current = encryption.state === 'public'
-        ? hasCurrentSnapshot(document, hexo, encryption.state)
-        : hasCurrentEncryptedSnapshot(document, hexo, encryption.state);
-      if (current) continue;
+      if (encryption.state !== 'public') {
+        if (hasCurrentEncryptedSnapshot(document, hexo, encryption.state)) continue;
+        const encryptedSnapshot = createEncryptedSnapshot(hexo, document);
+        if (encryptedSnapshot === null) continue;
+        document[SNAPSHOT_KEY] = encryptedSnapshot;
+        await document.update({ [SNAPSHOT_KEY]: encryptedSnapshot });
+        continue;
+      }
+      if (hasCurrentSnapshot(document, hexo, encryption.state)) continue;
       const source = document._content;
       if (typeof source !== 'string') continue;
       document.content = source;
