@@ -1,18 +1,109 @@
-"use strict";
-function BgmControl() {
-    const bgm = document.getElementById('bgm');
-    const control = document.getElementById("bgm-control");
-    if (bgm.paused) {
-        bgm.play();
-        control.setAttribute("fill", "#18d1ff");
-        control.style.transform = "scaleY(1)";
+'use strict';
+class BgmControl {
+    audio;
+    mediaFailed = false;
+    get button() {
+        return document.querySelector('.toolbox-bgm[data-action="bgm"]');
     }
-    else {
-        bgm.pause();
-        control.setAttribute("fill", "currentColor");
-        control.style.transform = "scaleY(.5)";
+    writeStatus = (message) => {
+        const status = document.querySelector('.toolbox-status');
+        if (status === null) {
+            return;
+        }
+        status.textContent = message;
+        status.hidden = message === '';
+    };
+    syncButton = () => {
+        const button = this.button;
+        const audio = this.audio;
+        if (button === null || audio === null) {
+            return;
+        }
+        const playing = !audio.paused;
+        button.setAttribute('aria-pressed', String(playing));
+        button.setAttribute('aria-busy', 'false');
+        const label = this.mediaFailed
+            ? button.dataset.labelError
+            : playing
+                ? button.dataset.labelPause
+                : button.dataset.labelPlay;
+        if (label !== undefined) {
+            button.setAttribute('aria-label', label);
+            button.setAttribute('title', label);
+        }
+    };
+    onPlay = () => {
+        this.syncButton();
+        if (this.audio !== null && !this.audio.paused) {
+            const button = this.button;
+            if (button !== null) {
+                this.writeStatus(button.dataset.labelPlayingStatus || '');
+            }
+        }
+    };
+    onPause = () => {
+        this.syncButton();
+        const button = this.button;
+        if (button !== null) {
+            this.writeStatus(button.dataset.labelPausedStatus || '');
+        }
+    };
+    onEnded = () => {
+        this.syncButton();
+    };
+    onError = () => {
+        this.mediaFailed = true;
+        this.syncButton();
+        const button = this.button;
+        if (button !== null) {
+            this.writeStatus(button.dataset.labelFailedStatus || '');
+        }
+    };
+    toggle = async () => {
+        const audio = this.audio;
+        const button = this.button;
+        if (audio === null || button === null) {
+            return;
+        }
+        if (!audio.paused) {
+            audio.pause();
+            this.syncButton();
+            this.writeStatus(button.dataset.labelPausedStatus || '');
+            return;
+        }
+        if (this.mediaFailed) {
+            audio.load();
+            this.mediaFailed = false;
+        }
+        button.setAttribute('aria-busy', 'true');
+        try {
+            await audio.play();
+        }
+        catch (error) {
+            button.setAttribute('aria-busy', 'false');
+            this.syncButton();
+            this.writeStatus(button.dataset.labelFailedStatus || '');
+            return;
+        }
+        button.setAttribute('aria-busy', 'false');
+        this.syncButton();
+        this.writeStatus(audio.paused
+            ? button.dataset.labelPausedStatus || ''
+            : button.dataset.labelPlayingStatus || '');
+    };
+    constructor() {
+        this.audio = document.getElementById('bgm');
+        if (this.audio !== null) {
+            this.audio.addEventListener('play', this.onPlay);
+            this.audio.addEventListener('pause', this.onPause);
+            this.audio.addEventListener('ended', this.onEnded);
+            this.audio.addEventListener('error', this.onError);
+        }
+        document.addEventListener('pjax:success', this.syncButton);
     }
 }
+var bgmControl = new BgmControl();
+Object.assign(window, { bgmControl: bgmControl });
 function getElement(string, item = document.documentElement) {
     let tmp = item.querySelector(string);
     if (tmp === null) {
@@ -1610,6 +1701,437 @@ class MonacoEditor {
 }
 ;
 new MonacoEditor();
+class ProjectTooltip {
+    boundCards = new WeakSet();
+    bindCards = () => {
+        document.querySelectorAll('.project-card').forEach(card => {
+            if (this.boundCards.has(card)) {
+                return;
+            }
+            this.boundCards.add(card);
+            card.addEventListener('mousemove', (event) => this.onMousemove(event, card));
+        });
+    };
+    onMousemove = (event, card) => {
+        card.style.setProperty('--mx', String(event.clientX));
+        card.style.setProperty('--my', String(event.clientY));
+    };
+    constructor() {
+        this.bindCards();
+        document.addEventListener('pjax:success', this.bindCards);
+    }
+}
+var projectTooltip = new ProjectTooltip();
+const RESOURCE_TIMEOUT_MS = 15_000;
+const MAX_CAPTURE_EDGE = 16_384;
+const MAX_CAPTURE_PIXELS = 33_554_432;
+const MAX_FILENAME_CODE_UNITS = 80;
+class ScreenshotControl {
+    currentGeneration = 0;
+    captureStates = new WeakMap();
+    snapDomPromise = null;
+    isCurrent = (generation) => {
+        return generation === this.currentGeneration;
+    };
+    withTimeout = (promise) => {
+        return new Promise((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                reject(new Error('Screenshot resource timed out'));
+            }, RESOURCE_TIMEOUT_MS);
+            promise.then(value => {
+                window.clearTimeout(timeoutId);
+                resolve(value);
+            }, error => {
+                window.clearTimeout(timeoutId);
+                reject(error);
+            });
+        });
+    };
+    loadSnapDom = (source) => {
+        if (this.snapDomPromise !== null) {
+            return this.snapDomPromise;
+        }
+        const promise = new Promise((resolve, reject) => {
+            if (source.trim() === '') {
+                reject(new Error('SnapDOM source is missing'));
+                return;
+            }
+            const script = document.createElement('script');
+            let timeoutId = 0;
+            const cleanup = () => {
+                window.clearTimeout(timeoutId);
+                script.removeEventListener('load', onLoad);
+                script.removeEventListener('error', onError);
+            };
+            const onLoad = () => {
+                cleanup();
+                const candidate = window.snapdom;
+                if (typeof candidate === 'function' && typeof Reflect.get(candidate, 'toCanvas') === 'function') {
+                    resolve(candidate);
+                }
+                else {
+                    reject(new Error('SnapDOM global is invalid'));
+                }
+            };
+            const onError = () => {
+                cleanup();
+                reject(new Error('SnapDOM failed to load'));
+            };
+            script.addEventListener('load', onLoad);
+            script.addEventListener('error', onError);
+            script.src = source;
+            script.async = true;
+            timeoutId = window.setTimeout(onError, RESOURCE_TIMEOUT_MS);
+            document.head.appendChild(script);
+        });
+        this.snapDomPromise = promise;
+        return promise;
+    };
+    waitForFonts = () => {
+        if (document.fonts === undefined) {
+            return Promise.resolve();
+        }
+        return this.withTimeout(Promise.resolve(document.fonts.ready)).then(() => undefined);
+    };
+    waitForImage = (image) => {
+        if (image.complete) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve, reject) => {
+            image.setAttribute('loading', 'eager');
+            if (image.complete) {
+                image.setAttribute('loading', 'lazy');
+                resolve();
+                return;
+            }
+            const cleanup = () => {
+                window.clearTimeout(timeoutId);
+                image.removeEventListener('load', settle);
+                image.removeEventListener('error', settle);
+                image.setAttribute('loading', 'lazy');
+            };
+            const settle = () => {
+                cleanup();
+                resolve();
+            };
+            const timeoutId = window.setTimeout(() => {
+                cleanup();
+                reject(new Error('Screenshot image timed out'));
+            }, RESOURCE_TIMEOUT_MS);
+            image.addEventListener('load', settle);
+            image.addEventListener('error', settle);
+        });
+    };
+    waitForImages = async (root) => {
+        const images = [...root.querySelectorAll('img')];
+        const loadingStates = images.map(image => ({
+            image: image,
+            loading: image.getAttribute('loading')
+        }));
+        try {
+            await Promise.all(images.map(image => this.waitForImage(image)));
+        }
+        finally {
+            loadingStates.forEach(state => {
+                if (state.loading === null) {
+                    state.image.removeAttribute('loading');
+                }
+                else {
+                    state.image.setAttribute('loading', state.loading);
+                }
+            });
+        }
+    };
+    computeScale = (width, height, pixelRatio) => {
+        return Math.min(1, MAX_CAPTURE_EDGE / (width * pixelRatio), MAX_CAPTURE_EDGE / (height * pixelRatio), Math.sqrt(MAX_CAPTURE_PIXELS / (width * height * pixelRatio * pixelRatio)));
+    };
+    createFilename = () => {
+        const postTitle = document.querySelector('#post-title');
+        let title = postTitle === null
+            ? document.title.split('|').at(-1)?.trim() || ''
+            : postTitle.textContent || '';
+        title = title
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-')
+            .replace(/[ .]+$/g, '')
+            .slice(0, MAX_FILENAME_CODE_UNITS)
+            .trim();
+        if (title === '') {
+            title = 'post';
+        }
+        const now = new Date();
+        const date = [
+            now.getFullYear(),
+            String(now.getMonth() + 1).padStart(2, '0'),
+            String(now.getDate()).padStart(2, '0')
+        ].join('');
+        const time = [
+            String(now.getHours()).padStart(2, '0'),
+            String(now.getMinutes()).padStart(2, '0'),
+            String(now.getSeconds()).padStart(2, '0')
+        ].join('');
+        return `${title}-${date}-${time}.png`;
+    };
+    detachPaginator = (lease) => {
+        const paginator = lease.root.querySelector('#paginator');
+        if (paginator === null) {
+            return null;
+        }
+        const parent = paginator.parentNode;
+        if (parent === null) {
+            return null;
+        }
+        const restore = {
+            lease,
+            launchGeneration: lease.generation,
+            paginator,
+            parent,
+            nextSibling: paginator.nextSibling
+        };
+        parent.removeChild(paginator);
+        return restore;
+    };
+    restorePaginator = (restore) => {
+        if (restore === null) {
+            return;
+        }
+        const state = this.captureStates.get(restore.lease.root);
+        const currentPaginator = restore.lease.root.querySelector('#paginator');
+        if (state?.active !== restore.lease ||
+            currentPaginator !== null ||
+            !restore.lease.root.contains(restore.parent) ||
+            (restore.launchGeneration !== this.currentGeneration && !restore.lease.root.isConnected)) {
+            return;
+        }
+        const nextSibling = restore.nextSibling !== null && restore.parent.contains(restore.nextSibling)
+            ? restore.nextSibling
+            : null;
+        restore.parent.insertBefore(restore.paginator, nextSibling);
+    };
+    createPng = (canvas) => {
+        return new Promise((resolve, reject) => {
+            try {
+                canvas.toBlob(blob => {
+                    if (blob === null) {
+                        reject(new Error('Screenshot PNG is empty'));
+                    }
+                    else {
+                        resolve(blob);
+                    }
+                }, 'image/png');
+            }
+            catch (error) {
+                reject(error);
+            }
+        });
+    };
+    download = (blob, filename) => {
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.hidden = true;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(url);
+    };
+    writeStatus = (message) => {
+        const status = document.querySelector('.toolbox-status');
+        if (status === null) {
+            return;
+        }
+        status.textContent = message;
+        status.hidden = message === '';
+    };
+    bindCurrentButton = () => {
+        const button = document.querySelector('.toolbox-screenshot[data-action="screenshot"]');
+        if (button === null) {
+            return;
+        }
+        button.disabled = false;
+        button.setAttribute('aria-busy', 'false');
+    };
+    setCaptureButton = (button) => {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+    };
+    getCaptureState = (root) => {
+        const existing = this.captureStates.get(root);
+        if (existing !== undefined) {
+            return existing;
+        }
+        const state = {
+            active: null,
+            activePromise: null,
+            pending: null,
+            pendingPromise: null
+        };
+        this.captureStates.set(root, state);
+        return state;
+    };
+    isRequestCurrent = (request) => {
+        const root = document.querySelector('#post-content');
+        const button = document.querySelector('.toolbox-screenshot[data-action="screenshot"]');
+        return this.isCurrent(request.generation) && root === request.root && button === request.button;
+    };
+    pendingOwnsButton = (state, lease) => {
+        const pending = state.pending;
+        return pending !== null &&
+            pending.button === lease.button &&
+            this.isRequestCurrent(pending);
+    };
+    captureCurrent = async (lease) => {
+        const { root, button, generation: launchGeneration } = lease;
+        let paginatorRestore = null;
+        this.setCaptureButton(button);
+        this.writeStatus(button.dataset.labelPreparing || '');
+        try {
+            const imagesReady = this.waitForImages(root);
+            void imagesReady.catch(() => undefined);
+            const snapdom = await this.loadSnapDom(button.dataset.snapdomSrc || '');
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            await this.waitForFonts();
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            await imagesReady;
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            const bounds = root.getBoundingClientRect();
+            if (!Number.isFinite(bounds.width) || !Number.isFinite(bounds.height) || bounds.width <= 0 || bounds.height <= 0) {
+                throw new Error('Screenshot target size is invalid');
+            }
+            const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+            const scale = this.computeScale(bounds.width, bounds.height, pixelRatio);
+            if (scale < 1) {
+                this.writeStatus(button.dataset.labelScaled || '');
+            }
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            paginatorRestore = this.detachPaginator(lease);
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            const canvas = await snapdom.toCanvas(root, { scale: scale, dpr: 1 });
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            const blob = await this.createPng(canvas);
+            if (!this.isCurrent(launchGeneration)) {
+                return;
+            }
+            const filename = this.createFilename();
+            this.download(blob, filename);
+            this.writeStatus(scale < 1
+                ? button.dataset.labelScaledSuccess || ''
+                : button.dataset.labelSuccess || '');
+        }
+        catch (error) {
+            if (this.isCurrent(launchGeneration)) {
+                this.writeStatus(button.dataset.labelFailed || '');
+            }
+        }
+        finally {
+            this.restorePaginator(paginatorRestore);
+            const state = this.captureStates.get(root);
+            if (state?.active === lease && !this.pendingOwnsButton(state, lease)) {
+                button.disabled = false;
+                button.setAttribute('aria-busy', 'false');
+            }
+        }
+    };
+    startCapture = (request) => {
+        const state = this.getCaptureState(request.root);
+        if (!this.isRequestCurrent(request)) {
+            return Promise.resolve();
+        }
+        if (state.active !== null) {
+            return state.activePromise ?? Promise.resolve();
+        }
+        const lease = {
+            root: request.root,
+            button: request.button,
+            generation: request.generation
+        };
+        state.active = lease;
+        const execution = this.captureCurrent(lease);
+        const trackedPromise = execution.finally(() => {
+            if (state.active === lease) {
+                state.active = null;
+                state.activePromise = null;
+            }
+        });
+        state.activePromise = trackedPromise;
+        return trackedPromise;
+    };
+    startPendingCapture = (state, request) => {
+        if (state.pending !== request) {
+            return Promise.resolve();
+        }
+        state.pending = null;
+        state.pendingPromise = null;
+        return this.startCapture(request);
+    };
+    enqueueCapture = (state, request) => {
+        const activePromise = state.activePromise;
+        if (activePromise === null) {
+            return this.startCapture(request);
+        }
+        const pendingPromise = activePromise.then(() => this.startPendingCapture(state, request), () => this.startPendingCapture(state, request));
+        state.pending = request;
+        state.pendingPromise = pendingPromise;
+        this.setCaptureButton(request.button);
+        this.writeStatus(request.button.dataset.labelPreparing || '');
+        return pendingPromise;
+    };
+    cancelCurrentGeneration = () => {
+        this.currentGeneration += 1;
+        this.bindCurrentButton();
+    };
+    capture = () => {
+        const root = document.querySelector('#post-content');
+        if (root === null) {
+            return Promise.resolve();
+        }
+        const button = document.querySelector('.toolbox-screenshot[data-action="screenshot"]');
+        if (button === null) {
+            return Promise.resolve();
+        }
+        const state = this.getCaptureState(root);
+        const request = {
+            root,
+            button,
+            generation: this.currentGeneration
+        };
+        if (state.active?.generation === request.generation &&
+            state.active.button === button &&
+            state.activePromise !== null) {
+            return state.activePromise;
+        }
+        if (state.pending?.generation === request.generation &&
+            state.pending.button === button &&
+            state.pendingPromise !== null) {
+            return state.pendingPromise;
+        }
+        if (state.active === null) {
+            return this.startCapture(request);
+        }
+        return this.enqueueCapture(state, request);
+    };
+    constructor() {
+        document.addEventListener('pjax:send', this.cancelCurrentGeneration);
+        document.addEventListener('pjax:error', this.cancelCurrentGeneration);
+        document.addEventListener('pjax:success', this.cancelCurrentGeneration);
+    }
+}
+var screenshotControl = new ScreenshotControl();
+Object.assign(window, { screenshotControl: screenshotControl });
 class Scroll {
     scrolling = 0;
     getingtop = false;
@@ -1829,6 +2351,60 @@ class Toolbox {
     toggle = () => {
         const toolbox = this.toolbox;
         this.applyState(toolbox === null || !toolbox.classList.contains('toolbox-open'));
+    };
+    writeStatus = (message) => {
+        const status = document.querySelector('.toolbox-status');
+        if (status === null) {
+            return;
+        }
+        status.textContent = message;
+        status.hidden = message === '';
+    };
+    dispatchAction = (action) => {
+        switch (action) {
+            case 'toolbox':
+                this.toggle();
+                break;
+            case 'annotate':
+                this.annotate();
+                break;
+            case 'share':
+                this.share();
+                break;
+            case 'favorite':
+                this.favorite();
+                break;
+            case 'screenshot': {
+                const capture = window.screenshotControl?.capture();
+                if (capture !== undefined) {
+                    void Promise.resolve(capture).catch(() => undefined);
+                }
+                this.applyState(false);
+                break;
+            }
+            case 'bgm': {
+                const toggle = window.bgmControl?.toggle();
+                if (toggle !== undefined) {
+                    void Promise.resolve(toggle).catch(() => undefined);
+                }
+                this.applyState(false);
+                break;
+            }
+        }
+    };
+    onToolboxClick = (event) => {
+        const target = event.target;
+        if (target === null || typeof target.closest !== 'function') {
+            return;
+        }
+        const button = target.closest('#to-toolbox, .toolbox-item');
+        if (button === null) {
+            return;
+        }
+        const action = button.getAttribute('data-action');
+        if (action !== null) {
+            this.dispatchAction(action);
+        }
     };
     onOutsideClick = (event) => {
         const target = event.target;
@@ -2463,6 +3039,7 @@ class Toolbox {
             if (button === null) {
                 return;
             }
+            this.writeStatus(button.dataset.labelCopied || '');
             button.classList.add('copied');
             setTimeout(() => {
                 button.classList.remove('copied');
@@ -2507,7 +3084,8 @@ class Toolbox {
     favorite = () => {
         const favorites = this.readFavorites();
         const path = window.location.pathname;
-        if (favorites[path] !== undefined) {
+        const wasSaved = favorites[path] !== undefined;
+        if (wasSaved) {
             delete favorites[path];
         }
         else {
@@ -2515,6 +3093,12 @@ class Toolbox {
         }
         this.write(Toolbox.FAVORITES_KEY, Object.keys(favorites).length === 0 ? null : JSON.stringify(favorites));
         this.applyFavoriteState();
+        const button = this.favoriteButton;
+        if (button !== null) {
+            this.writeStatus(wasSaved
+                ? button.dataset.labelRemovedStatus || ''
+                : button.dataset.labelSavedStatus || '');
+        }
     };
     onPjaxSuccess = () => {
         this.applyState(false);
@@ -2524,15 +3108,20 @@ class Toolbox {
         this.syncAnnotateButton();
         this.applyAnnotateColor();
     };
+    onPjaxSend = () => {
+        this.applyState(false);
+        this.hideToolbar();
+    };
     constructor() {
         document.addEventListener('keyup', this.onKeyup);
         document.addEventListener('mousedown', this.onMouseDown);
+        document.addEventListener('click', this.onToolboxClick);
         document.addEventListener('click', this.onMarkClick);
         document.addEventListener('click', this.onToolbarClick);
         document.addEventListener('click', this.onDocumentClick);
         document.addEventListener('selectionchange', this.onSelectionChange);
         document.addEventListener('pjax:success', this.onPjaxSuccess);
-        document.addEventListener('pjax:send', this.hideToolbar);
+        document.addEventListener('pjax:send', this.onPjaxSend);
         const main = document.querySelector('main');
         if (main !== null) {
             main.addEventListener('scroll', this.hideToolbar, { passive: true });
@@ -2544,6 +3133,7 @@ class Toolbox {
     }
 }
 var toolbox = new Toolbox();
+Object.assign(window, { toolbox: toolbox });
 class pjaxSupport {
     loading = getElement('.loading');
     left = getElement('.loadingBar.left');

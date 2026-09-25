@@ -6,13 +6,13 @@
 <meta property="og:description" content="在 Core Ultra 9 285K 上对比 CPU 与 iGPU 的 SYCL 性能：GEMM、FFT、压缩与内存带宽实测，覆盖五种 USM&#x2F;Buffer 内存模式，并分析 RFO 与共享 DDR5 等瓶颈成因。">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-09-22T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-23T19:46:16.653Z">
+<meta property="article:modified_time" content="2026-09-25T22:59:15.992Z">
 <meta property="article:author" content="遂沫">
 <meta property="article:tag" content="C++">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="SYCL">
 <meta property="article:tag" content="性能测试">
-<meta name="twitter:card" content="summary"><link rel="canonical" href="https://issuimo.com/2026/09/23/285k-cpu-igpu-sycl-benchmark/"><link rel="icon" type="image/x-icon" href="/favicon.ico"><link rel="preload" as="font" crossorigin="anonymous" href="/font/Bender.ttf"><link rel="preload" as="font" crossorigin="anonymous" href="/font/BenderLight.woff2"><link rel="preload" as="font" crossorigin="anonymous" href="/font/JetBrainsMono-Regular.woff2"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css"><link rel="stylesheet" href="/css/arknights.css?v=20260946"><style>@font-face {
+<meta name="twitter:card" content="summary"><link rel="canonical" href="https://issuimo.com/2026/09/23/285k-cpu-igpu-sycl-benchmark/"><link rel="icon" type="image/x-icon" href="/favicon.ico"><link rel="preload" as="font" crossorigin="anonymous" href="/font/Bender.ttf"><link rel="preload" as="font" crossorigin="anonymous" href="/font/BenderLight.woff2"><link rel="preload" as="font" crossorigin="anonymous" href="/font/JetBrainsMono-Regular.woff2"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css"><link rel="stylesheet" href="/css/arknights.css?v=20260952"><style>@font-face {
   font-family: Bender;
   src: local('Bender'), url("/font/Bender.ttf");
 }
@@ -42,7 +42,7 @@ if (window.localStorage.getItem('theme-mode') === 'dark' || window.matchMedia('(
  --dark-background: url('https://ak.hypergryph.com/assets/index/images/ak/pc/bk.jpg');
  --light-background: url('/img/bk.jpg');
  --theme-encrypt-confirm: '确认'
-}</style><script defer src="/js/arknights.js?v=20260947"></script><script defer src="/js/project-tooltip.js?v=20260947"></script><script defer src="/js/search.js?v=20260947"></script><script defer src="https://vercount.one/js"></script><script defer type="module">import mermaid from '//unpkg.com/mermaid@11.12.2/dist/mermaid.esm.min.mjs';
+}</style><script defer src="/js/arknights.js?v=20260950"></script><script defer src="/js/search.js?v=20260950"></script><script defer src="https://vercount.one/js"></script><script defer type="module">import mermaid from '//unpkg.com/mermaid@11.12.2/dist/mermaid.esm.min.mjs';
 window.mermaid = mermaid;
 code.paintMermaid();
 </script><script src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.6.1/MathJax.js"></script><script>MathJax.Hub.Config({
@@ -95,58 +95,58 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
  const script = document.createElement('script');
  script.src = 'https://vercount.one/js';
  document.head.appendChild(script);
-});window.reset()})</script><meta name="generator" content="Hexo 8.1.2"></head><body><div class="loading" style="opacity: 0;"><div class="loadingBar left"></div><div class="loadingBar right"></div></div><main><header class="topbar"><button class="navBtn" type="button" aria-label="展开导航" aria-expanded="false"><i class="navBtnIcon"><span class="navBtnIconBar"></span><span class="navBtnIconBar"></span><span class="navBtnIconBar"></span></i></button><nav><ol class="navContent"><li class="navItem"><a class="navBlock navBlockIcon" href="/" title="首页" aria-label="首页"><span class="navItemTitle"><i class="fa-solid fa-house" aria-hidden="true"></i><span class="navItemLabel">首页</span></span></a></li><li class="navItem" matchdata="categories,tags"><a class="navBlock navBlockIcon" href="/archives/" title="归档" aria-label="归档"><span class="navItemTitle"><i class="fa-solid fa-box-archive" aria-hidden="true"></i><span class="navItemLabel">归档</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/about/" title="关于" aria-label="关于"><span class="navItemTitle"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span class="navItemLabel">关于</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/projects/" title="项目" aria-label="项目"><span class="navItemTitle"><i class="fa-solid fa-folder-open" aria-hidden="true"></i><span class="navItemLabel">项目</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/links/" title="友链" aria-label="友链"><span class="navItemTitle"><i class="fa-solid fa-link" aria-hidden="true"></i><span class="navItemLabel">友链</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/data/" title="数据" aria-label="数据"><span class="navItemTitle"><i class="fa-solid fa-database" aria-hidden="true"></i><span class="navItemLabel">数据</span></span></a></li></ol><div class="topbar-social"><a target="_blank" rel="noopener" href="https://github.com/1992724048" aria-label="GitHub"><i class="fab fa-github"></i></a><a target="_blank" rel="noopener" href="https://space.bilibili.com/319091647" aria-label="BiliBili"><i class="fa-brands fa-bilibili"></i></a><a href="mailto:1992724048@qq.com" aria-label="E-Mail"><i class="fa fa-envelope"></i></a></div><div class="navItem" id="search-header"><svg class="searchFieldIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg><span class="navItemTitle"><input autocomplete="off" autocorrect="off" autocapitalize="none" placeholder="数据检索" aria-label="数据检索" spellcheck="false" maxlength="50" type="text" id="search-input"></span></div><div class="search-popup" tabindex="0"><div id="search-result"></div></div></nav><button class="searchBtn" type="button" aria-label="数据检索"><svg class="searchBtnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg></button></header><article><div id="post-bg"><div id="post-title"><h1>Core Ultra 9 285K 的 iGPU 能打过 CPU 吗？SYCL 五内存模式实测</h1></div><div id="post-info"><span>发布于: <div class="control"><time datetime="2026-09-22T16:00:00.000Z" id="date"> 2026-09-23</time></div></span><span>更新于: <div class="control"><time datetime="2026-09-23T19:46:16.653Z" id="updated"> 2026-09-24</time></div></span><span>文章字数: <div class="control">3717 字</div></span><span>阅读时间: <div class="control">15 分钟</div></span><span id="vercount_container_page_pv">浏览量: <span class="control" id="vercount_value_page_pv">加载中...</span></span></div><hr><div id="post-content"><p><span class="ai-badge ai-badge--edit" title="AI 生成内容 · 经人工审核并被人工修改"><span class="ai-badge__icon"><svg class="ai-badge__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><span class="ai-badge__status">EDIT</span><span class="ai-badge__text">测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改</span></span></p>
-<h2 id="测试结果"><a href="#测试结果" class="headerlink" title="测试结果"></a>测试结果</h2><p>相同的算法，在 Intel Core Ultra 9 285K 的 <a class="term-link" href="#term-64">CPU</a> 与核显（<a class="term-link" href="#term-44">iGPU</a>）上各跑一遍的测试结果：</p>
+});window.reset()})</script><meta name="generator" content="Hexo 8.1.2"></head><body><div class="loading" style="opacity: 0;"><div class="loadingBar left"></div><div class="loadingBar right"></div></div><main><header class="topbar"><button class="navBtn" type="button" aria-label="展开导航" aria-expanded="false"><i class="navBtnIcon"><span class="navBtnIconBar"></span><span class="navBtnIconBar"></span><span class="navBtnIconBar"></span></i></button><nav><ol class="navContent"><li class="navItem"><a class="navBlock navBlockIcon" href="/" title="首页" aria-label="首页"><span class="navItemTitle"><i class="fa-solid fa-house" aria-hidden="true"></i><span class="navItemLabel">首页</span></span></a></li><li class="navItem" matchdata="categories,tags"><a class="navBlock navBlockIcon" href="/archives/" title="归档" aria-label="归档"><span class="navItemTitle"><i class="fa-solid fa-box-archive" aria-hidden="true"></i><span class="navItemLabel">归档</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/about/" title="关于" aria-label="关于"><span class="navItemTitle"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span class="navItemLabel">关于</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/projects/" title="项目" aria-label="项目"><span class="navItemTitle"><i class="fa-solid fa-folder-open" aria-hidden="true"></i><span class="navItemLabel">项目</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/links/" title="友链" aria-label="友链"><span class="navItemTitle"><i class="fa-solid fa-link" aria-hidden="true"></i><span class="navItemLabel">友链</span></span></a></li><li class="navItem"><a class="navBlock navBlockIcon" href="/data/" title="数据" aria-label="数据"><span class="navItemTitle"><i class="fa-solid fa-database" aria-hidden="true"></i><span class="navItemLabel">数据</span></span></a></li></ol><div class="topbar-social"><a target="_blank" rel="noopener" href="https://github.com/1992724048" aria-label="GitHub"><i class="fab fa-github"></i></a><a target="_blank" rel="noopener" href="https://space.bilibili.com/319091647" aria-label="BiliBili"><i class="fa-brands fa-bilibili"></i></a><a href="mailto:1992724048@qq.com" aria-label="E-Mail"><i class="fa fa-envelope"></i></a></div><div class="navItem" id="search-header"><svg class="searchFieldIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg><span class="navItemTitle"><input autocomplete="off" autocorrect="off" autocapitalize="none" placeholder="数据检索" aria-label="数据检索" spellcheck="false" maxlength="50" type="text" id="search-input"></span></div><div class="search-popup" tabindex="0"><div id="search-result"></div></div></nav><button class="searchBtn" type="button" aria-label="数据检索"><svg class="searchBtnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg></button></header><article><div id="post-bg"><div id="post-title"><h1>Core Ultra 9 285K 的 iGPU 能打过 CPU 吗？SYCL 五内存模式实测</h1></div><div id="post-info"><span>发布于: <div class="control"><time datetime="2026-09-22T16:00:00.000Z" id="date"> 2026-09-23</time></div></span><span>更新于: <div class="control"><time datetime="2026-09-25T22:59:15.992Z" id="updated"> 2026-09-26</time></div></span><span>文章字数: <div class="control">3755 字</div></span><span>阅读时间: <div class="control">15 分钟</div></span><span id="vercount_container_page_pv">浏览量: <span class="control" id="vercount_value_page_pv">加载中...</span></span></div><hr><div id="post-content"><p><span class="ai-badge ai-badge--edit" tabindex="0" aria-describedby="arknights-ai-tip-content-95b8a518b6131163-o0"><span class="ai-badge__icon"><svg class="ai-badge__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><span class="ai-badge__status">EDIT</span><span class="ai-badge__text">测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改</span><span class="ai-badge__tip" id="arknights-ai-tip-content-95b8a518b6131163-o0" role="tooltip"><span class="ai-badge__tip-title">AI 生成内容标记</span><span class="ai-badge__tip-table" role="table"><span class="ai-badge__tip-row" role="row"><span class="ai-badge__tip-cell ai-badge__tip-tag ai-badge--pass" role="cell">PASS</span><span class="ai-badge__tip-cell ai-badge__tip-desc" role="cell">已人工审核通过</span></span><span class="ai-badge__tip-row" role="row"><span class="ai-badge__tip-cell ai-badge__tip-tag ai-badge--edit" role="cell">EDIT</span><span class="ai-badge__tip-cell ai-badge__tip-desc" role="cell">经人工审核并被人工修改</span></span><span class="ai-badge__tip-row" role="row"><span class="ai-badge__tip-cell ai-badge__tip-tag ai-badge--unkn" role="cell">UNKN</span><span class="ai-badge__tip-cell ai-badge__tip-desc" role="cell">未知，无法判断</span></span><span class="ai-badge__tip-row" role="row"><span class="ai-badge__tip-cell ai-badge__tip-tag ai-badge--none" role="cell">NONE</span><span class="ai-badge__tip-cell ai-badge__tip-desc" role="cell">未经人工审核</span></span></span></span></span></p>
+<h2 id="测试结果"><a href="#测试结果" class="headerlink" title="测试结果"></a>测试结果</h2><p>相同的算法，在 Intel Core Ultra 9 285K 的 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 与核显（<a class="term-link" href="#term-44" data-term-index="2">iGPU</a>）上各跑一遍的测试结果：</p>
 <table>
 <thead>
 <tr>
 <th>测试项</th>
-<th><a class="term-link" href="#term-64">CPU</a> (24 Core)</th>
-<th><a class="term-link" href="#term-44">iGPU</a> (64 EU)</th>
+<th><a class="term-link" href="#term-64" data-term-index="1">CPU</a> (24 Core)</th>
+<th><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> (64 EU)</th>
 <th>最优设备</th>
 <th>倍率</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-46">GEMM</a> 算力</td>
+<td><a class="term-link" href="#term-46" data-term-index="3">GEMM</a> 算力</td>
 <td>355.4 GFLOP&#x2F;s</td>
 <td>160.9 GFLOP&#x2F;s</td>
-<td><a class="term-link" href="#term-64">CPU</a></td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a></td>
 <td>2.2×</td>
 </tr>
 <tr>
 <td>压缩吞吐</td>
 <td>11169.4 MB&#x2F;s</td>
 <td>448.8 MB&#x2F;s</td>
-<td><a class="term-link" href="#term-64">CPU</a></td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a></td>
 <td>24.9×</td>
 </tr>
 <tr>
 <td>读带宽</td>
 <td>66.6 GB&#x2F;s</td>
 <td>61.0 GB&#x2F;s</td>
-<td><a class="term-link" href="#term-64">CPU</a></td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a></td>
 <td>1.1×</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-65">FFT</a> 吞吐</td>
+<td><a class="term-link" href="#term-65" data-term-index="4">FFT</a> 吞吐</td>
 <td>43.1 MSamples&#x2F;s</td>
 <td>145.4 MSamples&#x2F;s</td>
-<td><a class="term-link" href="#term-44">iGPU</a></td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a></td>
 <td>3.4×</td>
 </tr>
 <tr>
 <td>查询吞吐</td>
 <td>122.7 Mqueries&#x2F;s</td>
 <td>444.8 Mqueries&#x2F;s</td>
-<td><a class="term-link" href="#term-44">iGPU</a></td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a></td>
 <td>3.6×</td>
 </tr>
 <tr>
 <td>写带宽</td>
 <td>54.0 GB&#x2F;s</td>
 <td>87.6 GB&#x2F;s</td>
-<td><a class="term-link" href="#term-44">iGPU</a></td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a></td>
 <td>1.6×</td>
 </tr>
 <tr>
@@ -165,7 +165,7 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-64">CPU</a></td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a></td>
 <td>Intel Core Ultra 9 285K，<strong>D2D&#x2F;NGU Up to 3200 MHz</strong></td>
 </tr>
 <tr>
@@ -173,27 +173,27 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 <td>DDR5-6400 CL32 48 GB × 2</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a></td>
-<td>Arrow Lake-S 核显（Xe 架构，<a class="term-link" href="#term-28">oneAPI</a> 设备名 <code>Intel(R) Graphics</code>），共享系统内存</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a></td>
+<td>Arrow Lake-S 核显（Xe 架构，<a class="term-link" href="#term-28" data-term-index="5">oneAPI</a> 设备名 <code>Intel(R) Graphics</code>），共享系统内存</td>
 </tr>
 <tr>
 <td>编程模型</td>
-<td><a class="term-link" href="#term-43">SYCL</a> 2020（Intel <a class="term-link" href="#term-28">oneAPI</a> <a class="term-link" href="#term-32">DPC++</a> Compiler 2026.1）</td>
+<td><a class="term-link" href="#term-43" data-term-index="6">SYCL</a> 2020（Intel <a class="term-link" href="#term-28" data-term-index="5">oneAPI</a> <a class="term-link" href="#term-32" data-term-index="7">DPC++</a> Compiler 2026.1）</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-64">CPU</a> 侧并行</td>
-<td><a class="term-link" href="#term-29">oneTBB</a> 2023.1，24 线程（<code>tbb_24</code>）；另含串行基线（<code>serial</code>）</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> 侧并行</td>
+<td><a class="term-link" href="#term-29" data-term-index="8">oneTBB</a> 2023.1，24 线程（<code>tbb_24</code>）；另含串行基线（<code>serial</code>）</td>
 </tr>
 <tr>
 <td>构建</td>
-<td><a class="term-link" href="#term-1">Visual Studio</a> 2026，Intel <a class="term-link" href="#term-28">oneAPI</a> Toolkit 2026.1，两侧均 Release</td>
+<td><a class="term-link" href="#term-1" data-term-index="9">Visual Studio</a> 2026，Intel <a class="term-link" href="#term-28" data-term-index="5">oneAPI</a> Toolkit 2026.1，两侧均 Release</td>
 </tr>
 </tbody></table>
 <p><strong>测试细节</strong></p>
 <ul>
-<li><strong><a class="term-link" href="#term-44">iGPU</a> 内存模式</strong>：<code>malloc_device</code> &#x2F; <code>malloc_host</code> &#x2F; <code>malloc_shared</code> &#x2F; <code>usm_allocator</code>（<code>sycl::usm_allocator</code> + <code>std::vector</code>）&#x2F; <code>buffer</code>（<a class="term-link" href="#term-43">sycl</a>::buffer + <a class="term-link" href="#term-43">sycl</a>::accessor）</li>
-<li><strong>计时设计</strong>：统一使用 <code>std::chrono::steady_clock</code> 主机端计时，<a class="term-link" href="#term-43">SYCL</a> 未使用 profiling；每项 warmup 1 次 + 重复 3 次<strong>取最优值</strong>。</li>
-<li><strong>测试规模</strong>：<a class="term-link" href="#term-66">zip</a> 128 MiB &#x2F; 2048 块、<a class="term-link" href="#term-65">FFT</a> n &#x3D; 4,194,304（2²²）复数点、<a class="term-link" href="#term-46">GEMM</a> n &#x3D; 4096、<a class="term-link" href="#term-30">lookup</a> 1,048,576 次查询、带宽数组 256 MiB、指针追逐 4,194,304 步。</li>
+<li><strong><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 内存模式</strong>：<code>malloc_device</code> &#x2F; <code>malloc_host</code> &#x2F; <code>malloc_shared</code> &#x2F; <code>usm_allocator</code>（<code>sycl::usm_allocator</code> + <code>std::vector</code>）&#x2F; <code>buffer</code>（<a class="term-link" href="#term-43" data-term-index="6">sycl</a>::buffer + <a class="term-link" href="#term-43" data-term-index="6">sycl</a>::accessor）</li>
+<li><strong>计时设计</strong>：统一使用 <code>std::chrono::steady_clock</code> 主机端计时，<a class="term-link" href="#term-43" data-term-index="6">SYCL</a> 未使用 profiling；每项 warmup 1 次 + 重复 3 次<strong>取最优值</strong>。</li>
+<li><strong>测试规模</strong>：<a class="term-link" href="#term-66" data-term-index="10">zip</a> 128 MiB &#x2F; 2048 块、<a class="term-link" href="#term-65" data-term-index="4">FFT</a> n &#x3D; 4,194,304（2²²）复数点、<a class="term-link" href="#term-46" data-term-index="3">GEMM</a> n &#x3D; 4096、<a class="term-link" href="#term-30" data-term-index="11">lookup</a> 1,048,576 次查询、带宽数组 256 MiB、指针追逐 4,194,304 步。</li>
 </ul>
 <h2 id="测试项目对比"><a href="#测试项目对比" class="headerlink" title="测试项目对比"></a>测试项目对比</h2><h3 id="内存带宽"><a href="#内存带宽" class="headerlink" title="内存带宽"></a>内存带宽</h3><p><strong>Workload</strong>：256 MiB 数组的 read &#x2F; write &#x2F; copy 顺序访问，<code>GB/s = 字节数 / 时间</code>（copy 为 2×字节数）。</p>
 <table>
@@ -206,43 +206,43 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-64">CPU</a> serial</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> serial</td>
 <td>7.6</td>
 <td>18.1</td>
 <td>47.3</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-64">CPU</a> tbb_24</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> tbb_24</td>
 <td><strong>66.6</strong></td>
 <td>54.0</td>
 <td><strong>78.1</strong></td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_device</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_device</td>
 <td>61.0</td>
 <td><strong>87.6</strong></td>
 <td>76.1</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_host</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_host</td>
 <td>56.2</td>
 <td>64.1</td>
 <td>75.8</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_shared</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_shared</td>
 <td>55.7</td>
 <td>64.0</td>
 <td>75.3</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> usm_allocator</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> usm_allocator</td>
 <td>53.9</td>
 <td>61.5</td>
 <td>71.1</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> buffer</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> buffer</td>
 <td>56.5</td>
 <td>64.0</td>
 <td>77.8</td>
@@ -250,130 +250,130 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 </tbody></table>
 <p><strong>为什么拷贝平手？</strong></p>
 <ul>
-<li>双方处在 71–78.1 GB&#x2F;s 区间，<strong><a class="term-link" href="#term-44">iGPU</a> 与 <a class="term-link" href="#term-64">CPU</a> 共享同一条 <a class="term-link" href="#term-50">DDR5</a></strong>（DDR5-6400 双通道理论峰值 102.4 GB&#x2F;s），物理上限本来就是同一个；copy 指标 &#x3D; 实际总线流量，78.1 GB&#x2F;s 已是理论峰值的约 76%，两边都触及了代码执行所能到达的最大峰值性能（跑满带宽需要更大的数组）。</li>
+<li>双方处在 71–78.1 GB&#x2F;s 区间，<strong><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 与 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 共享同一条 <a class="term-link" href="#term-50" data-term-index="12">DDR5</a></strong>（DDR5-6400 双通道理论峰值 102.4 GB&#x2F;s），物理上限本来就是同一个；copy 指标 &#x3D; 实际总线流量，78.1 GB&#x2F;s 已是理论峰值的约 76%，两边都触及了代码执行所能到达的最大峰值性能（跑满带宽需要更大的数组）。</li>
 </ul>
-<p><strong>为什么 <a class="term-link" href="#term-44">iGPU</a> 写入（87.6 GB&#x2F;s）比 <a class="term-link" href="#term-64">CPU</a>（54.0 GB&#x2F;s）快？</strong></p>
+<p><strong>为什么 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 写入（87.6 GB&#x2F;s）比 <a class="term-link" href="#term-64" data-term-index="1">CPU</a>（54.0 GB&#x2F;s）快？</strong></p>
 <ul>
-<li>两侧实现都是”单个元素填充”循环，<a class="term-link" href="#term-64">CPU</a> 写路径受微架构中 <strong><a class="term-link" href="#term-69">RFO</a>（Read-For-Ownership，写前读）机制</strong>影响：<ul>
-<li><a class="term-link" href="#term-64">CPU</a> 缓存写是 write-allocate 策略：要写入的缓存行不在缓存时，必须先发一次 <strong><a class="term-link" href="#term-69">RFO</a> 读</strong>（把整行读回来取得所有权），然后才能标脏、逐级淘汰写回。一次”写”实际混入一次读往返，<a class="term-link" href="#term-69">RFO</a> 读流量还额外占用 <a class="term-link" href="#term-50">DDR5</a> 带宽，流水线被缓存行粒度的分配—标脏—写回拖住；</li>
-<li><a class="term-link" href="#term-44">iGPU</a> 把数千 work-item 的写<strong>合并成大段连续写</strong>，<a class="term-link" href="#term-44">iGPU</a> 的写路径少了 <a class="term-link" href="#term-69">RFO</a> 开销，有效吞吐占比更高。</li>
+<li>两侧实现都是”单个元素填充”循环，<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 写路径受微架构中 <strong><a class="term-link" href="#term-69" data-term-index="13">RFO</a>（Read-For-Ownership，写前读）机制</strong>影响：<ul>
+<li><a class="term-link" href="#term-64" data-term-index="1">CPU</a> 缓存写是 write-allocate 策略：要写入的缓存行不在缓存时，必须先发一次 <strong><a class="term-link" href="#term-69" data-term-index="13">RFO</a> 读</strong>（把整行读回来取得所有权），然后才能标脏、逐级淘汰写回。一次”写”实际混入一次读往返，<a class="term-link" href="#term-69" data-term-index="13">RFO</a> 读流量还额外占用 <a class="term-link" href="#term-50" data-term-index="12">DDR5</a> 带宽，流水线被缓存行粒度的分配—标脏—写回拖住；</li>
+<li><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 把数千 work-item 的写<strong>合并成大段连续写</strong>，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 的写路径少了 <a class="term-link" href="#term-69" data-term-index="13">RFO</a> 开销，有效吞吐占比更高。</li>
 </ul>
 </li>
 </ul>
-<p><strong>为什么 <a class="term-link" href="#term-64">CPU</a> 读（66.6 GB&#x2F;s）又能快于 <a class="term-link" href="#term-44">iGPU</a> 读（61.0 GB&#x2F;s）？</strong></p>
+<p><strong>为什么 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 读（66.6 GB&#x2F;s）又能快于 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 读（61.0 GB&#x2F;s）？</strong></p>
 <ul>
-<li>读内核两侧其实不同构：<a class="term-link" href="#term-64">CPU</a> 是一段可被 <a class="term-link" href="#term-49">AVX2</a> 完全向量化的紧致求和循环，硬件预取器把顺序读拉满；<a class="term-link" href="#term-44">iGPU</a> 读用的是 <a class="term-link" href="#term-43">SYCL</a> <code>reduction</code>（树形归约），<strong>测的不是纯读带宽</strong>，额外的归约组合与同步开销混在指标里。共享 <a class="term-link" href="#term-50">DDR5</a> 下纯读上限本就同量级，这点结构差异足以让 <a class="term-link" href="#term-64">CPU</a> “略胜”。</li>
+<li>读内核两侧其实不同构：<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 是一段可被 <a class="term-link" href="#term-49" data-term-index="14">AVX2</a> 完全向量化的紧致求和循环，硬件预取器把顺序读拉满；<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 读用的是 <a class="term-link" href="#term-43" data-term-index="6">SYCL</a> <code>reduction</code>（树形归约），<strong>测的不是纯读带宽</strong>，额外的归约组合与同步开销混在指标里。共享 <a class="term-link" href="#term-50" data-term-index="12">DDR5</a> 下纯读上限本就同量级，这点结构差异足以让 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> “略胜”。</li>
 </ul>
-<p><strong>为什么 <a class="term-link" href="#term-64">CPU</a> 串行版低到 7.6 GB&#x2F;s &#x2F; 18.1 GB&#x2F;s？</strong></p>
+<p><strong>为什么 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 串行版低到 7.6 GB&#x2F;s &#x2F; 18.1 GB&#x2F;s？</strong></p>
 <ul>
 <li>单线程发出的未完成访存请求数有限，跑不满多通道内存控制器；写侧靠合并缓冲吸收，所以串行写（18.1 GB&#x2F;s）反而高于串行读（7.6 GB&#x2F;s）。这类带宽测试对并发访存请求数极为敏感。</li>
 </ul>
-<h3 id="GEMM-通用矩阵乘"><a href="#GEMM-通用矩阵乘" class="headerlink" title="GEMM (通用矩阵乘)"></a><a class="term-link" href="#term-46">GEMM</a> (通用矩阵乘)</h3><p><strong>Workload</strong>：分块矩阵乘，n &#x3D; 4096，算力口径 <code>2·n³ / t</code>；<a class="term-link" href="#term-62">TBB</a> 按行块并行。</p>
+<h3 id="GEMM-通用矩阵乘"><a href="#GEMM-通用矩阵乘" class="headerlink" title="GEMM (通用矩阵乘)"></a><a class="term-link" href="#term-46" data-term-index="3">GEMM</a> (通用矩阵乘)</h3><p><strong>Workload</strong>：分块矩阵乘，n &#x3D; 4096，算力口径 <code>2·n³ / t</code>；<a class="term-link" href="#term-62" data-term-index="15">TBB</a> 按行块并行。</p>
 <table>
 <thead>
 <tr>
 <th>来源</th>
-<th><a class="term-link" href="#term-46">GEMM</a> 算力 (GFLOP&#x2F;s)</th>
+<th><a class="term-link" href="#term-46" data-term-index="3">GEMM</a> 算力 (GFLOP&#x2F;s)</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-64">CPU</a> serial</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> serial</td>
 <td>23.3</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-64">CPU</a> tbb_24</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> tbb_24</td>
 <td><strong>355.4</strong></td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_device</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_device</td>
 <td>160.9</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_shared</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_shared</td>
 <td>157.1</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> usm_allocator</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> usm_allocator</td>
 <td>157.0</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> buffer</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> buffer</td>
 <td>156.9</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_host</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_host</td>
 <td>156.2</td>
 </tr>
 </tbody></table>
 <ul>
-<li><a class="term-link" href="#term-64">CPU</a> (tbb_24) 测出 355.4 GFLOP&#x2F;s，是 <a class="term-link" href="#term-44">iGPU</a> 最佳值（160.9 GFLOP&#x2F;s）的 <strong>2.2 倍</strong>。</li>
-<li><a class="term-link" href="#term-44">iGPU</a> 五种内存模式彼此差距不到 3%，<strong>瓶颈不在分配方式上</strong>。</li>
+<li><a class="term-link" href="#term-64" data-term-index="1">CPU</a> (tbb_24) 测出 355.4 GFLOP&#x2F;s，是 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 最佳值（160.9 GFLOP&#x2F;s）的 <strong>2.2 倍</strong>。</li>
+<li><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 五种内存模式彼此差距不到 3%，<strong>瓶颈不在分配方式上</strong>。</li>
 </ul>
-<p><strong>为什么 <a class="term-link" href="#term-64">CPU</a> 最快？</strong></p>
+<p><strong>为什么 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 最快？</strong></p>
 <ul>
-<li><a class="term-link" href="#term-46">GEMM</a> 是”高频 + <a class="term-link" href="#term-47">SIMD</a> <a class="term-link" href="#term-67">FMA</a> + 缓存分块”的教科书主场，分块 64 让 A&#x2F;B 小块驻留缓存，内层循环被编译成连续的 <a class="term-link" href="#term-49">AVX2</a> <a class="term-link" href="#term-67">FMA</a> 指令流，24 个核心的频率与 <a class="term-link" href="#term-67">FMA</a> 火力全开。</li>
-<li><a class="term-link" href="#term-44">iGPU</a> 侧实现是 16×16 work-group + 双层 local 内存 tile 的<strong>朴素 <a class="term-link" href="#term-52">FP32</a> 乘加</strong>（未用半精度或矩阵加速指令），而核显 Xe 核在 <a class="term-link" href="#term-52">FP32</a> 算力与频率上本就不是 <a class="term-link" href="#term-64">CPU</a> 核心的对手。</li>
+<li><a class="term-link" href="#term-46" data-term-index="3">GEMM</a> 是”高频 + <a class="term-link" href="#term-47" data-term-index="16">SIMD</a> <a class="term-link" href="#term-67" data-term-index="17">FMA</a> + 缓存分块”的教科书主场，分块 64 让 A&#x2F;B 小块驻留缓存，内层循环被编译成连续的 <a class="term-link" href="#term-49" data-term-index="14">AVX2</a> <a class="term-link" href="#term-67" data-term-index="17">FMA</a> 指令流，24 个核心的频率与 <a class="term-link" href="#term-67" data-term-index="17">FMA</a> 火力全开。</li>
+<li><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 侧实现是 16×16 work-group + 双层 local 内存 tile 的<strong>朴素 <a class="term-link" href="#term-52" data-term-index="18">FP32</a> 乘加</strong>（未用半精度或矩阵加速指令），而核显 Xe 核在 <a class="term-link" href="#term-52" data-term-index="18">FP32</a> 算力与频率上本就不是 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 核心的对手。</li>
 </ul>
-<h3 id="FFT-快速傅里叶变换"><a href="#FFT-快速傅里叶变换" class="headerlink" title="FFT (快速傅里叶变换)"></a><a class="term-link" href="#term-65">FFT</a> (快速傅里叶变换)</h3><p><strong>Workload</strong>：radix-2 就地 <a class="term-link" href="#term-65">FFT</a>，n &#x3D; 4,194,304 复数点，算力口径 <code>5·n·log2(n)</code>；<a class="term-link" href="#term-44">iGPU</a> 侧 22 个蝶形 pass + 1 个 bit-reversal 共 23 次内核提交。</p>
+<h3 id="FFT-快速傅里叶变换"><a href="#FFT-快速傅里叶变换" class="headerlink" title="FFT (快速傅里叶变换)"></a><a class="term-link" href="#term-65" data-term-index="4">FFT</a> (快速傅里叶变换)</h3><p><strong>Workload</strong>：radix-2 就地 <a class="term-link" href="#term-65" data-term-index="4">FFT</a>，n &#x3D; 4,194,304 复数点，算力口径 <code>5·n·log2(n)</code>；<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 侧 22 个蝶形 pass + 1 个 bit-reversal 共 23 次内核提交。</p>
 <table>
 <thead>
 <tr>
 <th>来源</th>
-<th><a class="term-link" href="#term-65">FFT</a> 吞吐 (MSamples&#x2F;s)</th>
-<th><a class="term-link" href="#term-65">FFT</a> 算力 (GFLOP&#x2F;s)</th>
+<th><a class="term-link" href="#term-65" data-term-index="4">FFT</a> 吞吐 (MSamples&#x2F;s)</th>
+<th><a class="term-link" href="#term-65" data-term-index="4">FFT</a> 算力 (GFLOP&#x2F;s)</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-64">CPU</a> serial</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> serial</td>
 <td>19.0</td>
 <td>2.1</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-64">CPU</a> tbb_24</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> tbb_24</td>
 <td>43.1</td>
 <td>4.7</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_device</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_device</td>
 <td><strong>145.4</strong></td>
 <td><strong>16.0</strong></td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_shared</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_shared</td>
 <td>140.1</td>
 <td>15.4</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> usm_allocator</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> usm_allocator</td>
 <td>139.8</td>
 <td>15.4</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_host</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_host</td>
 <td>139.7</td>
 <td>15.4</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> buffer</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> buffer</td>
 <td>125.3</td>
 <td>13.8</td>
 </tr>
 </tbody></table>
 <ul>
-<li><a class="term-link" href="#term-44">iGPU</a> 最佳是 <a class="term-link" href="#term-64">CPU</a> (tbb_24) 的 <strong>3.4 倍</strong>。</li>
+<li><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 最佳是 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> (tbb_24) 的 <strong>3.4 倍</strong>。</li>
 <li><code>buffer</code> 模式在这里掉了约 14%（125.3 vs 145.4），是五模式中差距最大的一项。</li>
 </ul>
-<p><strong>为什么 <a class="term-link" href="#term-44">iGPU</a> 最快？</strong></p>
+<p><strong>为什么 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 最快？</strong></p>
 <ul>
-<li>蝶形之间零依赖，每个 pass 的 n&#x2F;2 个蝶形完全独立，<a class="term-link" href="#term-44">iGPU</a> 一个 kernel 把它们全部铺开，数千线程轮流吃访存延迟。<a class="term-link" href="#term-64">CPU</a> 侧 <a class="term-link" href="#term-62">TBB</a> 虽然也逐 pass 并行，但每步都吃亏：<ol>
-<li>线程上限 24，可并行的蝶形槽位远少于 <a class="term-link" href="#term-44">iGPU</a>；</li>
+<li>蝶形之间零依赖，每个 pass 的 n&#x2F;2 个蝶形完全独立，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 一个 kernel 把它们全部铺开，数千线程轮流吃访存延迟。<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 侧 <a class="term-link" href="#term-62" data-term-index="15">TBB</a> 虽然也逐 pass 并行，但每步都吃亏：<ol>
+<li>线程上限 24，可并行的蝶形槽位远少于 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a>；</li>
 <li>高 pass 的蝶形跨步越来越大（len 从 2 涨到 n），<strong>顺序性崩坏、硬件预取失效</strong>；</li>
-<li>每个 pass 结束还有一次 <a class="term-link" href="#term-62">TBB</a> 同步屏障；</li>
+<li>每个 pass 结束还有一次 <a class="term-link" href="#term-62" data-term-index="15">TBB</a> 同步屏障；</li>
 <li>计时里还多含 2n 个 float 的输入拷贝（见测试局限）。</li>
 </ol>
 </li>
 </ul>
-<p><a class="term-link" href="#term-65">FFT</a> 是”独立小运算 + 规则访存”的教科书场景，正是 <a class="term-link" href="#term-44">iGPU</a> 的主场。</p>
+<p><a class="term-link" href="#term-65" data-term-index="4">FFT</a> 是”独立小运算 + 规则访存”的教科书场景，正是 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 的主场。</p>
 <h3 id="批量二分查找"><a href="#批量二分查找" class="headerlink" title="批量二分查找"></a>批量二分查找</h3><p><strong>Workload</strong>：1,048,576 个查询在有序数组上二分查找（命中 524,862 次）。</p>
 <table>
 <thead>
@@ -383,40 +383,40 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-64">CPU</a> serial</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> serial</td>
 <td>8.8</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-64">CPU</a> tbb_24</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> tbb_24</td>
 <td>122.7</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_device</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_device</td>
 <td><strong>444.8</strong></td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_host</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_host</td>
 <td>433.7</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_shared</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_shared</td>
 <td>433.7</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> usm_allocator</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> usm_allocator</td>
 <td>433.1</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> buffer</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> buffer</td>
 <td>427.5</td>
 </tr>
 </tbody></table>
-<p><a class="term-link" href="#term-44">iGPU</a> 最佳是 <a class="term-link" href="#term-64">CPU</a> (tbb_24) 的 <strong>3.6 倍</strong>、是串行的 50 倍。</p>
-<p><strong>为什么 <a class="term-link" href="#term-44">iGPU</a> 最快？</strong></p>
+<p><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 最佳是 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> (tbb_24) 的 <strong>3.6 倍</strong>、是串行的 50 倍。</p>
+<p><strong>为什么 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 最快？</strong></p>
 <ul>
-<li>二分查找每查询最多 log2(1048576) &#x3D; 20 步<strong>串行依赖</strong>的随机访问：下一步的 mid 要等上一步结果，<a class="term-link" href="#term-64">CPU</a> 上这是”分支预测失败 + 缓存未命中”的双重打击，串行只有 8.8 Mqueries&#x2F;s 正是单条依赖链的真实速度。<a class="term-link" href="#term-44">iGPU</a> 赢的不是”单次访问更快”（延迟测试里 <a class="term-link" href="#term-44">iGPU</a> 单次访问反而慢 3.6 倍），而是<strong>查询彼此独立</strong>：百万查询摊到数千线程，一个线程等内存时另一个在算，用线程级并行把依赖延迟整个藏掉。</li>
+<li>二分查找每查询最多 log2(1048576) &#x3D; 20 步<strong>串行依赖</strong>的随机访问：下一步的 mid 要等上一步结果，<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 上这是”分支预测失败 + 缓存未命中”的双重打击，串行只有 8.8 Mqueries&#x2F;s 正是单条依赖链的真实速度。<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 赢的不是”单次访问更快”（延迟测试里 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 单次访问反而慢 3.6 倍），而是<strong>查询彼此独立</strong>：百万查询摊到数千线程，一个线程等内存时另一个在算，用线程级并行把依赖延迟整个藏掉。</li>
 </ul>
-<h3 id="块压缩-zip"><a href="#块压缩-zip" class="headerlink" title="块压缩 (zip)"></a>块压缩 (<a class="term-link" href="#term-66">zip</a>)</h3><p><strong>Workload</strong>：128 MiB 输入 &#x2F; 2048 块的块压缩（哈希表匹配），仅压缩计时（含哈希表清零），解压回读逐字节校验；两侧压缩比同为 1.30。</p>
+<h3 id="块压缩-zip"><a href="#块压缩-zip" class="headerlink" title="块压缩 (zip)"></a>块压缩 (<a class="term-link" href="#term-66" data-term-index="10">zip</a>)</h3><p><strong>Workload</strong>：128 MiB 输入 &#x2F; 2048 块的块压缩（哈希表匹配），仅压缩计时（含哈希表清零），解压回读逐字节校验；两侧压缩比同为 1.30。</p>
 <table>
 <thead>
 <tr>
@@ -425,52 +425,52 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 </tr>
 </thead>
 <tbody><tr>
-<td><a class="term-link" href="#term-64">CPU</a> serial</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> serial</td>
 <td>533.8</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-64">CPU</a> tbb_24</td>
+<td><a class="term-link" href="#term-64" data-term-index="1">CPU</a> tbb_24</td>
 <td><strong>11169.4</strong></td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> buffer</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> buffer</td>
 <td>448.8</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_device</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_device</td>
 <td>446.9</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_host</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_host</td>
 <td>443.8</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> malloc_shared</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> malloc_shared</td>
 <td>443.3</td>
 </tr>
 <tr>
-<td><a class="term-link" href="#term-44">iGPU</a> usm_allocator</td>
+<td><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> usm_allocator</td>
 <td>442.0</td>
 </tr>
 </tbody></table>
 <ul>
-<li><a class="term-link" href="#term-64">CPU</a> (tbb_24) 是 <a class="term-link" href="#term-44">iGPU</a> 的 <strong>24.9 倍</strong>，甚至<strong>串行 <a class="term-link" href="#term-64">CPU</a>（533.8）都快过所有 <a class="term-link" href="#term-44">iGPU</a> 模式（≈447）</strong>。</li>
+<li><a class="term-link" href="#term-64" data-term-index="1">CPU</a> (tbb_24) 是 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 的 <strong>24.9 倍</strong>，甚至<strong>串行 <a class="term-link" href="#term-64" data-term-index="1">CPU</a>（533.8）都快过所有 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 模式（≈447）</strong>。</li>
 </ul>
-<p><strong>为什么连串行 <a class="term-link" href="#term-64">CPU</a> 都比 <a class="term-link" href="#term-44">iGPU</a> 快？</strong></p>
+<p><strong>为什么连串行 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 都比 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 快？</strong></p>
 <ol>
-<li><strong>块内天生串行</strong>：匹配位置只能一步步前推，命中后还要逐字节回填哈希表，块内零并行空间，<a class="term-link" href="#term-44">iGPU</a> 的海量线程在块内完全用不上；</li>
-<li><strong>并行度只有 2048</strong>：全场只有 2048 个块（每块一个 <a class="term-link" href="#term-44">iGPU</a> 工作项），摊到核显上喂不饱所有执行单元，而 24 个 <a class="term-link" href="#term-64">CPU</a> 线程吃 2048 个块绰绰有余；</li>
-<li><strong>哈希表随机访问放大缓存差距</strong>：每块一张 4096 项（16 KB）的哈希表按块散布，块内全是哈希随机读写。<a class="term-link" href="#term-64">CPU</a> 上 16 KB 轻松驻留 L1&#x2F;L2，命中即快；核显要在更大的地址空间里踩这些散落的小表。候选字比对这类<strong>数据相关分支</strong>也一样，<a class="term-link" href="#term-64">CPU</a> 的分支预测与乱序执行远比 <a class="term-link" href="#term-48">SIMT</a> 分支处理高效。</li>
+<li><strong>块内天生串行</strong>：匹配位置只能一步步前推，命中后还要逐字节回填哈希表，块内零并行空间，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 的海量线程在块内完全用不上；</li>
+<li><strong>并行度只有 2048</strong>：全场只有 2048 个块（每块一个 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 工作项），摊到核显上喂不饱所有执行单元，而 24 个 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 线程吃 2048 个块绰绰有余；</li>
+<li><strong>哈希表随机访问放大缓存差距</strong>：每块一张 4096 项（16 KB）的哈希表按块散布，块内全是哈希随机读写。<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 上 16 KB 轻松驻留 L1&#x2F;L2，命中即快；核显要在更大的地址空间里踩这些散落的小表。候选字比对这类<strong>数据相关分支</strong>也一样，<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 的分支预测与乱序执行远比 <a class="term-link" href="#term-48" data-term-index="19">SIMT</a> 分支处理高效。</li>
 </ol>
-<p>串行 <a class="term-link" href="#term-64">CPU</a> 的哈希表同样在缓存里，块内串行恰好是单核的舒适区，所以 533.8 反超全部 <a class="term-link" href="#term-44">iGPU</a> 模式也就顺理成章。</p>
-<h2 id="深挖细节"><a href="#深挖细节" class="headerlink" title="深挖细节"></a>深挖细节</h2><h3 id="iGPU-五种内存模式差异很小，malloc-device-最佳"><a href="#iGPU-五种内存模式差异很小，malloc-device-最佳" class="headerlink" title="iGPU 五种内存模式差异很小，malloc_device 最佳"></a><a class="term-link" href="#term-44">iGPU</a> 五种内存模式差异很小，<code>malloc_device</code> 最佳</h3><p>把五模式在各测试项的排名拉通看：<strong><code>malloc_device</code> 几乎全面第一</strong>：读&#x2F;写带宽、<a class="term-link" href="#term-65">FFT</a>、<a class="term-link" href="#term-46">GEMM</a>、<a class="term-link" href="#term-30">lookup</a>、延迟均为五模式最佳。仅两项例外：拷贝带宽与 <a class="term-link" href="#term-66">zip</a> 压缩由 <code>buffer</code> 以不到 3% 的微弱优势领先（77.8 vs 76.1 GB&#x2F;s、448.8 vs 446.9 MB&#x2F;s），而 <code>buffer</code> 在 <a class="term-link" href="#term-65">FFT</a>、<a class="term-link" href="#term-30">lookup</a>、延迟上又均居末位。总体差距普遍在 3–14% 以内，<strong>选型上可以放心用 <code>malloc_device</code>（<a class="term-link" href="#term-68">USM</a> device 指针），不必为模式选择过度纠结</strong>；真正决定性能的是 workload 本身。</p>
-<h3 id="延迟：CPU-单线程延迟低得多，iGPU-靠聚合吞吐翻盘"><a href="#延迟：CPU-单线程延迟低得多，iGPU-靠聚合吞吐翻盘" class="headerlink" title="延迟：CPU 单线程延迟低得多，iGPU 靠聚合吞吐翻盘"></a>延迟：<a class="term-link" href="#term-64">CPU</a> 单线程延迟低得多，<a class="term-link" href="#term-44">iGPU</a> 靠聚合吞吐翻盘</h3><p>指针追逐（4,194,304 步依赖访问，每次访问必须等上一次完成）：</p>
+<p>串行 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 的哈希表同样在缓存里，块内串行恰好是单核的舒适区，所以 533.8 反超全部 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 模式也就顺理成章。</p>
+<h2 id="深挖细节"><a href="#深挖细节" class="headerlink" title="深挖细节"></a>深挖细节</h2><h3 id="iGPU-五种内存模式差异很小，malloc-device-最佳"><a href="#iGPU-五种内存模式差异很小，malloc-device-最佳" class="headerlink" title="iGPU 五种内存模式差异很小，malloc_device 最佳"></a><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 五种内存模式差异很小，<code>malloc_device</code> 最佳</h3><p>把五模式在各测试项的排名拉通看：<strong><code>malloc_device</code> 几乎全面第一</strong>：读&#x2F;写带宽、<a class="term-link" href="#term-65" data-term-index="4">FFT</a>、<a class="term-link" href="#term-46" data-term-index="3">GEMM</a>、<a class="term-link" href="#term-30" data-term-index="11">lookup</a>、延迟均为五模式最佳。仅两项例外：拷贝带宽与 <a class="term-link" href="#term-66" data-term-index="10">zip</a> 压缩由 <code>buffer</code> 以不到 3% 的微弱优势领先（77.8 vs 76.1 GB&#x2F;s、448.8 vs 446.9 MB&#x2F;s），而 <code>buffer</code> 在 <a class="term-link" href="#term-65" data-term-index="4">FFT</a>、<a class="term-link" href="#term-30" data-term-index="11">lookup</a>、延迟上又均居末位。总体差距普遍在 3–14% 以内，<strong>选型上可以放心用 <code>malloc_device</code>（<a class="term-link" href="#term-68" data-term-index="20">USM</a> device 指针），不必为模式选择过度纠结</strong>；真正决定性能的是 workload 本身。</p>
+<h3 id="延迟：CPU-单线程延迟低得多，iGPU-靠聚合吞吐翻盘"><a href="#延迟：CPU-单线程延迟低得多，iGPU-靠聚合吞吐翻盘" class="headerlink" title="延迟：CPU 单线程延迟低得多，iGPU 靠聚合吞吐翻盘"></a>延迟：<a class="term-link" href="#term-64" data-term-index="1">CPU</a> 单线程延迟低得多，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 靠聚合吞吐翻盘</h3><p>指针追逐（4,194,304 步依赖访问，每次访问必须等上一次完成）：</p>
 <table>
 <thead>
 <tr>
 <th>视角</th>
-<th><a class="term-link" href="#term-64">CPU</a></th>
-<th><a class="term-link" href="#term-44">iGPU</a>（malloc_device 最佳）</th>
+<th><a class="term-link" href="#term-64" data-term-index="1">CPU</a></th>
+<th><a class="term-link" href="#term-44" data-term-index="2">iGPU</a>（malloc_device 最佳）</th>
 </tr>
 </thead>
 <tbody><tr>
@@ -491,8 +491,8 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 </tbody></table>
 <p>两个要点：</p>
 <ol>
-<li><strong>依赖链延迟上 <a class="term-link" href="#term-64">CPU</a> 单线程就是快 3.6 倍</strong>（91.5 vs 330.4 ns）：核显核心的依赖访问代价远高于 <a class="term-link" href="#term-64">CPU</a> 核。</li>
-<li><a class="term-link" href="#term-44">iGPU</a> 用 256 个并行追逐者把聚合吞吐做到 417.6 Maccess&#x2F;s，是 <a class="term-link" href="#term-64">CPU</a> 24 线程的 2.9 倍。表中”2.4 ns”是<strong>吞吐摊薄值（1&#x2F;吞吐）不是真实延迟</strong>，并行度把等待藏起来了，单条依赖链的代价依然在那里。这解释了为什么 <a class="term-link" href="#term-44">iGPU</a> 赢 <a class="term-link" href="#term-65">FFT</a>&#x2F;<a class="term-link" href="#term-30">lookup</a>（吞吐型）却输 <a class="term-link" href="#term-66">zip</a>（依赖+分支型）。</li>
+<li><strong>依赖链延迟上 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 单线程就是快 3.6 倍</strong>（91.5 vs 330.4 ns）：核显核心的依赖访问代价远高于 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 核。</li>
+<li><a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 用 256 个并行追逐者把聚合吞吐做到 417.6 Maccess&#x2F;s，是 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 24 线程的 2.9 倍。表中”2.4 ns”是<strong>吞吐摊薄值（1&#x2F;吞吐）不是真实延迟</strong>，并行度把等待藏起来了，单条依赖链的代价依然在那里。这解释了为什么 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 赢 <a class="term-link" href="#term-65" data-term-index="4">FFT</a>&#x2F;<a class="term-link" href="#term-30" data-term-index="11">lookup</a>（吞吐型）却输 <a class="term-link" href="#term-66" data-term-index="10">zip</a>（依赖+分支型）。</li>
 </ol>
 <h3 id="主机↔设备传输：256-MiB-约-16-5-ms"><a href="#主机↔设备传输：256-MiB-约-16-5-ms" class="headerlink" title="主机↔设备传输：256 MiB 约 16.5 ms"></a>主机↔设备传输：256 MiB 约 16.5 ms</h3><table>
 <thead>
@@ -513,8 +513,8 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 <td>16.4 GB&#x2F;s</td>
 </tr>
 </tbody></table>
-<p>虽然 <a class="term-link" href="#term-44">iGPU</a> 共享 <a class="term-link" href="#term-50">DDR5</a>、拷贝带宽账面上与 <a class="term-link" href="#term-64">CPU</a> 持平，但 <a class="term-link" href="#term-43">SYCL</a> 的 <code>malloc_device</code> 路径下<strong>数据进出”设备”仍要走这笔显式拷贝</strong>（read&#x2F;write 指标不含它）。对一次性小任务，这 16 ms 级固定开销足以吃掉 <a class="term-link" href="#term-44">iGPU</a> 的算力优势；<code>malloc_shared</code> &#x2F; <code>usm_allocator</code> 免显式拷贝，代价是各项带宽略低（差距同样在 5% 内）。</p>
-<h3 id="CPU-拷贝阶梯：小尺寸靠缓存，大尺寸回落-DRAM"><a href="#CPU-拷贝阶梯：小尺寸靠缓存，大尺寸回落-DRAM" class="headerlink" title="CPU 拷贝阶梯：小尺寸靠缓存，大尺寸回落 DRAM"></a><a class="term-link" href="#term-64">CPU</a> 拷贝阶梯：小尺寸靠缓存，大尺寸回落 <a class="term-link" href="#term-53">DRAM</a></h3><p><a class="term-link" href="#term-64">CPU</a> 侧四档拷贝带宽（<code>copy = 2×字节数 / 时间</code>）：</p>
+<p>虽然 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 共享 <a class="term-link" href="#term-50" data-term-index="12">DDR5</a>、拷贝带宽账面上与 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 持平，但 <a class="term-link" href="#term-43" data-term-index="6">SYCL</a> 的 <code>malloc_device</code> 路径下<strong>数据进出”设备”仍要走这笔显式拷贝</strong>（read&#x2F;write 指标不含它）。对一次性小任务，这 16 ms 级固定开销足以吃掉 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 的算力优势；<code>malloc_shared</code> &#x2F; <code>usm_allocator</code> 免显式拷贝，代价是各项带宽略低（差距同样在 5% 内）。</p>
+<h3 id="CPU-拷贝阶梯：小尺寸靠缓存，大尺寸回落-DRAM"><a href="#CPU-拷贝阶梯：小尺寸靠缓存，大尺寸回落-DRAM" class="headerlink" title="CPU 拷贝阶梯：小尺寸靠缓存，大尺寸回落 DRAM"></a><a class="term-link" href="#term-64" data-term-index="1">CPU</a> 拷贝阶梯：小尺寸靠缓存，大尺寸回落 <a class="term-link" href="#term-53" data-term-index="21">DRAM</a></h3><p><a class="term-link" href="#term-64" data-term-index="1">CPU</a> 侧四档拷贝带宽（<code>copy = 2×字节数 / 时间</code>）：</p>
 <table>
 <thead>
 <tr>
@@ -544,65 +544,55 @@ document.addEventListener("pjax:complete", window.reset);document.addEventListen
 <td>79.1</td>
 </tr>
 </tbody></table>
-<p>小尺寸完全命中缓存时能冲到 200+ GB&#x2F;s；256 MiB 落回 <a class="term-link" href="#term-53">DRAM</a> 后就是 47–79 GB&#x2F;s，与前面的全尺寸带宽一致。<a class="term-link" href="#term-62">tbb</a> 在 32 KiB&#x2F;512 KiB 反而不如串行（线程分发开销 &gt; 并行收益），8 MiB 档并行收益最大（224.0）。</p>
-<h3 id="低延迟实时计算新选择：零拷贝为何偏爱-iGPU"><a href="#低延迟实时计算新选择：零拷贝为何偏爱-iGPU" class="headerlink" title="低延迟实时计算新选择：零拷贝为何偏爱 iGPU"></a>低延迟实时计算新选择：零拷贝为何偏爱 <a class="term-link" href="#term-44">iGPU</a></h3><p>上面几节的「带宽」「延迟」「拷贝」各自散落在不同测试里，主机↔设备传输一趟 256 MiB 要 16.5 ms、拷贝带宽与 <a class="term-link" href="#term-64">CPU</a> 打平在 ≈78 GB&#x2F;s，合起来其实指向同一个问题：这类 <a class="term-link" href="#term-43">SYCL</a> 用法到底适合哪类 <a class="term-link" href="#term-63">GPU</a>。先把内存模型摆清楚，<a class="term-link" href="#term-43">SYCL</a> 分三类：host（系统内存）、device（显存&#x2F;<a class="term-link" href="#term-54">VRAM</a>）、shared（驱动在两者间自动迁移，仍含隐式拷贝）。多数 <a class="term-link" href="#term-63">GPU</a> 加速默认走 device 路线，数据在系统内存与显存间来回搬运，开销不小；shared 看似省事，迁移仍由驱动代办，拷贝换了个形式依然存在。而数据若全程留在 host 内存，这部分开销即可归零，对「内存即显存」的 285K 核显正中下怀：<a class="term-link" href="#term-44">iGPU</a> 经 Ring Bus（而非 <a class="term-link" href="#term-51">PCIe</a>）直连 <a class="term-link" href="#term-64">CPU</a> 与内存控制器，独享一小块 L2 缓存，访存路径短；<a class="term-link" href="#term-45">dGPU</a> 走 <a class="term-link" href="#term-51">PCIe</a>，延迟高且必须频繁搬数，零拷贝的甜头在它身上吃不到。</p>
-<h2 id="结论与选型建议"><a href="#结论与选型建议" class="headerlink" title="结论与选型建议"></a>结论与选型建议</h2><p><strong>在 285K 上，<a class="term-link" href="#term-44">iGPU</a> 不是”小显卡”，而是一个”另一套脾气的协处理器”：</strong></p>
+<p>小尺寸完全命中缓存时能冲到 200+ GB&#x2F;s；256 MiB 落回 <a class="term-link" href="#term-53" data-term-index="21">DRAM</a> 后就是 47–79 GB&#x2F;s，与前面的全尺寸带宽一致。<a class="term-link" href="#term-62" data-term-index="15">tbb</a> 在 32 KiB&#x2F;512 KiB 反而不如串行（线程分发开销 &gt; 并行收益），8 MiB 档并行收益最大（224.0）。</p>
+<h3 id="低延迟实时计算新选择：零拷贝为何偏爱-iGPU"><a href="#低延迟实时计算新选择：零拷贝为何偏爱-iGPU" class="headerlink" title="低延迟实时计算新选择：零拷贝为何偏爱 iGPU"></a>低延迟实时计算新选择：零拷贝为何偏爱 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a></h3><p>上面几节的「带宽」「延迟」「拷贝」各自散落在不同测试里，主机↔设备传输一趟 256 MiB 要 16.5 ms、拷贝带宽与 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 打平在 ≈78 GB&#x2F;s，合起来其实指向同一个问题：这类 <a class="term-link" href="#term-43" data-term-index="6">SYCL</a> 用法到底适合哪类 <a class="term-link" href="#term-63" data-term-index="22">GPU</a>。先把内存模型摆清楚，<a class="term-link" href="#term-43" data-term-index="6">SYCL</a> 分三类：host（系统内存）、device（显存&#x2F;<a class="term-link" href="#term-54" data-term-index="23">VRAM</a>）、shared（驱动在两者间自动迁移，仍含隐式拷贝）。多数 <a class="term-link" href="#term-63" data-term-index="22">GPU</a> 加速默认走 device 路线，数据在系统内存与显存间来回搬运，开销不小；shared 看似省事，迁移仍由驱动代办，拷贝换了个形式依然存在。而数据若全程留在 host 内存，这部分开销即可归零，对「内存即显存」的 285K 核显正中下怀：<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 经 Ring Bus（而非 <a class="term-link" href="#term-51" data-term-index="24">PCIe</a>）直连 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 与内存控制器，独享一小块 L2 缓存，访存路径短；<a class="term-link" href="#term-45" data-term-index="25">dGPU</a> 走 <a class="term-link" href="#term-51" data-term-index="24">PCIe</a>，延迟高且必须频繁搬数，零拷贝的甜头在它身上吃不到。</p>
+<h2 id="结论与选型建议"><a href="#结论与选型建议" class="headerlink" title="结论与选型建议"></a>结论与选型建议</h2><p><strong>在 285K 上，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 不是”小显卡”，而是一个”另一套脾气的协处理器”：</strong></p>
 <ol>
-<li><strong>吞吐型规则并行优先丢给 <a class="term-link" href="#term-44">iGPU</a></strong>：<a class="term-link" href="#term-65">FFT</a>（3.4×）、批量查找（3.6×）、顺序大块写入（1.6×）这种无复杂控制流是<a class="term-link" href="#term-63">GPU</a>友好型算法；聚合访存吞吐也能到 <a class="term-link" href="#term-64">CPU</a> 24 线程的近 3 倍。</li>
-<li><strong>分支密集 &#x2F; 依赖链重的活留在 <a class="term-link" href="#term-64">CPU</a></strong>：压缩（24.9×，串行都赢）、依赖型延迟（快 3.6 倍）是它的绝对领域；分块 <a class="term-link" href="#term-46">GEMM</a> 这类 <a class="term-link" href="#term-47">SIMD</a> 友好算力也以 2.2× 领先核显。</li>
-<li><strong>五种 <a class="term-link" href="#term-43">SYCL</a> 内存模式不是性能旋钮</strong>：差异 3–14%，<code>malloc_device</code> 几乎全面最佳（仅拷贝带宽与 <a class="term-link" href="#term-66">zip</a> 由 <code>buffer</code> 微弱领先）；按编程便利性选即可。</li>
-<li><strong>共享内存是 <a class="term-link" href="#term-44">iGPU</a> 的结构现实</strong>：拷贝带宽与 <a class="term-link" href="#term-64">CPU</a> 打平（≈78 GB&#x2F;s）说明”显存带宽”这个独立维度在这里不存在，<a class="term-link" href="#term-44">iGPU</a> 赢的从来不是带宽，是<strong>并发结构</strong>。</li>
-<li><strong>CPU-iGPU 协同计算可以将双方优势发挥到最大</strong>：吞吐型阶段交给 <a class="term-link" href="#term-44">iGPU</a>、依赖与分支阶段留给 <a class="term-link" href="#term-64">CPU</a>，按 workload 特性拆分协作，两端各取所长。</li>
+<li><strong>吞吐型规则并行优先丢给 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a></strong>：<a class="term-link" href="#term-65" data-term-index="4">FFT</a>（3.4×）、批量查找（3.6×）、顺序大块写入（1.6×）这种无复杂控制流是<a class="term-link" href="#term-63" data-term-index="22">GPU</a>友好型算法；聚合访存吞吐也能到 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 24 线程的近 3 倍。</li>
+<li><strong>分支密集 &#x2F; 依赖链重的活留在 <a class="term-link" href="#term-64" data-term-index="1">CPU</a></strong>：压缩（24.9×，串行都赢）、依赖型延迟（快 3.6 倍）是它的绝对领域；分块 <a class="term-link" href="#term-46" data-term-index="3">GEMM</a> 这类 <a class="term-link" href="#term-47" data-term-index="16">SIMD</a> 友好算力也以 2.2× 领先核显。</li>
+<li><strong>五种 <a class="term-link" href="#term-43" data-term-index="6">SYCL</a> 内存模式不是性能旋钮</strong>：差异 3–14%，<code>malloc_device</code> 几乎全面最佳（仅拷贝带宽与 <a class="term-link" href="#term-66" data-term-index="10">zip</a> 由 <code>buffer</code> 微弱领先）；按编程便利性选即可。</li>
+<li><strong>共享内存是 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 的结构现实</strong>：拷贝带宽与 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 打平（≈78 GB&#x2F;s）说明”显存带宽”这个独立维度在这里不存在，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 赢的从来不是带宽，是<strong>并发结构</strong>。</li>
+<li><strong>CPU-iGPU 协同计算可以将双方优势发挥到最大</strong>：吞吐型阶段交给 <a class="term-link" href="#term-44" data-term-index="2">iGPU</a>、依赖与分支阶段留给 <a class="term-link" href="#term-64" data-term-index="1">CPU</a>，按 workload 特性拆分协作，两端各取所长。</li>
 </ol>
 <h2 id="测试局限"><a href="#测试局限" class="headerlink" title="测试局限"></a>测试局限</h2><ul>
 <li>单机、单次运行，数值为 warmup 后 3 次重复<strong>取最优值</strong>，非多次统计均值，绝对值有波动空间；结论看相对量级。</li>
-<li><a class="term-link" href="#term-64">CPU</a> 侧 <a class="term-link" href="#term-65">FFT</a> 计时含 2n 个 float 输入拷贝，<a class="term-link" href="#term-44">iGPU</a> 侧为就地 23 次提交不含同等拷贝，该项 <a class="term-link" href="#term-64">CPU</a> 处于轻微不利口径（量级结论不受影响）。</li>
+<li><a class="term-link" href="#term-64" data-term-index="1">CPU</a> 侧 <a class="term-link" href="#term-65" data-term-index="4">FFT</a> 计时含 2n 个 float 输入拷贝，<a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 侧为就地 23 次提交不含同等拷贝，该项 <a class="term-link" href="#term-64" data-term-index="1">CPU</a> 处于轻微不利口径（量级结论不受影响）。</li>
 <li><code>buffer</code> 模式的隐式 H2D&#x2F;D2H 由运行时管理、不计入指标；<code>malloc_device</code> 的 H2D&#x2F;D2H 单列（上文传输小节）。</li>
-<li>仅测本机 Intel 核显：工具不支持 <a class="term-link" href="#term-45">dGPU</a> 与 AMD <a class="term-link" href="#term-44">iGPU</a>，结论不可外推到独显或其他厂商核显。</li>
-<li><a class="term-link" href="#term-64">CPU</a> 并行固定 24 线程（<code>tbb_24</code>）；不同线程数、不同 <a class="term-link" href="#term-41">BIOS</a> 功耗墙下数值会变化。</li>
+<li>仅测本机 Intel 核显：工具不支持 <a class="term-link" href="#term-45" data-term-index="25">dGPU</a> 与 AMD <a class="term-link" href="#term-44" data-term-index="2">iGPU</a>，结论不可外推到独显或其他厂商核显。</li>
+<li><a class="term-link" href="#term-64" data-term-index="1">CPU</a> 并行固定 24 线程（<code>tbb_24</code>）；不同线程数、不同 <a class="term-link" href="#term-41" data-term-index="26">BIOS</a> 功耗墙下数值会变化。</li>
 </ul>
 <h2 id="复现方式"><a href="#复现方式" class="headerlink" title="复现方式"></a>复现方式</h2><figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs text">./run_bench.cmd dpcpp                    # iGPU（SYCL）侧<br>./run_bench.cmd cpu --threads 24         # CPU 侧<br>python ./tools/bench_to_labplot.py       # 汇总为宽表 CSV + LabPlot 工程<br></code></pre></td></tr></table></figure>
 
-<p>测试工程要求：Intel 6 代及以后带核显的酷睿 <a class="term-link" href="#term-64">CPU</a>、支持 <a class="term-link" href="#term-49">AVX2</a>；不含 <a class="term-link" href="#term-45">dGPU</a> &#x2F; AMD <a class="term-link" href="#term-44">iGPU</a> 支持。</p>
+<p>测试工程要求：Intel 6 代及以后带核显的酷睿 <a class="term-link" href="#term-64" data-term-index="1">CPU</a>、支持 <a class="term-link" href="#term-49" data-term-index="14">AVX2</a>；不含 <a class="term-link" href="#term-45" data-term-index="25">dGPU</a> &#x2F; AMD <a class="term-link" href="#term-44" data-term-index="2">iGPU</a> 支持。</p>
 <p>完整测试工程（源码 + 运行脚本 + 结果转换工具）已开源：<a target="_blank" rel="noopener" href="https://github.com/1992724048/sycl-igpu-benchmark">github.com&#x2F;1992724048&#x2F;sycl-igpu-benchmark</a>。</p>
 <hr class="terms-sep">
 <div class="terms-title">术语表</div>
 <ol class="terms-ref">
-    <li id="term-1"><a href="https://visualstudio.microsoft.com/" target="_blank" rel="noopener noreferrer">Visual Studio</a></li>
-    <li id="term-28"><a href="https://www.intel.com/content/www/us/en/developer/tools/oneapi/overview.html" target="_blank" rel="noopener noreferrer">oneAPI</a></li>
-    <li id="term-29"><a href="https://oneapi-src.github.io/oneTBB/" target="_blank" rel="noopener noreferrer">oneTBB</a></li>
-    <li id="term-30"><a href="https://en.wikipedia.org/wiki/Binary_search_algorithm" target="_blank" rel="noopener noreferrer">lookup</a></li>
-    <li id="term-32"><a href="https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html" target="_blank" rel="noopener noreferrer">DPC++</a></li>
-    <li id="term-41"><a href="https://en.wikipedia.org/wiki/BIOS" target="_blank" rel="noopener noreferrer">BIOS</a></li>
-    <li id="term-43"><a href="https://www.khronos.org/sycl/" target="_blank" rel="noopener noreferrer">SYCL</a></li>
-    <li id="term-44"><a href="https://en.wikipedia.org/wiki/Integrated_graphics_processor" target="_blank" rel="noopener noreferrer">iGPU</a></li>
-    <li id="term-45"><a href="https://en.wikipedia.org/wiki/Graphics_processing_unit" target="_blank" rel="noopener noreferrer">dGPU</a></li>
-    <li id="term-46"><a href="https://en.wikipedia.org/wiki/Matrix_multiplication" target="_blank" rel="noopener noreferrer">GEMM</a></li>
-    <li id="term-47"><a href="https://en.wikipedia.org/wiki/SIMD" target="_blank" rel="noopener noreferrer">SIMD</a></li>
-    <li id="term-48"><a href="https://en.wikipedia.org/wiki/SIMT" target="_blank" rel="noopener noreferrer">SIMT</a></li>
-    <li id="term-49"><a href="https://en.wikipedia.org/wiki/Advanced_Vector_Extensions" target="_blank" rel="noopener noreferrer">AVX2</a></li>
-    <li id="term-50"><a href="https://en.wikipedia.org/wiki/DDR5_SDRAM" target="_blank" rel="noopener noreferrer">DDR5</a></li>
-    <li id="term-51"><a href="https://en.wikipedia.org/wiki/PCI_Express" target="_blank" rel="noopener noreferrer">PCIe</a></li>
-    <li id="term-52"><a href="https://en.wikipedia.org/wiki/Single-precision_floating-point_format" target="_blank" rel="noopener noreferrer">FP32</a></li>
-    <li id="term-53"><a href="https://en.wikipedia.org/wiki/DRAM" target="_blank" rel="noopener noreferrer">DRAM</a></li>
-    <li id="term-54"><a href="https://en.wikipedia.org/wiki/Video_memory" target="_blank" rel="noopener noreferrer">VRAM</a></li>
-    <li id="term-62"><a href="https://oneapi-src.github.io/oneTBB/" target="_blank" rel="noopener noreferrer">TBB</a></li>
-    <li id="term-63"><a href="https://en.wikipedia.org/wiki/Graphics_processing_unit" target="_blank" rel="noopener noreferrer">GPU</a></li>
-    <li id="term-64"><a href="https://en.wikipedia.org/wiki/Central_processing_unit" target="_blank" rel="noopener noreferrer">CPU</a></li>
-    <li id="term-65"><a href="https://en.wikipedia.org/wiki/Fast_Fourier_transform" target="_blank" rel="noopener noreferrer">FFT</a></li>
-    <li id="term-66"><a href="https://en.wikipedia.org/wiki/ZIP_(file_format)" target="_blank" rel="noopener noreferrer">zip</a></li>
-    <li id="term-67"><a href="https://en.wikipedia.org/wiki/Fused_multiply%E2%80%93add" target="_blank" rel="noopener noreferrer">FMA</a></li>
-    <li id="term-68"><a href="https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_unified_shared_memory_usm" target="_blank" rel="noopener noreferrer">USM</a></li>
-    <li id="term-69"><a href="https://en.wikipedia.org/wiki/CPU_cache" target="_blank" rel="noopener noreferrer">RFO</a></li>
-</ol><div id="paginator"></div></div><div id="post-footer"><div id="pages" style="justify-content: flex-end"><div class="footer-link" style="width: 50%;right:1px;border-left:1px #fe2 solid"><a href="/2026/08/14/xorstr-string-encryption/">编译期 XOR 字符串加密：stdpp::xorstr 设计与实现 上一篇 →</a></div></div></div><div id="comments"><div id="giscus"></div></div></div><div class="bottom-btn"><div class="bottom-btn-stack"><button class="i-top" id="to-top" type="button" onClick="scrolls.scrolltop();" title="回到顶部" aria-label="回到顶部" style="opacity: 0; display: none;"><svg class="i-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button><button class="i-back" id="to-back" type="button" onclick="history.back();" title="返回上一页" aria-label="返回上一页"><svg class="i-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg></button><button class="i-index" id="to-index" type="button" onClick="tocControl.change()" title="文章目录" aria-label="文章目录"><span class="tocBtnIconBar"></span><span class="tocBtnIconBar"></span><span class="tocBtnIconBar"></span></button><button class="i-color" id="color-mode" type="button" onClick="colorMode.change()" title="切换主题" aria-label="切换主题"><svg class="i-icon i-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg><svg class="i-icon i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg></button></div><div class="toolbox"><button class="toolbox-toggle" id="to-toolbox" type="button" onclick="toolbox.toggle()" aria-expanded="false" aria-controls="toolbox-items" title="工具箱" aria-label="工具箱"><svg class="i-icon i-toolbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"></path><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><path d="M2 13h20"></path></svg></button><div class="toolbox-items" id="toolbox-items"><button class="toolbox-item toolbox-annotate" type="button" onclick="toolbox.annotate()" title="标注：选中文字后点击" aria-label="标注：选中文字后点击"><svg class="i-icon i-annotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"></path><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path></svg></button><button class="toolbox-item toolbox-share" type="button" onclick="toolbox.share()" title="分享本文" aria-label="分享本文"><svg class="i-icon i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"></path></svg><svg class="i-icon i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button><button class="toolbox-item toolbox-favorite" type="button" onclick="toolbox.favorite()" title="收藏本文" aria-label="收藏本文" aria-pressed="false" data-label-default="收藏本文" data-label-saved="已收藏，点击取消"><svg class="i-icon i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button></div></div><div id="annotate-toolbar" role="toolbar" aria-hidden="true"><button class="at-btn at-annotate" type="button" title="标注：选中文字后点击" aria-label="标注：选中文字后点击"><svg class="at-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"></path><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path></svg></button><button class="at-btn at-clear" type="button" title="清除" aria-label="清除"><svg class="at-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg></button><button class="at-btn at-copy" type="button" title="复制" aria-label="复制"><svg class="at-icon i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="at-icon i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button><button class="at-btn at-search" type="button" title="搜索" aria-label="搜索"><svg class="at-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg></button><button class="at-btn at-color" type="button" data-color="yellow" title="标注颜色" aria-label="标注颜色"><span class="at-color-fill"></span></button><div class="at-colors"><button class="at-color-opt active" type="button" data-color="yellow" title="yellow" aria-label="yellow"></button><button class="at-color-opt" type="button" data-color="green" title="green" aria-label="green"></button><button class="at-color-opt" type="button" data-color="blue" title="blue" aria-label="blue"></button><button class="at-color-opt" type="button" data-color="pink" title="pink" aria-label="pink"></button><button class="at-color-opt" type="button" data-color="orange" title="orange" aria-label="orange"></button></div></div></div></article><aside><div id="about"><a href="/" id="logo"><img src="https://github.com/1992724048.png" alt="遂沫'Blog" style="margin:0;border-radius:0;"></a><h1 id="Dr"><a href="/">遂沫</a></h1><div id="description"><p>嗯~ o(*￣▽￣*)o</p></div></div><div id="aside-block"><div id="toc-div"><h1>目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E7%BB%93%E6%9E%9C"><span class="toc-number">1.</span> <span class="toc-text">测试结果</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E5%B9%B3%E5%8F%B0%E4%B8%8E%E7%BB%86%E8%8A%82"><span class="toc-number">2.</span> <span class="toc-text">测试平台与细节</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E9%A1%B9%E7%9B%AE%E5%AF%B9%E6%AF%94"><span class="toc-number">3.</span> <span class="toc-text">测试项目对比</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%86%85%E5%AD%98%E5%B8%A6%E5%AE%BD"><span class="toc-number">3.1.</span> <span class="toc-text">内存带宽</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#GEMM-%E9%80%9A%E7%94%A8%E7%9F%A9%E9%98%B5%E4%B9%98"><span class="toc-number">3.2.</span> <span class="toc-text">GEMM (通用矩阵乘)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#FFT-%E5%BF%AB%E9%80%9F%E5%82%85%E9%87%8C%E5%8F%B6%E5%8F%98%E6%8D%A2"><span class="toc-number">3.3.</span> <span class="toc-text">FFT (快速傅里叶变换)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%89%B9%E9%87%8F%E4%BA%8C%E5%88%86%E6%9F%A5%E6%89%BE"><span class="toc-number">3.4.</span> <span class="toc-text">批量二分查找</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9D%97%E5%8E%8B%E7%BC%A9-zip"><span class="toc-number">3.5.</span> <span class="toc-text">块压缩 (zip)</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B7%B1%E6%8C%96%E7%BB%86%E8%8A%82"><span class="toc-number">4.</span> <span class="toc-text">深挖细节</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#iGPU-%E4%BA%94%E7%A7%8D%E5%86%85%E5%AD%98%E6%A8%A1%E5%BC%8F%E5%B7%AE%E5%BC%82%E5%BE%88%E5%B0%8F%EF%BC%8Cmalloc-device-%E6%9C%80%E4%BD%B3"><span class="toc-number">4.1.</span> <span class="toc-text">iGPU 五种内存模式差异很小，malloc_device 最佳</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%BB%B6%E8%BF%9F%EF%BC%9ACPU-%E5%8D%95%E7%BA%BF%E7%A8%8B%E5%BB%B6%E8%BF%9F%E4%BD%8E%E5%BE%97%E5%A4%9A%EF%BC%8CiGPU-%E9%9D%A0%E8%81%9A%E5%90%88%E5%90%9E%E5%90%90%E7%BF%BB%E7%9B%98"><span class="toc-number">4.2.</span> <span class="toc-text">延迟：CPU 单线程延迟低得多，iGPU 靠聚合吞吐翻盘</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BB%E6%9C%BA%E2%86%94%E8%AE%BE%E5%A4%87%E4%BC%A0%E8%BE%93%EF%BC%9A256-MiB-%E7%BA%A6-16-5-ms"><span class="toc-number">4.3.</span> <span class="toc-text">主机↔设备传输：256 MiB 约 16.5 ms</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#CPU-%E6%8B%B7%E8%B4%9D%E9%98%B6%E6%A2%AF%EF%BC%9A%E5%B0%8F%E5%B0%BA%E5%AF%B8%E9%9D%A0%E7%BC%93%E5%AD%98%EF%BC%8C%E5%A4%A7%E5%B0%BA%E5%AF%B8%E5%9B%9E%E8%90%BD-DRAM"><span class="toc-number">4.4.</span> <span class="toc-text">CPU 拷贝阶梯：小尺寸靠缓存，大尺寸回落 DRAM</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BD%8E%E5%BB%B6%E8%BF%9F%E5%AE%9E%E6%97%B6%E8%AE%A1%E7%AE%97%E6%96%B0%E9%80%89%E6%8B%A9%EF%BC%9A%E9%9B%B6%E6%8B%B7%E8%B4%9D%E4%B8%BA%E4%BD%95%E5%81%8F%E7%88%B1-iGPU"><span class="toc-number">4.5.</span> <span class="toc-text">低延迟实时计算新选择：零拷贝为何偏爱 iGPU</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E8%AE%BA%E4%B8%8E%E9%80%89%E5%9E%8B%E5%BB%BA%E8%AE%AE"><span class="toc-number">5.</span> <span class="toc-text">结论与选型建议</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E5%B1%80%E9%99%90"><span class="toc-number">6.</span> <span class="toc-text">测试局限</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%A4%8D%E7%8E%B0%E6%96%B9%E5%BC%8F"><span class="toc-number">7.</span> <span class="toc-text">复现方式</span></a></li></ol></div></div><footer><nobr><span class="icp-title"><i class="fa-regular fa-copyright"></i> 2026 遂沫</span><a class="icp-content" target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh">CC BY-NC-SA 4.0</a></nobr><br><nobr>构建自 <a target="_blank" rel="noopener" href="http://hexo.io">Hexo</a></nobr><wbr><nobr> 使用主题 <a target="_blank" rel="noopener" href="https://github.com/Yue-plus/hexo-theme-arknights">Arknights</a></nobr><wbr><nobr> 主题作者 <a target="_blank" rel="noopener" href="https://github.com/Yue-plus">Yue_plus</a> & <a target="_blank" rel="noopener" href="https://github.com/1992724048">遂沫</a></nobr><wbr><nobr> 构建时间<script>const buildTime = new Date("2026-09-23T19:46:23.918Z");
-document.write(' ' + buildTime.toLocaleString());</script></nobr></footer></aside></main><canvas id="canvas-dust"></canvas><script>(function() {
-  var normalTitle = document.title;
-  var leaveTitle = '♿冲刺!冲刺!♿';
-  document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      document.title = leaveTitle;
-    } else {
-      document.title = normalTitle;
-    }
-  });
-})();</script></body></html>
+    <li id="term-64" data-term-index="1"><a href="https://en.wikipedia.org/wiki/Central_processing_unit" target="_blank" rel="noopener noreferrer">CPU</a></li>
+    <li id="term-44" data-term-index="2"><a href="https://en.wikipedia.org/wiki/Integrated_graphics_processor" target="_blank" rel="noopener noreferrer">iGPU</a></li>
+    <li id="term-46" data-term-index="3"><a href="https://en.wikipedia.org/wiki/Matrix_multiplication" target="_blank" rel="noopener noreferrer">GEMM</a></li>
+    <li id="term-65" data-term-index="4"><a href="https://en.wikipedia.org/wiki/Fast_Fourier_transform" target="_blank" rel="noopener noreferrer">FFT</a></li>
+    <li id="term-28" data-term-index="5"><a href="https://www.intel.com/content/www/us/en/developer/tools/oneapi/overview.html" target="_blank" rel="noopener noreferrer">oneAPI</a></li>
+    <li id="term-43" data-term-index="6"><a href="https://www.khronos.org/sycl/" target="_blank" rel="noopener noreferrer">SYCL</a></li>
+    <li id="term-32" data-term-index="7"><a href="https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html" target="_blank" rel="noopener noreferrer">DPC++</a></li>
+    <li id="term-29" data-term-index="8"><a href="https://oneapi-src.github.io/oneTBB/" target="_blank" rel="noopener noreferrer">oneTBB</a></li>
+    <li id="term-1" data-term-index="9"><a href="https://visualstudio.microsoft.com/" target="_blank" rel="noopener noreferrer">Visual Studio</a></li>
+    <li id="term-66" data-term-index="10"><a href="https://en.wikipedia.org/wiki/ZIP_(file_format)" target="_blank" rel="noopener noreferrer">zip</a></li>
+    <li id="term-30" data-term-index="11"><a href="https://en.wikipedia.org/wiki/Binary_search_algorithm" target="_blank" rel="noopener noreferrer">lookup</a></li>
+    <li id="term-50" data-term-index="12"><a href="https://en.wikipedia.org/wiki/DDR5_SDRAM" target="_blank" rel="noopener noreferrer">DDR5</a></li>
+    <li id="term-69" data-term-index="13"><a href="https://en.wikipedia.org/wiki/CPU_cache" target="_blank" rel="noopener noreferrer">RFO</a></li>
+    <li id="term-49" data-term-index="14"><a href="https://en.wikipedia.org/wiki/Advanced_Vector_Extensions" target="_blank" rel="noopener noreferrer">AVX2</a></li>
+    <li id="term-62" data-term-index="15"><a href="https://oneapi-src.github.io/oneTBB/" target="_blank" rel="noopener noreferrer">TBB</a></li>
+    <li id="term-47" data-term-index="16"><a href="https://en.wikipedia.org/wiki/SIMD" target="_blank" rel="noopener noreferrer">SIMD</a></li>
+    <li id="term-67" data-term-index="17"><a href="https://en.wikipedia.org/wiki/Fused_multiply%E2%80%93add" target="_blank" rel="noopener noreferrer">FMA</a></li>
+    <li id="term-52" data-term-index="18"><a href="https://en.wikipedia.org/wiki/Single-precision_floating-point_format" target="_blank" rel="noopener noreferrer">FP32</a></li>
+    <li id="term-48" data-term-index="19"><a href="https://en.wikipedia.org/wiki/SIMT" target="_blank" rel="noopener noreferrer">SIMT</a></li>
+    <li id="term-68" data-term-index="20"><a href="https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_unified_shared_memory_usm" target="_blank" rel="noopener noreferrer">USM</a></li>
+    <li id="term-53" data-term-index="21"><a href="https://en.wikipedia.org/wiki/DRAM" target="_blank" rel="noopener noreferrer">DRAM</a></li>
+    <li id="term-63" data-term-index="22"><a href="https://en.wikipedia.org/wiki/Graphics_processing_unit" target="_blank" rel="noopener noreferrer">GPU</a></li>
+    <li id="term-54" data-term-index="23"><a href="https://en.wikipedia.org/wiki/Video_memory" target="_blank" rel="noopener noreferrer">VRAM</a></li>
+    <li id="term-51" data-term-index="24"><a href="https://en.wikipedia.org/wiki/PCI_Express" target="_blank" rel="noopener noreferrer">PCIe</a></li>
+    <li id="term-45" data-term-index="25"><a href="https://en.wikipedia.org/wiki/Graphics_processing_unit" target="_blank" rel="noopener noreferrer">dGPU</a></li>
+    <li id="term-41" data-term-index="26"><a href="https://en.wikipedia.org/wiki/BIOS" target="_blank" rel="noopener noreferrer">BIOS</a></li>
+</ol><div id="paginator"></div></div><div id="post-footer"><div id="pages" style="justify-content: flex-end"><div class="footer-link" style="width: 50%;right:1px;border-left:1px #fe2 solid"><a href="/2026/08/14/ai-programming-journey/">我对vibe coding的看法和观点 上一篇 →</a></div></div></div><div id="comments"><div id="giscus"></div></div></div><div class="bottom-btn"><div class="bottom-btn-stack"><button class="i-top" id="to-top" type="button" onClick="scrolls.scrolltop();" title="回到顶部" aria-label="回到顶部" style="opacity: 0; display: none;"><svg class="i-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button><button class="i-back" id="to-back" type="button" onclick="history.back();" title="返回上一页" aria-label="返回上一页"><svg class="i-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg></button><button class="i-index" id="to-index" type="button" onClick="tocControl.change()" title="文章目录" aria-label="文章目录"><span class="tocBtnIconBar"></span><span class="tocBtnIconBar"></span><span class="tocBtnIconBar"></span></button><button class="i-color" id="color-mode" type="button" onClick="colorMode.change()" title="切换主题" aria-label="切换主题"><svg class="i-icon i-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg><svg class="i-icon i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg></button></div><div class="toolbox"><button class="toolbox-toggle" id="to-toolbox" type="button" data-action="toolbox" aria-expanded="false" aria-controls="toolbox-items" title="工具箱" aria-label="工具箱"><svg class="i-icon i-toolbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"></path><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><path d="M2 13h20"></path></svg></button><div class="toolbox-items" id="toolbox-items"><button class="toolbox-item toolbox-annotate" type="button" data-action="annotate" title="标注：选中文字后点击" aria-label="标注：选中文字后点击" aria-pressed="false"><svg class="i-icon i-annotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"></path><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path></svg></button><button class="toolbox-item toolbox-share" type="button" data-action="share" title="分享本文" aria-label="分享本文" data-label-copied="文章链接已复制"><svg class="i-icon i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"></path></svg><svg class="i-icon i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button><button class="toolbox-item toolbox-favorite" type="button" data-action="favorite" title="收藏本文" aria-label="收藏本文" aria-pressed="false" data-label-default="收藏本文" data-label-saved="已收藏，点击取消" data-label-saved-status="文章已收藏" data-label-removed-status="已取消收藏"><svg class="i-icon i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button><button class="toolbox-item toolbox-screenshot" type="button" data-action="screenshot" data-snapdom-src="/lib/snapdom/3.1.1/snapdom.min.js" title="截图本文" aria-label="截图本文" aria-busy="false" data-label-preparing="正在准备截图" data-label-scaled="文章较长，截图将整体缩小" data-label-success="截图已下载" data-label-scaled-success="截图已整体缩小并下载" data-label-failed="截图失败，请重试"><svg class="i-icon i-screenshot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></button><button class="toolbox-item toolbox-bgm" type="button" data-action="bgm" title="播放背景音乐" aria-label="播放背景音乐" aria-pressed="false" aria-busy="false" data-label-play="播放背景音乐" data-label-pause="暂停背景音乐" data-label-error="背景音乐加载失败，点击重试" data-label-playing-status="背景音乐已开始播放" data-label-paused-status="背景音乐已暂停" data-label-failed-status="背景音乐加载失败，点击重试"><span class="i-bgm-icon" aria-hidden="true"></span></button></div><div class="toolbox-status" role="status" aria-live="polite" aria-atomic="true" hidden></div></div><div id="annotate-toolbar" role="toolbar" aria-hidden="true"><button class="at-btn at-annotate" type="button" title="标注：选中文字后点击" aria-label="标注：选中文字后点击"><svg class="at-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3"></path><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"></path></svg></button><button class="at-btn at-clear" type="button" title="清除" aria-label="清除"><svg class="at-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg></button><button class="at-btn at-copy" type="button" title="复制" aria-label="复制"><svg class="at-icon i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="at-icon i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button><button class="at-btn at-search" type="button" title="搜索" aria-label="搜索"><svg class="at-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg></button><button class="at-btn at-color" type="button" data-color="yellow" title="标注颜色" aria-label="标注颜色"><span class="at-color-fill"></span></button><div class="at-colors"><button class="at-color-opt active" type="button" data-color="yellow" title="yellow" aria-label="yellow"></button><button class="at-color-opt" type="button" data-color="green" title="green" aria-label="green"></button><button class="at-color-opt" type="button" data-color="blue" title="blue" aria-label="blue"></button><button class="at-color-opt" type="button" data-color="pink" title="pink" aria-label="pink"></button><button class="at-color-opt" type="button" data-color="orange" title="orange" aria-label="orange"></button></div></div></div></article><aside><div id="about"><a href="/" id="logo"><img src="https://github.com/1992724048.png" alt="遂沫'Blog" style="margin:0;border-radius:0;"></a><h1 id="Dr"><a href="/">遂沫</a></h1><div id="description"><p>嗯~ o(*￣▽￣*)o</p></div></div><div id="aside-block"><div id="toc-div"><h1>目录</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E7%BB%93%E6%9E%9C"><span class="toc-number">1.</span> <span class="toc-text">测试结果</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E5%B9%B3%E5%8F%B0%E4%B8%8E%E7%BB%86%E8%8A%82"><span class="toc-number">2.</span> <span class="toc-text">测试平台与细节</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E9%A1%B9%E7%9B%AE%E5%AF%B9%E6%AF%94"><span class="toc-number">3.</span> <span class="toc-text">测试项目对比</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%86%85%E5%AD%98%E5%B8%A6%E5%AE%BD"><span class="toc-number">3.1.</span> <span class="toc-text">内存带宽</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#GEMM-%E9%80%9A%E7%94%A8%E7%9F%A9%E9%98%B5%E4%B9%98"><span class="toc-number">3.2.</span> <span class="toc-text">GEMM (通用矩阵乘)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#FFT-%E5%BF%AB%E9%80%9F%E5%82%85%E9%87%8C%E5%8F%B6%E5%8F%98%E6%8D%A2"><span class="toc-number">3.3.</span> <span class="toc-text">FFT (快速傅里叶变换)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%89%B9%E9%87%8F%E4%BA%8C%E5%88%86%E6%9F%A5%E6%89%BE"><span class="toc-number">3.4.</span> <span class="toc-text">批量二分查找</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9D%97%E5%8E%8B%E7%BC%A9-zip"><span class="toc-number">3.5.</span> <span class="toc-text">块压缩 (zip)</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B7%B1%E6%8C%96%E7%BB%86%E8%8A%82"><span class="toc-number">4.</span> <span class="toc-text">深挖细节</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#iGPU-%E4%BA%94%E7%A7%8D%E5%86%85%E5%AD%98%E6%A8%A1%E5%BC%8F%E5%B7%AE%E5%BC%82%E5%BE%88%E5%B0%8F%EF%BC%8Cmalloc-device-%E6%9C%80%E4%BD%B3"><span class="toc-number">4.1.</span> <span class="toc-text">iGPU 五种内存模式差异很小，malloc_device 最佳</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%BB%B6%E8%BF%9F%EF%BC%9ACPU-%E5%8D%95%E7%BA%BF%E7%A8%8B%E5%BB%B6%E8%BF%9F%E4%BD%8E%E5%BE%97%E5%A4%9A%EF%BC%8CiGPU-%E9%9D%A0%E8%81%9A%E5%90%88%E5%90%9E%E5%90%90%E7%BF%BB%E7%9B%98"><span class="toc-number">4.2.</span> <span class="toc-text">延迟：CPU 单线程延迟低得多，iGPU 靠聚合吞吐翻盘</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BB%E6%9C%BA%E2%86%94%E8%AE%BE%E5%A4%87%E4%BC%A0%E8%BE%93%EF%BC%9A256-MiB-%E7%BA%A6-16-5-ms"><span class="toc-number">4.3.</span> <span class="toc-text">主机↔设备传输：256 MiB 约 16.5 ms</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#CPU-%E6%8B%B7%E8%B4%9D%E9%98%B6%E6%A2%AF%EF%BC%9A%E5%B0%8F%E5%B0%BA%E5%AF%B8%E9%9D%A0%E7%BC%93%E5%AD%98%EF%BC%8C%E5%A4%A7%E5%B0%BA%E5%AF%B8%E5%9B%9E%E8%90%BD-DRAM"><span class="toc-number">4.4.</span> <span class="toc-text">CPU 拷贝阶梯：小尺寸靠缓存，大尺寸回落 DRAM</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BD%8E%E5%BB%B6%E8%BF%9F%E5%AE%9E%E6%97%B6%E8%AE%A1%E7%AE%97%E6%96%B0%E9%80%89%E6%8B%A9%EF%BC%9A%E9%9B%B6%E6%8B%B7%E8%B4%9D%E4%B8%BA%E4%BD%95%E5%81%8F%E7%88%B1-iGPU"><span class="toc-number">4.5.</span> <span class="toc-text">低延迟实时计算新选择：零拷贝为何偏爱 iGPU</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E8%AE%BA%E4%B8%8E%E9%80%89%E5%9E%8B%E5%BB%BA%E8%AE%AE"><span class="toc-number">5.</span> <span class="toc-text">结论与选型建议</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B5%8B%E8%AF%95%E5%B1%80%E9%99%90"><span class="toc-number">6.</span> <span class="toc-text">测试局限</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%A4%8D%E7%8E%B0%E6%96%B9%E5%BC%8F"><span class="toc-number">7.</span> <span class="toc-text">复现方式</span></a></li></ol></div></div><footer><nobr><span class="icp-title"><i class="fa-regular fa-copyright"></i> 2026 遂沫</span><a class="icp-content" target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh">CC BY-NC-SA 4.0</a></nobr><br><nobr>构建自 <a target="_blank" rel="noopener" href="http://hexo.io">Hexo</a></nobr><wbr><nobr> 使用主题 <a target="_blank" rel="noopener" href="https://github.com/Yue-plus/hexo-theme-arknights">Arknights</a></nobr><wbr><nobr> 主题作者 <a target="_blank" rel="noopener" href="https://github.com/Yue-plus">Yue_plus</a> & <a target="_blank" rel="noopener" href="https://github.com/1992724048">遂沫</a></nobr><wbr><nobr> 构建时间<script>const buildTime = new Date("2026-09-25T22:59:24.146Z");
+document.write(' ' + buildTime.toLocaleString());</script></nobr></footer></aside></main><audio id="bgm" src="/audio/bgm.mp3" preload="metadata" loop></audio><canvas id="canvas-dust"></canvas></body></html>
