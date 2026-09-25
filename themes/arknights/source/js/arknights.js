@@ -1794,12 +1794,12 @@ class ScreenshotControl {
         return this.withTimeout(Promise.resolve(document.fonts.ready)).then(() => undefined);
     };
     waitForImage = (image) => {
-        if (image.complete && image.naturalWidth > 0) {
+        if (image.complete) {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
             image.setAttribute('loading', 'eager');
-            if (image.complete && image.naturalWidth > 0) {
+            if (image.complete) {
                 image.setAttribute('loading', 'lazy');
                 resolve();
                 return;

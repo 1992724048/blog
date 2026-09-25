@@ -90,13 +90,13 @@ class ScreenshotControl {
   }
 
   private waitForImage = (image: HTMLImageElement): Promise<void> => {
-    if (image.complete && image.naturalWidth > 0) {
+    if (image.complete) {
       return Promise.resolve()
     }
 
     return new Promise((resolve, reject) => {
       image.setAttribute('loading', 'eager')
-      if (image.complete && image.naturalWidth > 0) {
+      if (image.complete) {
         image.setAttribute('loading', 'lazy')
         resolve()
         return
