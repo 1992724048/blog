@@ -23,6 +23,7 @@
 5. 保留既有 AI 徽标、项目卡、GitHub Alert、Monaco Editor、`.link-card`、`.admonition` 与 `.expand-box` 的可用视觉和交互资产。
 6. 删除四个旧 tag 入口及其专属文档、死代码，不提供旧语法或旧 tag 兼容分支。
 7. 修复暗色 GitHub Alert 交互态、桌面导航宽度稳定性和 BGM 状态生命周期。
+8. 按职责拆分 `pipeline.js` 与 `Toolbox.ts`，使 marker pipeline 与主题控制器不继续膨胀为单文件大模块，且不改变任何对外契约。
 
 ## 2. 范围边界
 
@@ -30,6 +31,7 @@
 
 - 生产 marker 名称：`AI`、`Project`、`Alerts`、`Editor`、`LinkCard`。
 - marker lexer、parser、token store、registry、pipeline、Marked 扩展和五类 handler。
+- 第 12.1.1 节的模块拆分：`pipeline.js` 的物化/失败恢复/Project 编排/投影四个子模块与 `ToolboxStatusLease.ts`，只搬运实现、不改外部契约。
 - `content`、显式 `excerpt`、派生 excerpt、SEO description 和搜索 sidecar 的 marker 纯文本投影。
 - `source/_posts/` 与 `source/projects/index.md` 中现有四处 marker 的一次性迁移。
 - 主题 README、AGENTS 活文档和本地自动化门禁同步。
@@ -52,17 +54,24 @@
 - “多行值”指使用精确 opening `|$[` 与独立 closing `]$` 分隔的值。
 - “位置字段”指 `[]` 行，按 handler 声明的位置顺序绑定。
 - “命名字段”指 `[name]` 行，按区分大小写的字段名绑定。
+- “捕获层”指 lexer 对原始 Markdown 字段的逐字切片结果，含 `raw`、`physicalLines[].raw|terminator` 与 `sourceRange`；捕获层永远保留原始终止符、Tab 与相对缩进。
+- “恢复层”指写入活动 `content`/`excerpt` 字段或进入投影的文本；恢复层一律先经第 4.1 节的 `normalizeLineEndings` 规范为 LF。
 - “sourceRange”指 `{ start, end }` 在原始 Markdown 字段中的 UTF-16 半开区间，只用于捕获 occurrence 原文、Project 相邻分组和字段级 fallback 的来源审计；它不是最终 HTML 坐标。
 - “renderedPlaceholderRange”指 Marked renderer 生成的唯一 block placeholder 在 after 9 输入 HTML 中的 UTF-16 半开区间；after 9 只按该坐标替换。
 - “placeholder token”指 block-only occurrence 的 opaque token；它既是 store 身份，也是生成唯一 placeholder DOM 的输入，禁止拆解、拼接或自行构造。
-- “整枚失败”指不输出任何 handler DOM，改为恢复该 marker 的完整原始源文本。
+- “整枚失败”指不输出任何 handler DOM，改为恢复该 marker 的完整原始源文本的 LF 化形态（第 4.1 节恢复层）。
 - “必须”“不得”“应当”表示本规格的强制要求；“可以”表示允许但非必需的扩展点。
 
 ## 4. 统一按行协议
 
 ### 4.1 物理行与 header
 
-解析前只把 CRLF、CR 和 LF 识别为物理换行；逻辑字段值和纯文本投影统一以 LF 计算。lexer 另外保留每个物理行的原始终止符，失败恢复因此不改变 CRLF、CR、LF、Tab 或相对缩进。
+解析前只把 CRLF、CR 和 LF 识别为物理换行。行尾口径分捕获层与恢复层两层，本规格只实现并门禁「捕获逐字、恢复 LF」一种，不同时承诺两者：
+
+1. **捕获层（逐字）**：`raw`、`physicalLines[].raw|terminator` 与 `sourceRange` 是原始字段的逐字切片，保留 CRLF、CR、LF、Tab 与相对缩进。第 4.6 节全部 range/raw fixture 只对捕获层成立。
+2. **恢复层（LF）**：`normalizeLineEndings(text)` 把每个 CRLF 或 CR 折叠为单个 LF，不改变其它 code unit。字段值、失败恢复文本和投影一律先经 `normalizeLineEndings`。
+
+不承诺恢复层保留 CR/CRLF 的原因：Marked 15 的 `Lexer.lex()` 在分词前把整个字段的 CR/CRLF 改写为 LF，因此最终 `data.content` 的行边界只可能是 LF，把 CRLF 原文插回该输出无法由已解析的源复现。显式 `excerpt` 不经 Marked，但为使 content 与 excerpt 的失败文本、投影、description 与搜索文本可逐字比较，同样使用 LF。Tab 与相对缩进在两层都不改写。因此「恢复层保留原始终止符」类 fixture 与本口径互斥，不得加入门禁；门禁只允许断言捕获层逐字、恢复层 LF。
 
 header 的规范形状为：
 
@@ -254,7 +263,7 @@ closing 与 `EndOfSource` 规则如下：
 
 去缩进和物理行处理固定为：
 
-1. 先按原 range 捕获 `raw`，内部 CRLF/CR/LF 原样保留；随后只为字段值把每个内部物理终止符规范为 LF。
+1. 先按原 range 捕获 `raw`，内部 CRLF/CR/LF 原样保留（第 4.1 节捕获层）；随后对字段值执行第 4.1 节的 `normalizeLineEndings`，把每个 CRLF/CR 折叠为单个 LF（第 4.1 节恢复层）。
 2. opening 的终止符和 closing 行本身不属于值。紧邻 closing 之前的最后一个物理终止符是分隔符，移除一次；更早的空行终止符保留，因此不会丢失正文中的空行。
 3. “空行”指只含零个或多个 U+0020/U+0009 的行；空行不参与共同缩进计算，其已有空白原样保留。
 4. 对每个非空行按 UTF-16 code unit 计算最长共同前缀；U+0009 不展开为固定空格数，前缀必须逐 code unit 相同。一个 Tab 与一个空格不视为相同缩进。
@@ -914,6 +923,11 @@ themes/arknights/scripts/markers/
 ├── token.js
 ├── registry.js
 ├── pipeline.js
+├── pipeline/
+│   ├── materialize.js
+│   ├── failure.js
+│   ├── project-grid.js
+│   └── projection.js
 ├── register.js
 ├── carrier.js
 ├── marked-extension.js
@@ -925,19 +939,52 @@ themes/arknights/scripts/markers/
     └── link-card.js
 ```
 
+`pipeline.js` 与同目录 `pipeline/` 依赖 Node 的「同名文件优先于同名目录」解析规则（`require('./pipeline')` 命中 `pipeline.js`），目录内拆分具体职责的风格与 `scripts/generator/search/{generator,snapshot,database}.js` 一致。
+
+主题 TypeScript 侧新增一个同级模块：
+
+```text
+themes/arknights/source/js/_src/include/ToolboxStatusLease.ts
+```
+
 | 模块 | 职责 | 禁止承担的职责 |
 | --- | --- | --- |
 | `lexer.js` | 保护区扫描、header/range 识别、完整 block 捕获 | handler 字段与业务校验 |
 | `parser.js` | header、字段、值类型、多行与绑定前校验 | HTML、URL、CSS 业务策略 |
 | `token.js` | 当前 render 的 opaque token、occurrence、原文与终态审计 | 页面类型和业务字段 |
 | `registry.js` | 五类 handler 注册与分发 | 具体 handler 规则 |
-| `pipeline.js` | 字段生命周期、block 物化、失败恢复、Project 连续编排、投影 | 复制 handler 业务规则 |
+| `pipeline.js` | 阶段编排与外部契约：注册 before 4 / after 9、carrier 生命周期、字段进入与退出的顺序、抛错边界 | 具体物化算法、失败序列化、Project 分组细节、投影合并 |
+| `pipeline/materialize.js` | 字段物化：按 `renderedPlaceholderRange`/`tokenRange` 替换 placeholder，调用 handler `render` | 失败序列化、Project 分组、投影合并 |
+| `pipeline/failure.js` | 失败恢复：单枚 `markerFailureHtml`、字段级 fallback、occurrence 终态标记 | 成功路径 HTML、投影派生 |
+| `pipeline/project-grid.js` | Project 连续分组：按 `sourceRange` 邻接判定、网格 span 计算与 flush | 通用 placeholder 替换、投影拼接 |
+| `pipeline/projection.js` | 投影合并、`<!-- more -->` 派生、description 纯文本来源 | carrier bridge、DOM 替换 |
 | `register.js` | Hexo 自动注册唯一入口 | 第二套 pipeline |
 | `carrier.js` | `data.markdown` bridge 与当前字段原值保存 | 全局 current carrier |
 | `marked-extension.js` | block token provenance、renderer 委托和审计 | inline marker 支持 |
 | `handlers/*.js` | schema、业务校验、DOM 与纯文本投影 | Hexo filter 注册和文件读取 |
 
-`sentinel.js` 与旧 inline/autolink ownership 路径在 block-only 协议下删除；连续 Project 由 pipeline 的通用 block 分组阶段处理。
+`sentinel.js` 与旧 inline/autolink ownership 路径在 block-only 协议下删除；连续 Project 由 `pipeline/project-grid.js` 的通用 block 分组阶段处理。
+
+#### 12.1.1 拆分边界与验证
+
+拆分只搬运实现，不改变任何对外契约。`defaultPipeline` 仍是 `pipeline.js` 与 `meta-description.js` 通过普通 CommonJS 缓存共享的同一实例；对外可观察面逐项冻结如下，任一项变化都视为破坏契约：
+
+| 冻结面 | 契约 |
+| --- | --- |
+| Hexo 注册 | `before_post_render` priority 4、`after_post_render` priority 9、`marked:use` priority 0 各唯一；同 context + 同 pipeline 幂等，异 pipeline 仍为 `DUPLICATE_MARKER_PIPELINE` |
+| 导出 API | `register` / `projectText` / `originalField` / 错误码集合与第 13 节逐字一致 |
+| 产物 | 第 12.3 至 12.6 节的 placeholder、失败 DOM、投影、sidecar 文本逐字不变 |
+| 依赖方向 | `pipeline.js` → 子模块；子模块之间不得互相 `require`（`failure` 与 `project-grid` 需要的共享值由 `pipeline.js` 显式注入）；子模块不得反向 `require` `pipeline.js` |
+| 单向依赖 | 子模块只能依赖 `token.js`、`carrier.js`、`registry.js`、handler 与纯工具，不得 `require` Hexo context、文件系统或网络 |
+
+前端侧 `ToolboxStatusLease.ts` 承担共享 `.toolbox-status` 的 lease 协议：`statusGeneration`、唯一 `MutationObserver`、唯一 timer、token/node 归属判定与 `claimStatus`/`invalidateStatusLease`/`clearStatus`。`BgmControl.ts` 组合它并保留 `playbackState`、`mediaFailed`、operation/lifecycle generation 与状态机；`Toolbox.ts` 仍以 `Toolbox.applyState(true)` 调用公开的 `bgmControl.clearStatus()`。契约冻结：`.toolbox-status` 不新增公开 DOM attribute，`claimStatus(message, delay)`、`invalidateStatusLease()`、`clearStatus()` 的签名与第 16.3 节 lease 伪代码一致，截图/分享/收藏仍作为外部 owner 直接写该 node 而不持 lease。
+
+拆分验证：
+
+1. 文件规模门禁：`.temp/line-marker-pipeline.test.js` 断言 `pipeline.js` 与每个 `pipeline/*.js` 均不超过 500 行，`ToolboxStatusLease.ts` 不超过 300 行，`BgmControl.ts` 与 `Toolbox.ts` 拆分后均不超过 500 行；超限即视为拆分未完成。
+2. 依赖门禁：同一探针静态扫描子模块的 `require`，断言无子模块互引、无子模块反向引用 `pipeline.js`、无 Hexo/文件系统/网络依赖。
+3. 行为回归：第 18.4 节全量矩阵在拆分后于同一最终状态只跑一次，任何 DOM、projection、sidecar、status lease 断言差异都判定为契约破坏。
+4. 幂等与身份：`line-marker-registry.test.js` 断言 `pipeline.js` 导出的 `defaultPipeline` 与 `meta-description.js` 共享同一引用，且重复 `register` 不新增 filter。
 
 ### 12.2 Hexo 生命周期与阶段顺序
 
@@ -951,18 +998,33 @@ themes/arknights/scripts/markers/
 
 `register.js` 是 markers 子树唯一自动注册入口。`pipeline.js` 本身无 Hexo 注册副作用；同一 context 与同一 pipeline 重复调用注册必须幂等，不同 pipeline 绑定同一 context 返回 `DUPLICATE_MARKER_PIPELINE`。生产 registry 只能在五类 handler、迁移内容、控制器和协议测试同批就绪后原子激活，不允许先注册不完整 allowlist。
 
-一次 `post.render` 的固定顺序为：
+一次 `post.render`（`node_modules/hexo/dist/hexo/post.js` 的 `Post#render`）内的固定顺序为：
 
 ```text
-before 4
-→ Markdown renderer
-→ onRenderEnd
-→ after_render:html priority 5/其它已注册阶段
-→ after 9
-→ Hexo excerpt priority 10（仅无显式 excerpt 时）
+before_post_render priority 4（markers before）
+→ before_post_render priority > 4 的其它已注册阶段（当前 footnotes 为 10）
+→ Markdown renderer（ctx.render.render）+ onRenderEnd hook
+→ restoreComments / restoreCodeBlocks
+→ after_post_render priority < 9 的其它已注册阶段（当前 spoiler 为 5）
+→ after 9（markers after，priority 9）
+→ Hexo excerpt（after_post_render priority 10）
+→ after_post_render 的 10 与 1100（alerts/terms/checkbox/lightgallery/pandoc/encrypt/meta-description、search 捕获）
 ```
 
-before 4 先无正文读取地修复同 data 的旧 bridge/state，再调用第 12.6 节共享 encryption policy；只有 `public` 状态可以读取 content/excerpt 并建立 carrier。after 9 始终在 finally 恢复 bridge；renderer、`onRenderEnd` 或任一 after_render:html 阶段拒绝时，Hexo 不执行 after 9，原异常继续向构建调用方传播。
+同一文档 build 中位于 `Post#render` 之后的阶段为：
+
+```text
+view.render(locals) → injector.exec → after_render:html（当前 external_link、meta_generator）
+```
+
+即 `after_render:html` 由 `node_modules/hexo/dist/hexo/index.js` 的路由阶段（`createLoadThemeRoute`）在布局渲染后执行，不在 `Post#render` 内。因此本规格按两个作用域分别承诺：
+
+| 作用域 | 阶段 | 拒绝后果 |
+| --- | --- | --- |
+| 字段生命周期 | before 4 与 after 9 之间的任一阶段，即后续 `before_post_render`、renderer、`onRenderEnd`、`after_post_render` priority < 9 | after 9 不执行；原异常继续向构建调用方传播；下一次同 data 的 before 4 先从 `carrier.originalField` 修复字段与 descriptor、清除旧 state，再执行新一轮 tokenization |
+| 路由阶段 | `after_render:html` | 位于 after 9 之后，不得回写已物化的 `content`/`excerpt`、不得改写 occurrence 终态、不得生成 token 或 placeholder；该路由失败即构建失败，由构建调用方处理，pipeline 不参与 |
+
+before 4 先无正文读取地修复同 data 的旧 bridge/state，再调用第 12.6 节共享 encryption policy；只有 `public` 状态可以读取 content/excerpt 并建立 carrier。after 9 始终在 finally 恢复 bridge。持续拒绝使构建失败，不返回半成品。第 15 节批次 D 必须把本作用域修正同步进 AGENTS 活文档，不得继续沿用「`after_render:html` 位于 after 9 之前」的旧表述。
 
 ### 12.3 block occurrence、坐标与 placeholder
 
@@ -1004,7 +1066,7 @@ explicit excerpt: excerpt-pending -> consumed | failed
 - `processAllTokens` 只审计 `field === "content"` 且状态为 `pending-render`；explicit excerpt 保持 `excerpt-pending`，不进入 Marked metadata。
 - 所有 snapshot、字段、range、metadata 和数组深度冻结；同 token 重复解析不得拆 token 或生成第二 occurrence。
 
-before 4 在确认文档为 `public` 后、创建 carrier 和签发 occurrence 之前，分别检查将参与本次 render 的 `content` 与显式 string `excerpt` 源字段。任一源字段含 NUL 时，当前 `post.render` 以 `UNEXPECTED_NUL` 字段/构建级 fail-closed 抛错：不改写任何源字段或 `data.markdown` descriptor，不创建 carrier/token/occurrence，不调用 handler，不生成 escaped failure DOM，也不生成或缓存失败 projection。检查通过后，before 4 才按 `sourceRange` 从后向前把每个 raw 替换为 opaque token，并保留 marker 后的物理终止符；token 本身长度不要求等于 raw。token 生成必须避开所有 public source field 的完整拼接文本和保留 token namespace；32 次仍碰撞返回 `TOKEN_GENERATION_EXHAUSTED`。
+before 4 在确认文档为 `public` 后、创建 carrier 和签发 occurrence 之前，分别检查将参与本次 render 的 `content` 与显式 string `excerpt` 源字段。任一源字段含 NUL 时，当前 `post.render` 以 `UNEXPECTED_NUL` 字段/构建级 fail-closed 抛错：不改写任何源字段或 `data.markdown` descriptor，不创建 carrier/token/occurrence，不调用 handler，不生成 escaped failure DOM，也不生成或缓存失败 projection。检查通过后，before 4 才按 `sourceRange` 从后向前把每个 raw 替换为 opaque token，并原样保留 marker 之后的物理终止符（该终止符属于字段而不属于 marker；进入 content 时由 Marked 按第 4.1 节恢复层折叠为 LF，进入显式 excerpt 时按 `normalizeLineEndings` 折叠）；token 本身长度不要求等于 raw。token 生成必须避开所有 public source field 的完整拼接文本和保留 token namespace；32 次仍碰撞返回 `TOKEN_GENERATION_EXHAUSTED`。
 
 Marked 15.0.12 使用一个 `level: "block"` custom extension，名称固定 `arknights-line-marker`：
 
@@ -1040,7 +1102,7 @@ bridge 安装顺序固定为：
 
 `data.markdown` bridge 不是全局 current carrier。Marked 15 singleton 可能在当前或下一次 parse 前短暂强引用 parse options；`processAllTokens` 一进入就在 `finally` 从当前 parse options 副本删除 `CARRIER_SYMBOL`，删除失败返回 `CARRIER_AUDIT_FAILED`。hook 退出后，Marked defaults hook options 与 renderer options 均不得再含本次 symbol；原始 `data.markdown` bridge 仍由 after 9 或下一次同 data before 恢复。
 
-renderer、`onRenderEnd` 或任一 `after_render:html` filter 拒绝时，after 9 不执行，renderer 已产生的临时 HTML 不得交给页面或搜索。异常原样传播。若同一 post data 再次 render，下一次 before 4 必须先从 `carrier.originalField` 恢复所有原字段、按原 descriptor 恢复 bridge、清除 WeakMap state，再执行 encryption policy 和新一次 tokenization；不得沿用旧 occurrence、placeholder range 或 projection。持续拒绝使构建失败，不返回半成品。
+后续 `before_post_render`、renderer、`onRenderEnd` 或任一 `after_post_render` priority < 9 的 filter 拒绝时，after 9 不执行，renderer 已产生的临时 HTML 不得交给页面或搜索。异常原样传播。若同一 post data 再次 render，下一次 before 4 必须先从 `carrier.originalField` 恢复所有原字段、按原 descriptor 恢复 bridge、清除 WeakMap state，再执行 encryption policy 和新一次 tokenization；不得沿用旧 occurrence、placeholder range 或 projection。持续拒绝使构建失败，不返回半成品。`after_render:html` 属第 12.2 节路由阶段，位于 after 9 之后，其拒绝不回滚已物化字段，pipeline 不感知。
 
 当前 bridge 支持边界只有 `dompurify` 缺省或显式 `false`，以及测试中可证明逐字 identity 的 sanitizer。`true`、自定义 sanitizer、未知 adapter 或任何会重排/改写 placeholder DOM 的配置，在字段改写前返回 `MARKDOWN_SANITIZER_UNSUPPORTED`；不得以关闭检查或事后修补继续。受控 `renderMarkdown` 同样只继承该已验证配置和 `sanitizeUrl:true`。
 
@@ -1050,41 +1112,47 @@ renderer、`onRenderEnd` 或任一 `after_render:html` filter 拒绝时，after 
 
 | 失败点 | 恢复动作 | 是否抛出 |
 | --- | --- | --- |
-| lexer/parser/registry/handler/单枚 projection | 该 occurrence 输出 escaped `<pre>`，投影保存原文，状态 `failed`；同字段其它 marker 继续 | 否 |
+| lexer/parser/registry/handler/单枚 projection | 该 occurrence 输出 escaped `<pre>`，投影保存 LF 化的 `raw`，状态 `failed`；同字段其它 marker 继续 | 否 |
 | before 4 的 public `content` 或显式 string `excerpt` 源字段含 NUL | 不创建 carrier/token/occurrence/failure DOM/projection；所有源字段与 descriptor 保持 before 前值 | 是，传播 `UNEXPECTED_NUL`，当前字段/构建 fail-closed |
-| handler `render` 输出或 `toPlainText` projection 新生成 NUL | 丢弃该 handler 的全部结果，仅该 occurrence 输出 escaped `<pre>`、投影保存无 NUL 的完整 raw，状态 `failed` | 否；仅后续字段审计失败时按下一层抛出 |
+| handler `render` 输出或 `toPlainText` projection 新生成 NUL | 丢弃该 handler 的全部结果，仅该 occurrence 输出 escaped `<pre>`、投影保存无 NUL 的 `normalizeLineEndings(raw)`，状态 `failed` | 否；仅后续字段审计失败时按下一层抛出 |
 | token collision/exhaustion、加密状态 ambiguous、bridge/field write/unsupported sanitizer 失败 | 恢复所有原字段和 descriptor，不创建可见 carrier | 是，传播稳定错误码 |
-| Markdown renderer、`onRenderEnd`、after_render:html 拒绝 | after 9 不执行；原 render 异常传播，页面无输出 | 是 |
+| 后续 `before_post_render`、renderer、`onRenderEnd`、`after_post_render` priority < 9 拒绝 | after 9 不执行；原 render 异常传播，页面无输出 | 是 |
+| 路由阶段 `after_render:html` 拒绝 | 位于 after 9 之后，不回滚已物化字段；该路由构建失败，pipeline 不参与 | 是（构建级） |
 | placeholder 数量/范围/metadata/内部串/终态审计失败 | 当前字段使用安全字段 fallback，所有未终态 occurrence 标 `failed`，恢复 bridge | 是，传播 `PLACEHOLDER_AUDIT_FAILED` 或 `PIPELINE_AUDIT_FAILED` |
 | `renderMarkdown`/`markdownToPlainText` 单枚失败 | 整枚回退，不保留已成功 render 的部分 DOM | 否；若造成字段级审计失败则按上一行抛出 |
 
 源字段 NUL 与生成 NUL 的作用域不得混用：
 
 - **before 路径**：NUL 已在 `content`/显式 `excerpt` 源字段中时，before 4 必须在 carrier 写入前终止整个字段/本次构建。该路径没有 occurrence 可标 `failed`，也不调用 `markerFailureHtml` 或 `markerFailureProjection`；捕获错误后 `projectText`、搜索 sidecar 捕获/保存调用计数均保持 0，且不得返回含 NUL 的“失败 projection”。
-- **handler 路径**：源字段已经通过 before NUL 检查，但 `render` 或 `toPlainText` 新生成 NUL 时，pipeline 立即丢弃该 handler 的 render/projection 结果，复用已冻结且不含 NUL 的 occurrence `raw` 执行单枚安全回退。DOM 精确为 `markerFailureHtml(raw)`，projection 精确为 `raw`，occurrence 恰为一次 `failed`；同字段其它 marker 继续。若 `render` 输出已含 NUL，则不得再调用 `toPlainText`；若仅 `toPlainText` 含 NUL，则先丢弃已生成 HTML，再执行同一回退。
+- **handler 路径**：源字段已经通过 before NUL 检查，但 `render` 或 `toPlainText` 新生成 NUL 时，pipeline 立即丢弃该 handler 的 render/projection 结果，复用已冻结且不含 NUL 的 occurrence `raw` 执行单枚安全回退。DOM 精确为 `markerFailureHtml(raw)`，projection 精确为 `markerFailureProjection(raw)`（即 `normalizeLineEndings(raw)`），occurrence 恰为一次 `failed`；同字段其它 marker 继续。若 `render` 输出已含 NUL，则不得再调用 `toPlainText`；若仅 `toPlainText` 含 NUL，则先丢弃已生成 HTML，再执行同一回退。
 
 安全序列化接口固定为：
 
 ```text
+normalizeLineEndings(text)
+  = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
+
 escapeMarkerHtml(raw)
   = raw.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
 markerFailureHtml(raw)
-  = "<pre class=\"arknights-marker-source\">" + escapeMarkerHtml(raw) + "</pre>"
+  = "<pre class=\"arknights-marker-source\">" + escapeMarkerHtml(normalizeLineEndings(raw)) + "</pre>"
 
 markerFailureProjection(raw)
-  = raw                         // 未做 HTML escape
+  = normalizeLineEndings(raw)         // 未做 HTML escape
 
 fieldFallbackHtml(originalField)
-  = "<pre class=\"arknights-marker-source\">" + escapeMarkerHtml(originalField) + "</pre>"
+  = "<pre class=\"arknights-marker-source\">" + escapeMarkerHtml(normalizeLineEndings(originalField)) + "</pre>"
 
 fieldFallbackProjection(originalField)
-  = originalField               // 未做 HTML escape
+  = normalizeLineEndings(originalField)   // 未做 HTML escape
 ```
+
+`normalizeLineEndings` 即第 4.1 节恢复层的唯一实现：写入活动 `content`/`excerpt` 的任何文本以及任何投影都先折叠 CRLF/CR 为单个 LF。occurrence 快照中的 `raw` 仍是捕获层逐字原文，不被改写；因此同一次失败可以从 `raw` 逐字反查 `sourceRange`，而 DOM 与投影只呈现 LF 形态。Tab、相对缩进和 code unit 顺序在折叠后不变。
 
 - `data.content`/`data.excerpt` 在 after 9 阶段被视为活动 HTML 字段，绝不能直接写回 `originalField` Markdown 源字符串、`</style>`、`<script>` 或 handler 原始 HTML。
 - 字段 fallback 的 `<pre>` 转义所有 `&`、`<`、`>`，因此原始 active HTML 只作为文本显示；引号在 text context 无需编码，但不得进入 attribute。
-- projection/search 保存未转义的原文纯文本，不保存 `&amp;` 等 HTML 实体。失败 marker 的 projection 与 `raw` 逐字相同，字段 fallback projection 与 `originalField` 逐字相同。
+- projection/search 保存未转义的原文纯文本，不保存 `&amp;` 等 HTML 实体。失败 marker 的 projection 与 `normalizeLineEndings(raw)` 逐字相同，字段 fallback projection 与 `normalizeLineEndings(originalField)` 逐字相同；两者在 LF 源上与 `raw`/`originalField` 逐字相同，在 CRLF/CR 源上只差行尾折叠。
 - 若 handler render 成功但 `toPlainText` 失败，render 结果整体丢弃并执行 `markerFailureHtml`；不返回“DOM 已成功、投影缺失”的半状态。
 - before 源字段 NUL、bridge/field write 等 before 失败时字段尚未活动化，保持全部原 source/descriptor 并抛错，不把 source 当作已渲染 HTML 写回，也不创建 marker 级失败 projection。
 - 字段级审计失败时先计算 fallback，再标终态、恢复 bridge，最后抛出；构建调用方不得消费该字段的临时结果。
@@ -1193,7 +1261,7 @@ content/excerpt/description 契约：
 | `themes/arknights/scripts/tags/code-editor.js` | 删除，由 Editor handler 取代 |
 | `themes/arknights/scripts/tags/link-card.js` | 删除，由 LinkCard handler 取代 |
 | `themes/arknights/scripts/tags/admonition.js` | 删除，由 Alerts handler 取代 |
-| `themes/arknights/source/css/_modules/cards/hide.styl` | 删除；`.hide` 只服务被删除 tag |
+| `themes/arknights/source/css/_modules/cards/hide.styl` | 删除；`.hide` 只服务被删除 tag，最终 `arknights.css` 因此变化，B 批次必须递增 `cssVersion` |
 | `themes/arknights/scripts/markers/handlers/projects.js` | 删除，由 `project.js` 取代 |
 | 旧 `[#]<NAME>{...}` grammar | 删除，不保留读取分支 |
 | `themes/arknights/scripts/markers/sentinel.js` | 删除；连续 Project 归入 pipeline block 分组 |
@@ -1246,20 +1314,22 @@ content/excerpt/description 契约：
 
 | 批次 | 原子范围 | 独立门禁 | 建议提交信息 |
 | --- | --- | --- | --- |
-| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
-| B | 删除四个旧 tag、hide 样式、旧 Project handler/分组模块/死代码；README 与 AGENTS 本地定制地图/删除清单同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中 | `refactor(tags): 删除旧标签并同步内容文档` |
-| C | GitHub Alert、导航、BGM 修复；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/mediaFailed/MutationObserver lease、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
-| D | 最终门禁与 AGENTS 验证矩阵/当前版本收口，不再引入功能 | 第 18 节 source/unit → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
+| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`/`ToolboxStatusLease.ts`、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；模块规模与依赖门禁；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
+| B | 删除四个旧 tag、`hide.styl`、旧 Project handler/分组模块/死代码；README 与 AGENTS 本地定制地图/删除清单/缓存版本同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中；最终 CSS 不再含 `.hide` 产物且 `cssVersion` 已递增 | `refactor(tags): 删除旧标签并同步内容文档` |
+| C | GitHub Alert、导航、BGM 修复（含 `retireOperation` 与 `ToolboxStatusLease` 收口）；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/retire 终态/mediaFailed/MutationObserver lease、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
+| D | 最终门禁与 AGENTS 验证矩阵/当前版本/生命周期作用域收口，不再引入功能 | 第 18 节 source/unit → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
 
 原子性与文档边界：
 
 1. A 在同一 commit 内完成五 handler、完整 allowlist、自动注册、控制器/样式和现有 source 迁移；A 之前不修改任何当前活动 lexer/parser/pipeline，也不预注册空 registry。不得把 A 拆成可构建但不完整的提交。
-2. A 同批更新 AGENTS 的 Source Tree、marker Architecture、handler/控制器职责和 cache version；B 同批更新删除项、本地定制地图与旧 tag 验证口径；C 同批更新 UI/BGM 架构和版本；D 只收口最终验证矩阵与仍未同步的事实。
-3. A 修改 `MonacoEditor.ts`、`Expands.ts`、Alerts/LinkCard/Editor 样式与产物，因此把 `jsVersion` 从 `20260950` 递增到 `20260951`，把 `cssVersion` 从 `20260952` 递增到 `20260953`。
-4. C 修改 `BgmControl.ts` 和主题 Stylus，因此把 `jsVersion` 从 `20260951` 递增到 `20260952`，把 `cssVersion` 从 `20260953` 递增到 `20260954`。
-5. B、D 不修改浏览器 CSS/JS 产物，不递增对应版本。
-6. 共享文件发生并行冲突时停止并行，按批次顺序重新基于最新主控状态实施；除 A 内已明确的原子集合外，不得把多个批次合入同一提交。
-7. 每次审查发现的问题由原实施 Agent 修复并追加独立提交，修复后重跑该批门禁。
+2. A 同批更新 AGENTS 的 Source Tree、marker Architecture、handler/控制器职责和 cache version；B 同批更新删除项、本地定制地图与旧 tag 验证口径；C 同批更新 UI/BGM 架构和版本；D 收口最终验证矩阵、仍未同步的事实，并按第 12.2 节修正 AGENTS 的 Hexo 生命周期作用域表述。
+3. A 修改 `MonacoEditor.ts`、`Expands.ts`、`ToolboxStatusLease.ts`、Alerts/LinkCard/Editor 样式与产物，因此把 `jsVersion` 从 `20260950` 递增到 `20260951`，把 `cssVersion` 从 `20260952` 递增到 `20260953`。
+4. B 删除 `themes/arknights/source/css/_modules/cards/hide.styl` 及其 `@import`，最终 `arknights.css` 因此发生字节变化，必须把 `cssVersion` 从 `20260953` 递增到 `20260954`，即使本批不新增任何样式；B 不改 JS 产物，`jsVersion` 保持 `20260951`。
+5. C 修改 `BgmControl.ts` 和主题 Stylus，因此把 `jsVersion` 从 `20260951` 递增到 `20260952`，把 `cssVersion` 从 `20260954` 递增到 `20260955`。
+6. D 不修改浏览器 CSS/JS 产物，不递增对应版本；最终值为 `cssVersion=20260955`、`jsVersion=20260952`。
+7. 缓存版本递增机制不变：CSS 产物改 `themes/arknights/layout/includes/meta-data.pug` 的 `cssVersion`，JS 产物改 `themes/arknights/layout/includes/js-data.pug` 的 `jsVersion`；`marker-artifacts.js` 必须断言最终 `arknights.css?v=` 与 `arknights.js?v=` 命中上述最终值，命中旧值即失败。
+8. 共享文件发生并行冲突时停止并行，按批次顺序重新基于最新主控状态实施；除 A 内已明确的原子集合外，不得把多个批次合入同一提交。
+9. 每次审查发现的问题由原实施 Agent 修复并追加独立提交，修复后重跑该批门禁。
 
 ## 16. UI 修复规格
 
@@ -1325,7 +1395,7 @@ statusGeneration: monotonically increasing integer，初值 0
 statusLease: { token, node, message, observer, timer } | null
 ```
 
-`operationGeneration` 与 `lifecycleGeneration` 只能经以下三个私有修改函数改变，零宽 snapshot 不修改 generation；返回 token 及其它入口均不得直接 `++` 这两个字段。`statusGeneration` 仍只由下述 status lease 失效路径修改：
+`operationGeneration` 与 `lifecycleGeneration` 只能经以下四个私有修改函数改变，零宽 snapshot 不修改 generation；返回 token 及其它入口均不得直接 `++` 这两个字段。`statusGeneration` 仍只由下述 status lease 失效路径修改：
 
 ```text
 OperationToken = frozen { kind: "operation", operation, lifecycle }
@@ -1344,12 +1414,28 @@ beginOperation()
   2. 断开并替换上一 OperationToken 的 operation-scoped media listener
   3. 返回同时捕获当前 operationGeneration 与 lifecycleGeneration 的 OperationToken
 
+retireOperation(token)
+  1. 仅接受 kind==="operation" 且 acceptsOperation(token) 为真的 token；LifecycleToken、其它值与旧 operation 一律 no-op
+  2. 断开并清空该 operation 绑定的全部 operation-scoped media listener（one-shot 与仍在排队的回调都随之失效）
+  3. 调用 advanceOperationGeneration() 恰好一次
+  4. 返回是否真正执行；被拒绝时对 generation、listener 集合、状态、status、timer 与 aria-busy 的写入计数均为 0
+
 invalidateLifecycle(reason)
   1. lifecycleGeneration += 1；旧 OperationToken 因 lifecycle 不匹配而全部失效
   2. 断开旧 persistent/operation-scoped media listener，并用新 lifecycle 重新绑定唯一 persistent listener
   3. 调用 invalidateStatusLease() 恰好一次；返回 ownedNode 时才清空该 node
   4. 返回只捕获新 lifecycleGeneration 的 LifecycleToken
 ```
+
+`retireOperation(token)` 是「操作结束」的统一私有入口，与 `beginOperation()` 互为一次操作的两端：任何把 `playbackState` 迁出 `starting`/`retrying-play` 或写入 `paused` 的路径都必须在写终态之前调用它，使旧 `O` 的延迟回调（Promise resolve/reject、同步异常后的排队 microtask、已排队但未派发的 one-shot media 事件、timer 延迟回调）在任何字段写入前失效。硬性约束：
+
+1. `retireOperation` 只接受 `OperationToken`，严禁传入 `LifecycleToken` 或用 `snapshotLifecycleToken()` 的返回值代替；传入 `LifecycleToken` 必须被 no-op 拒绝。
+2. 成功终态（`starting|retrying-play -> playing`、`playing|任一 pending -> paused`）在写终态之前恰好调用一次 `retireOperation(O)`；终态一旦写入，旧 `O` 的任何 continuation 都因 `operation` 不匹配而 no-op。
+3. 中间态不 retire：`retrying-load -> retrying-play` 期间 `O` 继续存活，不得提前调用 `retireOperation`，否则后续 `play()` continuation 会被自身作废。
+4. 失败终态由 `enterFailed` 内部完成：OperationToken 输入时 `enterFailed` 恰好调用一次 `retireOperation(token)`，不得再单独调用 `advanceOperationGeneration`；LifecycleToken 输入时 `invalidateLifecycle` 已断绑 operation-scoped listener，`enterFailed` 改为恰好调用一次 `advanceOperationGeneration()`。
+5. 同步异常终态（`load()`/`play()`/`pause()` 同步抛错）统一经 `enterFailed`，同样遵守第 4 条。
+6. 取消终态（新一次 toggle）由 `beginOperation()` 递增 operation 并断绑旧 operation-scoped listener 完成，不额外调用 `retireOperation`。
+7. retire 之后 operation-scoped listener 集合必须归零；除 `beginOperation` 外的路径不得留下悬挂 listener。
 
 `acceptsOperation(token)` 仅接受 `kind==="operation"` 且其 operation/lifecycle 均等于当前值的 token；`acceptsLifecycle(token)` 仅接受 `kind==="lifecycle"` 且 lifecycle 等于当前值的 token。Promise、`load()`/`play()`/`pause()` continuation 只携带并检查 `OperationToken`；持久原生 media listener 携带其绑定时的 `LifecycleToken`，操作期 one-shot media listener 捕获对应 `OperationToken`；`reconcile({ token, publishStatus })` 只接受 `LifecycleToken`。初始化以当前 lifecycle snapshot 绑定唯一 persistent listener；每次 `invalidateLifecycle()` 先断绑旧 listener，再以新值绑定一次，`beginOperation()` 只替换 operation-scoped listener。Pjax handler 不复用进入回调前的旧 token，而是由本次 `invalidateLifecycle(eventType)` 返回值继续处理。旧 operation、已断绑 listener 的排队回调、旧 lifecycle token 都必须在任何字段写入前 no-op。
 
@@ -1358,13 +1444,14 @@ invalidateLifecycle(reason)
 ```text
 enterFailed(reason, token)
   1. OperationToken 用 acceptsOperation(token) 校验；LifecycleToken 用 acceptsLifecycle(token) 校验；其它输入 no-op
-  2. 调用 advanceOperationGeneration() 恰好一次，结束当前 busy 并使兄弟 continuation 失效
+  2. OperationToken 输入：调用 retireOperation(token) 恰好一次（其内部断绑 operation-scoped listener 并递增 operationGeneration）
+     LifecycleToken 输入：调用 advanceOperationGeneration() 恰好一次（invalidateLifecycle 已断绑 operation-scoped listener）
   3. 同步设置 mediaFailed = true
   4. 设置 playbackState = "failed"
   5. 在 audio/button 仍连接时发布不自动清除的 failed status
 ```
 
-`enterFailed` 不递增 `lifecycleGeneration`，也不把旧 `lifecycle` 值包装成新的 token。Pjax 媒体失败必须把 `invalidateLifecycle()` 本次返回的新 `LifecycleToken` 传入；Promise/media 失败必须传自己的 `MediaToken`。被拒绝的 `enterFailed` 对 generation、状态、status、timer 与 `aria-busy` 的写入计数均为 0。
+`enterFailed` 不递增 `lifecycleGeneration`，也不把旧 `lifecycle` 值包装成新的 token；对同一 operation 不得同时调用 `retireOperation` 与 `advanceOperationGeneration`。Pjax 媒体失败必须把 `invalidateLifecycle()` 本次返回的新 `LifecycleToken` 传入；Promise/media 失败必须传自己的 `MediaToken`。被拒绝的 `enterFailed` 对 generation、状态、status、timer 与 `aria-busy` 的写入计数均为 0。
 
 `reconcile({ token, publishStatus })` 先用 `acceptsLifecycle(token)` 校验，只渲染当前 `playbackState`，不得把旧 Promise 的结果直接写成最终状态，也不得因 pending 状态下 `audio.paused === true` 而自行取消操作；只有原生事件、当前 generation 的 Promise 终态、显式 `audio.error !== null` 检查或 Pjax 失效可以迁移状态。`starting/retrying-load/retrying-play` 均令当前按钮 `aria-busy="true"`；`playing/paused/failed` 令其为 `false`。只有 `playing` 令 `aria-pressed="true"`。初始化使用 `snapshotLifecycleToken()` 且只调用 `publishStatus:false`；Pjax success 使用该事件新签发的 lifecycle token。`playing/paused` 的新终态可发布 2500ms 状态，`failed` 发布不自动清除的持久错误，`starting` 与两个 retrying 状态不发布中间文案。
 
@@ -1374,11 +1461,12 @@ enterFailed(reason, token)
 | --- | --- | --- | --- |
 | `paused` | toggle | `O=beginOperation()`，调用一次 `audio.play()` 并由所有 continuation 携带 `O` | `starting` |
 | `failed` | toggle | `O=beginOperation()`，调用一次 `audio.load()` 并由所有 continuation 携带 `O` | `retrying-load` |
-| `retrying-load` | `O` 的 `load()` 正常返回 | 清 `mediaFailed`，随后以同一 `O` 调用一次 `audio.play()` | `retrying-play` |
+| `retrying-load` | `O` 的 `load()` 正常返回 | 清 `mediaFailed`，随后以同一 `O` 调用一次 `audio.play()`；本步不 retire，`O` 继续存活到 `retrying-play` 终态 | `retrying-play` |
 | `retrying-load` | `O` 的 `load()` 同步抛错 | 调用 `enterFailed("load-sync", O)` | `failed` |
-| `starting` / `retrying-play` | `O` 的 play Promise resolve 且 `audio.paused === false && mediaFailed === false && audio.error === null` | `acceptsOperation(O)` 后结束 busy | `playing` |
+| `starting` / `retrying-play` | `O` 的 play Promise resolve 且 `audio.paused === false && mediaFailed === false && audio.error === null` | `acceptsOperation(O)` 后调用 `retireOperation(O)` 结束 busy 并断绑 operation-scoped listener | `playing` |
 | `starting` / `retrying-play` | `O` 的 `audio.play()` 同步抛错、Promise reject，或 resolve 但不满足健康条件 | 调用 `enterFailed("play", O)` | `failed` |
 | `playing` / 任一 pending 状态 | toggle | `O=beginOperation()` 使旧 Promise 失效，再以 `O` 调用一次 `audio.pause()` | `paused` |
+| `playing` / 任一 pending 状态 | toggle 且 `O` 的 `audio.pause()` 正常返回 | 以 `O` 调用 `retireOperation(O)` 结束 busy 并断绑 listener | `paused` |
 | `playing` / 任一 pending 状态 | toggle 且 `O` 的 `audio.pause()` 同步抛错 | 调用 `enterFailed("pause-sync", O)` | `failed` |
 | 任意状态 | 原生 `play` 且 `M` 当前 | 健康条件成立时调用 `beginOperation()` 结束 busy 并进入 `playing`；否则调用 `enterFailed("media-play", M)` | `playing` / `failed` |
 | 任意状态 | 原生 `pause` / `ended` 且 `M` 当前 | `mediaFailed === false && audio.error === null` 时调用 `beginOperation()` 结束 busy 并进入 `paused`；否则调用 `enterFailed("media-pause", M)` | `paused` / `failed` |
@@ -1419,9 +1507,9 @@ timer callback / clearStatus()
 
 因此截图、分享或收藏在 2500ms 内写入共享 status 后，即使文本与 BGM 原消息逐字相同，mutation record 也会使旧 lease 失效；BGM timer 不得清除其它控制器消息。`Toolbox.applyState(true)` 调用公开的 `bgmControl.clearStatus()`；每个 `pjax:send`、`pjax:error`、`pjax:success` dispatch 通过上述 `invalidateLifecycle()` 恰好清理一次 timer/observer。若当前确有未被外部修改的 BGM lease 才清空其 node；否则只丢弃 BGM lease。
 
-所有当前 token 的退出路径结束自己的 busy；旧 token 不得覆盖新操作。状态文案只读取按钮现有 `data-label-playing-status`、`data-label-paused-status` 和 `data-label-failed-status`，不新增配置或硬编码中文。
+所有当前 token 的退出路径都以 `retireOperation(O)`（终态写回之前）或 `enterFailed(reason, token)`（内部按 token 类型完成 retire / advance）结束自己的 busy 并断绑 operation-scoped listener；旧 token 不得覆盖新操作。状态文案只读取按钮现有 `data-label-playing-status`、`data-label-paused-status` 和 `data-label-failed-status`，不新增配置或硬编码中文。
 
-确定性 fixture 必须覆盖：`failed -> retrying-load -> retrying-play -> playing|failed` 的两条终态、`load()`/`play()`/`pause()` 同步抛错、`load()` 返回后 play reject 重置 `mediaFailed`、普通 paused play 不调用 load、原生 `play` 健康与失败、原生 `pause`、`ended`、`error`、连续 play→pause→play、外部写入与 BGM 完全相同文本、2500ms 前后截图覆盖 status、BGM 无 lease 时 toolbox 打开 no-op。generation 专项断言：初始化 `snapshotLifecycleToken()` 不增加任一 generation；每次 `beginOperation()` 只把 operation 计数增加 1；每个 Pjax dispatch 的 `invalidateLifecycle()` 只使 lifecycle 增加 1、调用 `invalidateStatusLease()` 1 次且 operation 增量在健康路径为 0、失败路径仅由随后一次 `enterFailed(..., L)` 增加 1；Pjax 后旧 `O`、旧 `M`、旧 `L` 的 resolve/reject/媒体/Pjax continuation 均在写入前拒绝；被拒绝和所有实际进入 `failed` 的路径分别证明 generation/状态写入计数为 0 与 `enterFailed(reason, 当前 token)` 调用后 `mediaFailed === true`。
+确定性 fixture 必须覆盖：`failed -> retrying-load -> retrying-play -> playing|failed` 的两条终态、`load()`/`play()`/`pause()` 同步抛错、`load()` 返回后 play reject 重置 `mediaFailed`、普通 paused play 不调用 load、原生 `play` 健康与失败、原生 `pause`、`ended`、`error`、连续 play→pause→play、外部写入与 BGM 完全相同文本、2500ms 前后截图覆盖 status、BGM 无 lease 时 toolbox 打开 no-op。generation 专项断言：初始化 `snapshotLifecycleToken()` 不增加任一 generation；每次 `beginOperation()` 只把 operation 计数增加 1；每个 Pjax dispatch 的 `invalidateLifecycle()` 只使 lifecycle 增加 1、调用 `invalidateStatusLease()` 1 次且 operation 增量在健康路径为 0、失败路径仅由随后一次 `enterFailed(..., L)` 增加 1；Pjax 后旧 `O`、旧 `M`、旧 `L` 的 resolve/reject/媒体/Pjax continuation 均在写入前拒绝；被拒绝和所有实际进入 `failed` 的路径分别证明 generation/状态写入计数为 0 与 `enterFailed(reason, 当前 token)` 调用后 `mediaFailed === true`。`retireOperation` 专项断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用一次 `retireOperation(O)`，同一 operation 不得再由 `enterFailed` 或 `beginOperation` 重复 retire；`retrying-load -> retrying-play` 中途不得 retire；`retireOperation` 后 operation-scoped listener 集合归零（探针统计 addEventListener/removeEventListener 差值为 0）；终态之后人为触发的旧 `O` 延迟 resolve、旧 `O` 的排队 one-shot media 回调与 `setTimeout` 延迟回调全部在写入前 no-op；对 `retireOperation` 传入 `LifecycleToken`、旧 `O` 与非 token 值时返回 false 且 generation、listener 集合、状态、status、timer 与 `aria-busy` 写入计数均为 0；`enterFailed` 以 OperationToken 进入时恰好调用一次 `retireOperation` 且不再单独调用 `advanceOperationGeneration`，以 LifecycleToken 进入时恰好调用一次 `advanceOperationGeneration`。
 
 ## 17. 安全、搜索与描述
 
@@ -1462,7 +1550,7 @@ timer callback / clearStatus()
 | `Alerts` | `TYPE title` 加 LF 加 `markdownToPlainText` 结果 |
 | `Editor` | 完整 body |
 | `LinkCard` | 有效值 `descr` 为缺省所得 `null` 或显式空串时投影为 `avatar`；非空时为 `avatar descr`，不产生尾随空格 |
-| 失败 marker | 完整原始 marker 源文本 |
+| 失败 marker | `normalizeLineEndings(raw)`，即完整原始 marker 源文本的 LF 化形态 |
 
 投影函数不得返回 handler DOM、内部字段对象或原始 HTML。
 
@@ -1486,6 +1574,7 @@ timer callback / clearStatus()
 | 多行 opening | `[body]\|$[` 与 `[body] \|$[` 合法，pipe 后可跟 SP/HTAB 且 `$[` 必须相邻；`$[` 后尾随空白/注释及其它首个非水平空白 code unit 为 U+007C 的形式均为 `MULTILINE_INVALID_OPEN`；title 为 `MULTILINE_NOT_ALLOWED` |
 | 多行 closing/EndOfSource | 独立 `]$` 关闭；立即关闭产生空 body 并由 handler 报错；缩进/尾内容触发 `MULTILINE_UNEXPECTED_END` 且在该行停止；opening 外的 `]$` 为正文；`EndOfSource` 前无 closing 为 `MULTILINE_UNCLOSED`，有/无最后终止符均遵守统一 range 公式 |
 | 多行物理行 | CRLF/CR/LF 规范为 LF；header/opening/body 的内部终止符保留在 raw；最后物理行有终止符时排除、无终止符时到 `source.length`；最后一个内容换行不进入值但更早空行保留 |
+| 捕获层/恢复层 | 同一 marker 分别以 LF/CRLF/CR 三种物理终止符构造：捕获层断言 `raw`、`physicalLines[].terminator` 与 `sourceRange` 逐字等于原文切片；恢复层断言 `markerFailureHtml`、`markerFailureProjection` 与 `fieldFallbackHtml`、`fieldFallbackProjection` 的行尾全部为 LF，Tab 与相对缩进两层都不变；门禁不得出现「恢复层保留 CRLF/CR」断言 |
 | dedent | 空格与 Tab 逐 code unit 比较、不展开；最长共同前缀、相对缩进、行内空格和全空输入 fixture 精确 |
 | 多行递归 | body 内 `[#]>AI\|`、`[#]<AI>{...}` 和 tag 文本零 occurrence |
 | 保护区 | fenced/indented/inline code、HTML comment/tag/attribute、完整 raw-text 内零 occurrence |
@@ -1499,7 +1588,8 @@ timer callback / clearStatus()
 | Marked block | `start(src.slice(1))` 不 `+1`、严格整行 tokenizer、custom block 非 paragraph、renderer 精确 placeholder、`processAllTokens`/`walkTokens`/symbol finally 清理 |
 | placeholder | 每 token 恰一精确 DOM/range、无未拥有 namespace、顺序/重叠/替换审计；`sourceRange` 切 HTML 必须失败 |
 | bridge | 无 own property、accessor 零调用、unsupported value、descriptor/spread/define Proxy、已有 descriptor flags/value 深比较、原子回滚 |
-| render 拒绝/重试 | renderer、`onRenderEnd`、after_render:html reject 后 after 9 未执行；下一次同 data before 修复字段/descriptor，旧 carrier 不复用 |
+| render 拒绝/重试 | 按第 12.2 节逐阶段注入拒绝：后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、`after_post_render`（priority < 9，当前 spoiler）各注入一次，断言 after 9 未执行、原异常传播、`data.content` 未被交出；同一 post data 再次 render 时断言下一次 before 4 先从 `carrier.originalField` 修复字段值与 descriptor、清除旧 state 后重新 tokenization，旧 carrier/occurrence/placeholder range/projection 均不复用。路由阶段 `after_render:html` 拒绝只断言构建失败且不回写已物化字段 |
+| 生命周期顺序 | 断言 `after_post_render` priority < 9（spoiler 5）确实先于 after 9 执行、core excerpt（10）确实后于 after 9 执行；断言 `after_render:html` 在 `Post#render` 之外（`Post#render` 全程不调用它） |
 | sanitizer | 缺省/false/逐字 identity 通过；true/自定义改写 placeholder 在字段改写前失败 |
 | AI | 四态、可选 text、content/excerpt ID namespace、path hash、键盘 focus、tooltip/投影、错误恢复 |
 | Project | 页面/URL 注入、只按 sourceRange 恰好一个 CRLF/CR/LF 分组、失败/文本/空行 flush、投影 LF、Pjax 绑定 |
@@ -1509,7 +1599,7 @@ timer callback / clearStatus()
 | service/handler | service 能力白名单、detached render、handler throw/非法返回、render 成功但 projection 失败仍整枚恢复 |
 | before 源字段 NUL | `content` 与显式 `excerpt` 分别注入 NUL；断言 `post.render` 抛 `UNEXPECTED_NUL`，字段值/引用与 descriptor 不变；被注入 NUL 的字段由 NUL 检查读取 1 次，field/descriptor 写入均为 0，carrier/token/occurrence/handler 调用均为 0，未生成 escaped failure DOM，projectText/sidecar 捕获与保存计数为 0 |
 | handler 生成 NUL | render 输出 NUL 与 projection 输出 NUL 分开断言：前者 `render=1/toPlainText=0`，后者 `render=1/toPlainText=1` 且先丢弃 render；两者都只调用一次 marker fallback，DOM 精确为 `markerFailureHtml(raw)`、projection 精确为 `raw`、occurrence=`failed`，最终 DOM/projection NUL 为 0 |
-| 通用失败 | 未知/重复/缺字段、单枚 escaped pre、字段安全 fallback、原文 projection、内部 placeholder/token/NUL 清零 |
+| 通用失败 | 未知/重复/缺字段、单枚 escaped pre、字段安全 fallback、原文 projection、内部 placeholder/token/NUL 清零；LF/CRLF/CR 三种物理终止符下的失败恢复文本与投影均已 LF 化 |
 | content/excerpt | content、显式 excerpt tokenRange、派生 excerpt、无 more 分隔符逐字等值、description、renderer 拒绝边界 |
 | 加密 | 共享 policy 的 public/encrypted/ambiguous；before 读取正文前判定；encrypted/ambiguous 不扫描、不创建公开 projection |
 | more | 抛异常 getter/setter 配独立计数，before/after/projectText 读写均为 0 |
@@ -1574,24 +1664,46 @@ public 门禁与上述内存门禁是两套独立断言，不能互相替代：
    SYNTHETIC_PUBLIC     = "public/__line-marker-artifact-fixture"
    ```
 
-   `.temp/line-marker-artifacts.js --install-fixture` 创建 `SYNTHETIC_SOURCE`，frontmatter 固定 `title: line-marker-artifact-fixture`、`layout: page`、`permalink: __line-marker-artifact-fixture/`、`comments: false`，正文复用第 18.2 节内存 fixture，并在正文首行放置恰好一次、独占一行的 `<!-- arknights-line-marker-artifact-fixture:v1 -->`。staging 与 final source 的完整 UTF-8 bytes 必须相同；post-build HTML 必须含同一 sentinel、title 与 permalink 身份。该 page 不进入当前 `search.field=post` 的真实文章映射。
-3. install 的 staging 创建、完整写入、复读校验、exclusive/no-replace 发布到 final source 以及发布后校验必须位于同一个 `try/finally`；`finally` 无条件调用共享 cleanup。staging 路径由 fixture runner 独占，使用 exclusive-create 写入；发布前 `SYNTHETIC_STAGING` 与 `SYNTHETIC_SOURCE` 都必须不存在。禁止覆盖作者文件。默认 post-build 模式同时验证 source 精确 sentinel/bytes 与 public 身份，在报告中标记为 `synthetic`，并断言 `public/search.json` 不含 synthetic URL。
-4. `--install-fixture` 与 `--remove-fixture` 必须调用同一个 `cleanupSyntheticFixture()`。cleanup 始终尝试删除由 runner 独占的固定 `SYNTHETIC_STAGING`；final source 只在当前 bytes 与 sentinel 精确等于本轮完整 fixture source 时删除（install 已要求它开始前不存在，因此本轮创建后匹配即归本轮所有）；synthetic public 只在 `index.html` 同时匹配固定 title、permalink 与 sentinel 时递归删除。预先存在且不匹配或发布后被外部篡改的 final source/public 永不删除，并作为身份错误报告；这种非本轮或未知目标不是可清理残留。install 在 staging 写入后、发布前或发布后失败，以及 remove 在删除任一 owned target 前后失败，都再次执行同一 cleanup；原始错误与 cleanup 错误必须同时可诊断，不得因第一个异常跳过 staging 或其它 owned target。
-5. source/unit 在 install 前失败时不得创建 fixture；外层门禁的 `try` 必须从 `--install-fixture` 调用之前开始，`finally` 必须调用 `--remove-fixture`，并在其后断言 `SYNTHETIC_STAGING`、`SYNTHETIC_SOURCE`、`SYNTHETIC_PUBLIC` 均不存在。install 部分失败、clean/build 失败或任一 post-build artifact 失败都执行该路径；`git status --short` 不得包含三个 fixture 路径。合成 artifact 只证明构建链，不算“真实站点已有 Alerts/Editor/LinkCard 内容”。
+   `.temp/line-marker-artifacts.js --install-fixture` 创建 `SYNTHETIC_SOURCE`，frontmatter 固定 `title: line-marker-artifact-fixture`、`layout: page`、`permalink: __line-marker-artifact-fixture/`、`comments: false`、`sitemap: false`，正文复用第 18.2 节内存 fixture，并在正文首行放置恰好一次、独占一行的 `<!-- arknights-line-marker-artifact-fixture:v1 -->`。staging 与 final source 的完整 UTF-8 bytes 必须相同；post-build HTML 必须含同一 sentinel、title 与 permalink 身份。该 page 不进入当前 `search.field=post` 的真实文章映射，也不得进入任何 sitemap：`sitemap: false` 使 `hexo-generator-sitemap` 的同一份 `posts` 数组同时排除该 page，因此 `public/sitemap.xml` 与 `public/sitemap.txt` 都必须既不含 sentinel、也不含该 permalink 或站点 URL。
+3. install 的职责是「让 fixture 在 build 前就位并交给外层 remove 收尾」，因此其 `finally` 不得删除 final source。固定形态：
+
+   ```text
+   installSyntheticFixture()
+     assert !exists(SYNTHETIC_STAGING) && !exists(SYNTHETIC_SOURCE)   // 禁止覆盖作者文件
+     try
+       staging = exclusiveCreate(SYNTHETIC_STAGING)                  // 独占创建
+       writeAll(staging, fixtureSourceBytes)
+       assertEqual(readAllBytes(SYNTHETIC_STAGING), fixtureSourceBytes)
+       assertSentinelOnce(SYNTHETIC_STAGING)
+       publishNoReplace(staging, SYNTHETIC_SOURCE)                   // exclusive-create / no-replace
+       assertEqual(readAllBytes(SYNTHETIC_SOURCE), fixtureSourceBytes)
+       assertSentinelOnce(SYNTHETIC_SOURCE)                           // 发布后校验
+     catch (error)
+       cleanupSyntheticFixture()                                      // 发布前/发布后失败都完整清理
+       throw error                                                     // 原始错误优先，cleanup 错误同时可诊断
+     finally
+       removeIfOwned(SYNTHETIC_STAGING)                               // 只清 staging，不触碰 final source
+     // 正常成功：final source 保留，删除只由外层 --remove-fixture 负责
+     return ownershipToken
+   ```
+
+   硬性约束：成功路径必须保留 final source，否则紧随其后的 `npm run build` 无源可渲染；`finally` 只负责 staging，final source 的最终删除只由外层 `--remove-fixture` 负责；发布后校验失败视为「已发布但不可信」，必须走完整 cleanup 而不是留下待 build 消费的半成品。install 返回后，外层门禁必须立即断言 `SYNTHETIC_SOURCE` 存在且 bytes 与 sentinel 精确等于本轮 fixture source，缺失或不匹配即失败。
+4. `--install-fixture` 与 `--remove-fixture` 必须调用同一个 `cleanupSyntheticFixture()`。cleanup 始终尝试删除由 runner 独占的固定 `SYNTHETIC_STAGING`；final source 只在当前 bytes 与 sentinel 精确等于本轮完整 fixture source 时删除（install 已要求它开始前不存在，因此本轮创建后匹配即归本轮所有）；synthetic public 只在 `index.html` 同时匹配固定 title、permalink 与 sentinel 时递归删除。预先存在且不匹配或发布后被外部篡改的 final source/public 永不删除，并作为身份错误报告；这种非本轮或未知目标不是可清理残留。install 在 staging 写入后、发布前或发布后失败，以及 remove 在删除任一 owned target 前后失败，都再次执行同一 cleanup；原始错误与 cleanup 错误必须同时可诊断，不得因第一个异常跳过 staging 或其它 owned target。cleanup 成功后的残留断言集合固定为四项：`SYNTHETIC_STAGING`、`SYNTHETIC_SOURCE`、`SYNTHETIC_PUBLIC` 三条路径不存在，且 `public/sitemap.xml` 与 `public/sitemap.txt` 均不含 sentinel 与该 permalink/站点 URL。
+5. source/unit 在 install 前失败时不得创建 fixture；外层门禁的 `try` 必须从 `--install-fixture` 调用之前开始，`finally` 必须调用 `--remove-fixture`，并在其后断言 `SYNTHETIC_STAGING`、`SYNTHETIC_SOURCE`、`SYNTHETIC_PUBLIC` 均不存在，且 `public/sitemap.xml` 与 `public/sitemap.txt` 不含 sentinel 与 `__line-marker-artifact-fixture`。install 部分失败、clean/build 失败或任一 post-build artifact 失败都执行该路径；`git status --short` 不得包含三个 fixture 路径。合成 artifact 只证明构建链，不算“真实站点已有 Alerts/Editor/LinkCard 内容”。
 6. 若维护者选择不为 public 覆盖这三类 handler，final matrix 必须删除 synthetic install/remove 与对应 public DOM 断言，只保留内存 Hexo fixture 覆盖；不得一边只跑内存测试，一边仍要求不存在的 public 产物。
 
 ### 18.3 UI 自动化
 
 1. `.temp/theme-ui-alerts.test.js` 解析最终 `arknights.css`，分别计算普通 blockquote 与五种 GitHub Alert 在 light/dark、rest/hover/focus-within 下的合成 background、accent border 和 `--theme-text` 标题/正文；断言文字 `>=4.5:1`、边框 `>=3:1`、hover/focus 规则相同，并验证 IMPORTANT/其它类型不污染普通引用。
 2. `.temp/theme-ui-nav.test.js` 覆盖 1023/1024/1280px，断言桌面一级按钮 72×36、border-box、居中、active 前后位置不变；移动端整行左对齐。
-3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()/pause()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/lifecycle/status generation、对应 token 拒绝、原生 `play`/`pause`/`ended`/`error`、Pjax 三事件与旧 Promise 交错；断言初始化 snapshot 不递增 generation、每个 Pjax dispatch 的 lifecycle 只递增 1、`invalidateStatusLease()` 只调用 1 次、persistent listener 只重绑 1 次，operation 在健康路径增量为 0、失败路径仅由一次 `enterFailed(..., L)` 递增 1，并证明旧 `O/M/L` 在任何写入前 no-op、`enterFailed()` 不会接收旧 lifecycle token。每条实际进入 `failed` 的路径都必须传入当前 token 并断言调用后 `mediaFailed === true`，同时覆盖外部相同文本写入、2500ms lease 与 toolbox 打开。
+3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()/pause()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/lifecycle/status generation、对应 token 拒绝、原生 `play`/`pause`/`ended`/`error`、Pjax 三事件与旧 Promise 交错；断言初始化 snapshot 不递增 generation、每个 Pjax dispatch 的 lifecycle 只递增 1、`invalidateStatusLease()` 只调用 1 次、persistent listener 只重绑 1 次，operation 在健康路径增量为 0、失败路径仅由一次 `enterFailed(..., L)` 递增 1，并证明旧 `O/M/L` 在任何写入前 no-op、`enterFailed()` 不会接收旧 lifecycle token。`retireOperation` 必须单列一组断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用 1 次；`retrying-load -> retrying-play` 中途不调用；调用后 operation-scoped listener 计数归零；终态后人为触发的旧 `O` 延迟 resolve、排队 one-shot media 回调与 timer 延迟回调全部 no-op；传入 `LifecycleToken`/旧 `O`/非 token 时返回 false 且 generation、listener、状态、status、timer 与 `aria-busy` 写入计数为 0。每条实际进入 `failed` 的路径都必须传入当前 token 并断言调用后 `mediaFailed === true`，同时覆盖外部相同文本写入、2500ms lease 与 toolbox 打开。
 4. 必须运行现有真实脚本 `.temp/project-tooltip.test.js`、`.temp/theme-ui-screenshot.test.js`、`.temp/theme-ui-toolbox.test.js`；脚本从 source/DOM fixture 初始化 Project、截图 lease 和五项 toolbox，不以缺少 source 的 public HTML 作为通过证据。
 5. `.temp/search-projection-lifecycle.test.js` 继续跨真实 Warehouse 文档生命周期验证五类投影、失败原文、加密/ambiguous 空 sidecar 和内部串清零。
-6. `.temp/line-marker-artifacts.js` 默认模式必须同时读取真实 `source/` 输入和 `public/` 输出并逐项建立 source→artifact 对照；`--install-fixture` / `--remove-fixture` 只负责第 18.2 节 synthetic build fixture 的成对生命周期。fixture 探针必须注入 staging create/write/verify、no-replace publish、final source remove 和 public remove 前后失败，证明每次都进入共享 cleanup，并断言固定 staging/final source/public owned target 无残留。真实 source 缺失、fixture 未迁移、只存在 public 输出、synthetic source/output 不成对或清理残留时立即失败。
+6. `.temp/line-marker-artifacts.js` 默认模式必须同时读取真实 `source/` 输入和 `public/` 输出并逐项建立 source→artifact 对照；`--install-fixture` / `--remove-fixture` 只负责第 18.2 节 synthetic build fixture 的成对生命周期。fixture 探针必须注入 staging create/write/verify 失败、no-replace publish 失败、发布后 final source 校验失败、final source remove 前后失败和 public remove 前后失败，证明 staging 失败与发布后校验失败都进入共享 cleanup 并在 `finally` 后不留 staging，且成功 install 之后 `SYNTHETIC_SOURCE` 仍存在、失败 install 之后三条固定路径全为空；同时断言 `public/search.json` 不含 synthetic URL，`public/sitemap.xml` 与 `public/sitemap.txt` 均不含 sentinel、`__line-marker-artifact-fixture` 与站点 URL。真实 source 缺失、fixture 未迁移、只存在 public 输出、synthetic source/output 不成对或清理残留时立即失败。
 
 ### 18.4 最终命令
 
-A 至 D 完成后，在同一最终状态只执行一次以下门禁。顺序固定为“source/unit → 在外层 `try` 内调用 install（其内部 `try/finally` 覆盖 staging 创建/发布）→ 一次 clean/build → post-build artifact → 外层 `finally` 调用共享 remove → 三条固定路径残留断言”；任何 native command 非零退出都立即 throw，后续命令不得执行。install、clean、build 和 post-build artifact 任一阶段失败都必须进入同一个外层 `finally`；remove 自身失败时，内层 `finally` 仍执行 staging/source/public 与 git status 残留断言。以下块必须作为同一个 PowerShell 7 script/session 整体执行，不能拆开逐行粘贴而丢失 `finally`；`node --check` 只是语法补充，每个 probe 随后或对应阶段都以 `node <probe>` 实际执行：
+A 至 D 完成后，在同一最终状态只执行一次以下门禁。顺序固定为“source/unit → 在外层 `try` 内调用 install（其内部 `try/finally` 只清 staging，成功保留 final source 供 build 消费，发布后校验失败执行完整 cleanup）→ 断言 final source 存在 → 一次 clean/build → post-build artifact → 外层 `finally` 调用共享 remove 收尾 → 三条固定路径 + 两个 sitemap 残留断言”；任何 native command 非零退出都立即 throw，后续命令不得执行。install、clean、build 和 post-build artifact 任一阶段失败都必须进入同一个外层 `finally`；remove 自身失败时，内层 `finally` 仍执行 staging/source/public、sitemap 与 git status 残留断言。以下块必须作为同一个 PowerShell 7 script/session 整体执行，不能拆开逐行粘贴而丢失 `finally`；`node --check` 只是语法补充，每个 probe 随后或对应阶段都以 `node <probe>` 实际执行：
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -1661,6 +1773,9 @@ $fixturePaths = @(
 )
 try {
   Invoke-Checked node '.temp/line-marker-artifacts.js' '--install-fixture'
+  if (-not (Test-Path -LiteralPath 'source/__line-marker-artifact-fixture.md')) {
+    throw 'Synthetic fixture install succeeded without leaving the final source in place'
+  }
   Invoke-Checked npm 'run' 'clean'
   $env:TZ = 'Asia/Shanghai'
   Invoke-Checked npm 'run' 'build'
@@ -1675,6 +1790,18 @@ finally {
     foreach ($fixturePath in $fixturePaths) {
       if (Test-Path -LiteralPath $fixturePath) {
         throw "Synthetic fixture cleanup left residual path: $fixturePath"
+      }
+    }
+
+    foreach ($sitemapPath in @('public/sitemap.xml', 'public/sitemap.txt')) {
+      if (Test-Path -LiteralPath $sitemapPath) {
+        $sitemapHits = @(Select-String -LiteralPath $sitemapPath -SimpleMatch -Pattern @(
+          'arknights-line-marker-artifact-fixture',
+          '__line-marker-artifact-fixture'
+        ))
+        if ($sitemapHits.Count -ne 0) {
+          throw "Synthetic fixture leaked into $sitemapPath"
+        }
       }
     }
 
@@ -1711,7 +1838,7 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | `line-marker-marked.test.js` | block token、placeholder、metadata、symbol 清理 | 无；source/unit |
 | `line-marker-registry.test.js` | 五 handler 注册与受控接口 | 无；source/unit |
 | `line-marker-handlers.test.js` | Alerts/Editor/LinkCard 三类 DOM/投影、LinkCard ABNF/descr 三态、失败恢复 | 内存 Hexo HTML；不读取 public |
-| `line-marker-pipeline.test.js` | occurrence、Project 分组、fallback、projection | 内存 Hexo；不读取 public |
+| `line-marker-pipeline.test.js` | occurrence、Project 分组、fallback、projection；第 12.1.1 节模块规模与依赖门禁 | 内存 Hexo；不读取 public |
 | `line-marker-hexo.test.js` | 真实 `Hexo#post.render` 的 Alerts/Editor/LinkCard 三类终态 | 内存 source→内存 HTML |
 | 九个旧 `marker-*.test.js` | 既有 AI/Project/carrier/search 行为按 block-only 回归 | 无；source/unit |
 | `search-projection-lifecycle.test.js` | 五类 sidecar、加密/ambiguous、失败原文 | Warehouse `db.json` fixture；无 public |
@@ -1726,18 +1853,36 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 
 - 三篇现有文章只含新 AI block 输出，tooltip ID 含 `content` source-field namespace。
 - 项目页只含按 `sourceRange` 分组的 Project 卡和原有 GitHub Important Alert；投影 name 以 LF 分隔。
-- 第 18.2 节内存 fixture 经真实 `Hexo#post.render` 后具有 Alerts/Editor/LinkCard 具体 DOM，且不读取 `public/`；synthetic page 的 `public/__line-marker-artifact-fixture/index.html` 只由本次 build 新建，artifact 检查后固定 staging、final source 与该 public 目录均被删除并通过残留断言。
+- 第 18.2 节内存 fixture 经真实 `Hexo#post.render` 后具有 Alerts/Editor/LinkCard 具体 DOM，且不读取 `public/`；synthetic page 的 `public/__line-marker-artifact-fixture/index.html` 只由本次 build 新建，artifact 检查后固定 staging、final source 与该 public 目录均被删除并通过残留断言，`public/sitemap.xml` 与 `public/sitemap.txt` 不含 synthetic 身份。
 - 旧 marker、旧 tag、carrier token、placeholder attribute、Project 临时分组边界和 NUL 在最终 HTML 中零命中。
-- `public/search.json` 只含已验证 sidecar 搜索文本且不含 synthetic fixture URL；失败 marker 是未转义原源纯文本，不含 HTML entity、placeholder 或部分 handler 字段。
+- `public/search.json` 只含已验证 sidecar 搜索文本且不含 synthetic fixture URL；失败 marker 是未转义原源纯文本（行尾已 LF 化），不含 HTML entity、placeholder 或部分 handler 字段。
+- `public/sitemap.xml` 与 `public/sitemap.txt` 均不含 synthetic sentinel、`__line-marker-artifact-fixture` 或其站点 URL。
 - `public/projects/index.html` 保留 grid/card、lazy image、project-name 和 Pjax 属性。
 - Monaco 容器不含 `data-readonly`、`data-height`、`data-options`，并保留 hidden direct-child source pre 契约。
 - source-level LinkCard 正反 fixture 只输出 scoped allowlist style，不含 `@import`、外部 URL、脚本、transition/animation 属性或非白名单 property。
 - `audio#bgm` 仍只有一个且位于 Pjax 替换区外。
-- CSS/JS 产物版本最终为 `cssVersion=20260954`、`jsVersion=20260952`。
+- CSS/JS 产物版本最终为 `cssVersion=20260955`、`jsVersion=20260952`；`public/` 中 `arknights.css?v=` 与 `arknights.js?v=` 均为该最终值，命中 A/B/C 任一中间值即失败。
 
 ## 19. 真实有头浏览器验收
 
-自动化与无头截图不能替代以下人工验收。验收前创建真实临时源文件 `source/_posts/__line-marker-browser-fixture.md`，内容复用第 18.2 节 Alerts/Editor/三种 LinkCard，并追加一个 GitHub Alert 与 TEST 失败 marker；在第 18.4 节同一 PowerShell fail-fast session 中先设 `$env:TZ = 'Asia/Shanghai'`，再执行 `Invoke-Checked npm 'run' 'build'`，随后用有头浏览器打开生成页。验收结束删除临时 source，再以同一 helper 顺序执行 `Invoke-Checked npm 'run' 'clean'`、`Invoke-Checked npm 'run' 'build'` 移除对应 public 输出；不提交 fixture、不新增友链数据。
+自动化与无头截图不能替代以下人工验收。人工验收使用与第 18.2 节同一套 ownership 纪律，避免把作者同名文件覆盖或留下残留：
+
+```text
+BROWSER_SENTINEL  = "arknights-line-marker-browser-fixture:v1"
+BROWSER_STAGING   = ".temp/line-marker-browser-fixture.md.staging"
+BROWSER_SOURCE    = "source/_posts/__line-marker-browser-fixture.md"
+BROWSER_PUBLIC    = "public/__line-marker-browser-fixture"
+```
+
+安装与清理规则：
+
+1. `--install-browser-fixture` 先断言 `BROWSER_STAGING` 与 `BROWSER_SOURCE` 都不存在；已存在即以身份错误退出，**禁止覆盖作者同名文件**。
+2. staging 由 runner 独占，以 exclusive-create 写入完整 fixture source（frontmatter 固定 `title: line-marker-browser-fixture`、`layout: post`、`date: 2026-01-01`、`permalink: __line-marker-browser-fixture/`、`comments: false`、`sitemap: false`，正文复用第 18.2 节 Alerts/Editor/三种 LinkCard，并追加一个 GitHub Alert 与一个 `TEST` 失败 marker，正文首行放置恰好一次、独占一行的 `<!-- arknights-line-marker-browser-fixture:v1 -->`）；复读校验后以 exclusive-create / no-replace 发布为 `BROWSER_SOURCE`。Project、导航、BGM、搜索、响应式与主题条目在真实页面验收，不依赖该 fixture。
+3. 内层 `finally` 只删除 staging；发布后校验失败才执行完整 cleanup；正常成功保留 final source 交由外层收尾。
+4. 外层 `finally` 必须调用 `--remove-browser-fixture`，其 `cleanupBrowserFixture()` 与 install 共用：staging 无条件删除；`BROWSER_SOURCE` 只在当前 bytes 与 sentinel 精确等于本轮 fixture source 时删除；`BROWSER_PUBLIC` 只在同时匹配固定 title、permalink 与 sentinel 时删除；不匹配或被外部篡改的目标永不删除并报身份错误。
+5. 中断（Ctrl+C、构建失败、人工提前退出）同样走该 `finally`；因此人工验收脚本必须整体作为同一个 PowerShell 7 session 执行，验收动作放在 `try` 内，删除与 clean/rebuild 放在 `finally` 内。删除后以同一 `Invoke-Checked` helper 顺序执行 `npm run clean`、`npm run build` 移除对应 public 输出，再断言 `BROWSER_STAGING`/`BROWSER_SOURCE`/`BROWSER_PUBLIC` 均不存在且 `git status --short` 不含该路径。fixture 不提交、不新增友链数据。
+
+在上述 `try/finally` 内，先设 `$env:TZ = 'Asia/Shanghai'`，再执行 `Invoke-Checked npm 'run' 'build'`，随后用有头浏览器打开生成页，按下列条目人工验收：
 
 1. Alerts：默认展开，点击、Enter、Space 可收起/展开，class 与 `aria-expanded` 同步。
 2. GitHub Alert：在 light/dark 下 hover 与 focus-within 背景一致变化，普通 blockquote 不被 `.alert-*` 污染。
@@ -1745,7 +1890,7 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 4. LinkCard：链接、显示名称、背景图、说明和 scoped style 正确；style 不影响其它卡片。
 5. Project：连续卡片为单网格，hover CSS 变量正常，Pjax 后重绑。
 6. 导航：1023/1024/1280px 验证 active 前后无横向位移，移动端整行左对齐。
-7. BGM：播放、暂停、原生 `play`/`pause`/`ended`/`error`、`failed -> retrying-load -> retrying-play -> playing|failed`、重试失败、Pjax 边界、共享 status 被相同文本外部覆盖与打开工具箱均符合状态机；失败后可见状态与 `mediaFailed` 同步保持。
+7. BGM：播放、暂停、原生 `play`/`pause`/`ended`/`error`、`failed -> retrying-load -> retrying-play -> playing|failed`、重试失败、终态 `retireOperation` 后旧 `O` 延迟回调无效、Pjax 边界、共享 status 被相同文本外部覆盖与打开工具箱均符合状态机；失败后可见状态与 `mediaFailed` 同步保持。
 8. 搜索：五类成功 marker 与失败 marker 均不泄漏内部串，搜索结果可正常定位。
 9. 响应式：320、768、1023、1024、1440px 无横向溢出、遮挡或焦点丢失。
 10. 主题：light/dark/auto 下复核 Alert、LinkCard、Editor 容器和现有卡片视觉。
@@ -1762,10 +1907,12 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 4. AI、Project、Alerts、Editor、LinkCard 的字段、默认值、DOM 和纯文本投影与本文一致。
 5. GitHub Alert、Alerts marker、普通 blockquote 三者类名和交互不串层。
 6. 桌面导航 active 不引发布局位移，移动端布局不回归。
-7. BGM 的 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed`、operation/lifecycle token、共享 status lease、toolbox 与 Pjax 状态机全部通过。
+7. BGM 的 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed`、operation/lifecycle token、`retireOperation` 终态 retire 与 listener 归零、共享 status lease、toolbox 与 Pjax 状态机全部通过。
 8. document-private search sidecar、加密空投影、缓存自愈和 fail-closed 行为保持有效。
-9. A 至 D 均有独立测试、审查和 commit；A 的 handler、注册、控制器和内容迁移保持原子，均未 push。
-10. 自动化、构建、artifact 与真实有头浏览器验收均有可复核证据。
+9. 第 12.1.1 节拆分完成：`pipeline.js` 与四个子模块、`ToolboxStatusLease.ts` 均在规模门禁内，依赖方向单向，导出 API、注册 identity 与全部产物逐字不变。
+10. 捕获层 `raw`/`sourceRange` 逐字保留原始终止符，恢复层 DOM 与投影一律 LF 化；两种口径不同时承诺。
+11. A 至 D 均有独立测试、审查和 commit；A 的 handler、注册、控制器和内容迁移保持原子，均未 push。
+12. 自动化、构建、artifact 与真实有头浏览器验收均有可复核证据。
 
 ### 20.2 已识别风险与控制
 
@@ -1778,7 +1925,8 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | Alerts 与 GitHub Alert 类/对比度冲突 | 新 handler 只输出 `.admonition`；GitHub filter 只输出 `.alert`；标题/正文用主题正文色并对 alpha 合成值门禁 |
 | LinkCard style 注入 | 可执行 ABNF、属性/颜色/长度/资源白名单、RootUrl 单次 percent-decode 与 decoded segment 审计、动画禁止项、正反 fixture、field+occurrence 唯一 scope |
 | Editor 任意 options 扩张 | marker 只输出 language/number/theme/body；hidden source pre 为唯一原文；控制器固定只读与自动布局 |
-| BGM 过期 Promise/media 回调或 status lease 覆盖新状态 | 单一 playback state machine、operation/lifecycle 双 generation 与类型化 token、每次 Pjax dispatch 精确一次失效、`mediaFailed` load 重试边界、MutationObserver lease（含相同文本 mutation） |
+| BGM 过期 Promise/media 回调或 status lease 覆盖新状态 | 单一 playback state machine、operation/lifecycle 双 generation 与类型化 token、`retireOperation` 终态 retire + listener 归零、每次 Pjax dispatch 精确一次失效、`mediaFailed` load 重试边界、MutationObserver lease（含相同文本 mutation） |
 | marker 内容泄漏到搜索 | handler 纯文本投影、sidecar hash、内部串拒绝、无效 sidecar 不回退 |
 | 加密文档意外读取正文 | 加密空 sidecar、字段 getter 计数、render count 与搜索输出回归 |
 | vendored 主题同步覆盖本地实现 | 修改点集中在 handler、控制器、局部 Stylus 和 README；同步上游时按本规格逐项复核 |
+| `pipeline.js` / `Toolbox.ts` 继续膨胀成单文件大模块 | 第 12.1.1 节冻结拆分边界：物化/失败恢复/Project 编排/投影各自独立模块 + 独立 status lease 模块；文件规模、依赖方向与行为回归三道门禁，超限即视为拆分未完成 |
