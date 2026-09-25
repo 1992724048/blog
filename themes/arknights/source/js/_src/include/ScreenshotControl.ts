@@ -5,7 +5,23 @@ const MAX_CAPTURE_EDGE = 16_384
 const MAX_CAPTURE_PIXELS = 33_554_432
 const MAX_FILENAME_CODE_UNITS = 80
 
+interface CaptureRequest {
+  root: HTMLElement
+  button: HTMLButtonElement
+  generation: number
+}
+
+type CaptureLease = CaptureRequest
+
+interface RootCaptureState {
+  active: CaptureLease | null
+  activePromise: Promise<void> | null
+  pending: CaptureRequest | null
+  pendingPromise: Promise<void> | null
+}
+
 interface PaginatorRestore {
+  lease: CaptureLease
   launchGeneration: number
   paginator: HTMLElement
   parent: Node
@@ -14,7 +30,7 @@ interface PaginatorRestore {
 
 class ScreenshotControl {
   private currentGeneration: number = 0
-  private capturePromise: Promise<void> | null = null
+  private readonly captureStates = new WeakMap<HTMLElement, RootCaptureState>()
   private snapDomPromise: Promise<SnapDomGlobal> | null = null
 
   private isCurrent = (generation: number): boolean => {
@@ -179,8 +195,8 @@ class ScreenshotControl {
     return `${title}-${date}-${time}.png`
   }
 
-  private detachPaginator = (root: HTMLElement, launchGeneration: number): PaginatorRestore | null => {
-    const paginator = root.querySelector<HTMLElement>('#paginator')
+  private detachPaginator = (lease: CaptureLease): PaginatorRestore | null => {
+    const paginator = lease.root.querySelector<HTMLElement>('#paginator')
     if (paginator === null) {
       return null
     }
@@ -189,9 +205,10 @@ class ScreenshotControl {
       return null
     }
     const restore: PaginatorRestore = {
-      launchGeneration: launchGeneration,
-      paginator: paginator,
-      parent: parent,
+      lease,
+      launchGeneration: lease.generation,
+      paginator,
+      parent,
       nextSibling: paginator.nextSibling
     }
     parent.removeChild(paginator)
@@ -202,7 +219,14 @@ class ScreenshotControl {
     if (restore === null) {
       return
     }
-    if (restore.launchGeneration !== this.currentGeneration && !restore.parent.isConnected) {
+    const state = this.captureStates.get(restore.lease.root)
+    const currentPaginator = restore.lease.root.querySelector('#paginator')
+    if (
+      state?.active !== restore.lease ||
+      currentPaginator !== null ||
+      !restore.lease.root.contains(restore.parent) ||
+      (restore.launchGeneration !== this.currentGeneration && !restore.lease.root.isConnected)
+    ) {
       return
     }
     const nextSibling = restore.nextSibling !== null && restore.parent.contains(restore.nextSibling)
@@ -257,20 +281,43 @@ class ScreenshotControl {
     button.setAttribute('aria-busy', 'false')
   }
 
-  private cancelCurrentGeneration = (): void => {
-    this.currentGeneration += 1
-    this.capturePromise = null
-    this.bindCurrentButton()
-  }
-
-  private captureCurrent = async (
-    root: HTMLElement,
-    button: HTMLButtonElement,
-    launchGeneration: number
-  ): Promise<void> => {
-    let paginatorRestore: PaginatorRestore | null = null
+  private setCaptureButton = (button: HTMLButtonElement): void => {
     button.disabled = true
     button.setAttribute('aria-busy', 'true')
+  }
+
+  private getCaptureState = (root: HTMLElement): RootCaptureState => {
+    const existing = this.captureStates.get(root)
+    if (existing !== undefined) {
+      return existing
+    }
+    const state: RootCaptureState = {
+      active: null,
+      activePromise: null,
+      pending: null,
+      pendingPromise: null
+    }
+    this.captureStates.set(root, state)
+    return state
+  }
+
+  private isRequestCurrent = (request: CaptureRequest): boolean => {
+    const root = document.querySelector<HTMLElement>('#post-content')
+    const button = document.querySelector<HTMLButtonElement>('.toolbox-screenshot[data-action="screenshot"]')
+    return this.isCurrent(request.generation) && root === request.root && button === request.button
+  }
+
+  private pendingOwnsButton = (state: RootCaptureState, lease: CaptureLease): boolean => {
+    const pending = state.pending
+    return pending !== null &&
+      pending.button === lease.button &&
+      this.isRequestCurrent(pending)
+  }
+
+  private captureCurrent = async (lease: CaptureLease): Promise<void> => {
+    const { root, button, generation: launchGeneration } = lease
+    let paginatorRestore: PaginatorRestore | null = null
+    this.setCaptureButton(button)
     this.writeStatus(button.dataset.labelPreparing || '')
 
     try {
@@ -304,7 +351,7 @@ class ScreenshotControl {
         return
       }
 
-      paginatorRestore = this.detachPaginator(root, launchGeneration)
+      paginatorRestore = this.detachPaginator(lease)
       if (!this.isCurrent(launchGeneration)) {
         return
       }
@@ -328,15 +375,71 @@ class ScreenshotControl {
       }
     } finally {
       this.restorePaginator(paginatorRestore)
-      button.disabled = false
-      button.setAttribute('aria-busy', 'false')
+      const state = this.captureStates.get(root)
+      if (state?.active === lease && !this.pendingOwnsButton(state, lease)) {
+        button.disabled = false
+        button.setAttribute('aria-busy', 'false')
+      }
     }
   }
 
-  public capture = (): Promise<void> => {
-    if (this.capturePromise !== null) {
-      return this.capturePromise
+  private startCapture = (request: CaptureRequest): Promise<void> => {
+    const state = this.getCaptureState(request.root)
+    if (!this.isRequestCurrent(request)) {
+      return Promise.resolve()
     }
+    if (state.active !== null) {
+      return state.activePromise ?? Promise.resolve()
+    }
+
+    const lease: CaptureLease = {
+      root: request.root,
+      button: request.button,
+      generation: request.generation
+    }
+    state.active = lease
+    const execution = this.captureCurrent(lease)
+    const trackedPromise = execution.finally(() => {
+      if (state.active === lease) {
+        state.active = null
+        state.activePromise = null
+      }
+    })
+    state.activePromise = trackedPromise
+    return trackedPromise
+  }
+
+  private startPendingCapture = (state: RootCaptureState, request: CaptureRequest): Promise<void> => {
+    if (state.pending !== request) {
+      return Promise.resolve()
+    }
+    state.pending = null
+    state.pendingPromise = null
+    return this.startCapture(request)
+  }
+
+  private enqueueCapture = (state: RootCaptureState, request: CaptureRequest): Promise<void> => {
+    const activePromise = state.activePromise
+    if (activePromise === null) {
+      return this.startCapture(request)
+    }
+    const pendingPromise = activePromise.then(
+      () => this.startPendingCapture(state, request),
+      () => this.startPendingCapture(state, request)
+    )
+    state.pending = request
+    state.pendingPromise = pendingPromise
+    this.setCaptureButton(request.button)
+    this.writeStatus(request.button.dataset.labelPreparing || '')
+    return pendingPromise
+  }
+
+  private cancelCurrentGeneration = (): void => {
+    this.currentGeneration += 1
+    this.bindCurrentButton()
+  }
+
+  public capture = (): Promise<void> => {
     const root = document.querySelector<HTMLElement>('#post-content')
     if (root === null) {
       return Promise.resolve()
@@ -346,15 +449,26 @@ class ScreenshotControl {
       return Promise.resolve()
     }
 
-    const launchGeneration = this.currentGeneration
-    const execution = this.captureCurrent(root, button, launchGeneration)
-    const trackedPromise = execution.finally(() => {
-      if (this.capturePromise === trackedPromise) {
-        this.capturePromise = null
-      }
-    })
-    this.capturePromise = trackedPromise
-    return trackedPromise
+    const state = this.getCaptureState(root)
+    const request: CaptureRequest = {
+      root,
+      button,
+      generation: this.currentGeneration
+    }
+    if (state.active?.generation === request.generation &&
+        state.active.button === button &&
+        state.activePromise !== null) {
+      return state.activePromise
+    }
+    if (state.pending?.generation === request.generation &&
+        state.pending.button === button &&
+        state.pendingPromise !== null) {
+      return state.pendingPromise
+    }
+    if (state.active === null) {
+      return this.startCapture(request)
+    }
+    return this.enqueueCapture(state, request)
   }
 
   constructor() {

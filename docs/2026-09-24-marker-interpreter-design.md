@@ -122,7 +122,8 @@ AI 标记的参数契约为 `(state, text?)`：
 
 AI 支持 block 和 inline 两种 lexer 模式，但“inline”只表示普通 Markdown text 上下文。link label 固定为 text-carrier（状态 `text-preserved`），按最终 label 渲染语义委托当前 Hexo link renderer；image alt、link href 和字符串 title 固定 raw-preserve，均不生成 wrapper、不调用 AI handler。image alt 的唯一语义来源是当前 Hexo `image` renderer 实际读取的 `image.text`：扩展恢复该字段并委托 renderer，不把 `image.tokens` 规范化成另一套 alt 文本。link title 只有 `typeof token.title === 'string'` 时才允许扫描；`null`、`undefined` 和其它类型都跳过。HTML 标签及属性由 lexer 整体保护，属性 marker 不进入 AI 解释器。block/inline 不改变徽标的状态、四态类名和 tooltip 契约。AI 输出必须保留：
 
-- `.ai-badge` 根类。
+- `.ai-badge` 根类；根节点固定输出 `tabindex="0"`，并以 `aria-describedby` 关联本 badge 的 `.ai-badge__tip[role="tooltip"]`。
+- tooltip ID 按渲染字段、页面路径与 store occurrence ID 组成确定性命名空间；同字段同页的重复 marker、content/excerpt 同 occurrence 序号及多页面输出均不得碰撞。内部 SVG 保持 `aria-hidden="true"`，tooltip 不得放入可聚焦嵌套 button/link。
 - 当前四态类名和状态标签：`pass`、`edit`、`unkn`、`none`。
 - 机器人 SVG 图标、状态区域和 `.ai-badge__tip` 四态图例。
 - 文案存在时的可选 `.ai-badge__text`。
@@ -148,7 +149,7 @@ PJ 输出必须保留：
 - `--card-img` 自定义属性。
 - 懒加载 `img` 和 `.project-name`。
 - 现有 `target="_blank"`、`rel="noopener"` 以及项目悬停和 Pjax 所需的结构。
-- `source/js/project-tooltip.js` 对 `.project-card` 的既有绑定方式。
+- `themes/arknights/source/js/_src/include/ProjectTooltip.ts` 对 `.project-card` 的既有绑定方式，编译后随 `arknights.js` bundle 交付。
 
 ## 7. 模块架构
 
@@ -476,7 +477,7 @@ Alert、Spoiler、Terms 及其 core 文件不在迁移范围内，不因 markers
 | heading | 真实 `Hexo#post.render` 中 marker 在 heading 前、后方、两侧、嵌套强调中、至少两个连续 heading-only、成功/失败 marker、PJ inline 不支持、`headerIds:false`、后续正常 heading | test-only spy 确认 `parseInline` 收到原 `token.tokens` 同一引用；priority 9 仍物化/恢复；最终 heading-only 无 `id`/`.headerlink` 且通过内部串审计；每个共享 `_headingId` snapshot 同时断言 `!Object.hasOwn(snapshot, '')` 与 `!Object.hasOwn(snapshot, '-1')`，后续正常 heading id 等于对照；纯 `new Marked()` 不作为此门禁 |
 | 注册 | 同一 context+pipeline 重复调用、同一 context 不同 pipeline、不同 context、重复 `hexo.init()` | before 4、after 9、marked:use 0 各恰好一条；同 pair 幂等；不同 pipeline 抛稳定重复错误；init 后不手动注册 |
 | 并发隔离 | `Promise.all` 并发渲染两篇不同 marker 文档、重复 init 后再并发 | 每篇只消费自己的 carrier；无串文、无未消费 occurrence；Marked defaults 重装不丢失其它文章状态 |
-| AI handler | `PASS/EDIT/UNKN/NONE`、旧值 `IGNORE/NOTREVIEW` 负例、可选文案、1–40 字符限制、tooltip 顺序与文案转义 | 新四态 class、tooltip 和 projection 符合协议；旧值返回 `AI_INVALID_STATE`、恢复原 marker 且不生成 badge |
+| AI handler | `PASS/EDIT/UNKN/NONE`、旧值 `IGNORE/NOTREVIEW` 负例、可选文案、1–40 字符限制、tooltip 顺序与文案转义、根 badge 键盘聚焦、tooltip 唯一 ID / `aria-describedby`、同页重复 marker、同名同文案与多页面 ID 隔离 | 新四态 class、tooltip 和 projection 符合协议；根 badge 可聚焦且每个 tooltip ID 唯一并正确关联，SVG 对辅助技术隐藏，内部无嵌套 button/link；旧值返回 `AI_INVALID_STATE`、恢复原 marker 且不生成 badge |
 | PJ handler/grid | 三字段、页面类型、block 限制、真实 Hexo 两个连续 PJ、普通文字中断、空行中断、非法字段、handler 失败 | 两个连续 PJ 恰好一个 `.projects-grid`、两个直接 `.project-card` 且无额外 `p` wrapper；普通文字/空行产生两个网格；非法枚恢复；失败不产生半截网格；不依赖纯 `new Marked()` 的 `breaks:false` 假设 |
 | PJ 安全 | `javascript:`、`data:`、`vbscript:`、协议相对地址、CSS 注入、引号和反斜杠 | 危险 URL 或 CSS 不能进入 href、src 或 `--card-img` |
 | 可观测性 | store/carrier spy、正常 content 的实际 Marked token、HTML 属性与四种 raw-text protected 区域 | protected 区域不签发 occurrence、不附 `arknights` metadata；正常 content 在真实 token 上出现冻结 descriptor/数组/元素/嵌套 parent；不靠最终字符串猜测“没有内部处理” |

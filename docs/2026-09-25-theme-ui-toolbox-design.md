@@ -16,7 +16,7 @@
 | 页面标题 | `themes/arknights/layout/includes/layout.pug` | 已删除 `visibilitychange`、缓存标题与“冲刺”改写；页面隐藏/恢复不改变标题。 |
 | Pjax 标题 | `themes/arknights/layout/includes/js-data.pug`、`themes/arknights/source/js/pjax.js` | Pjax selector 继续包含 `title`，切换时通过 History API 写入新页面标题。 |
 | 评论开关 | `themes/arknights/layout/post.pug`、`source/projects/index.md`、`source/data/index.md` | 文章模板继续以 `page.comments` 和已启用评论组件共同决定是否渲染 `#comments`；项目页和数据页已显式 `comments: false`。 |
-| AI 协议与 DOM | `themes/arknights/scripts/markers/handlers/ai.js` | 合法状态为 `PASS`、`EDIT`、`UNKN`、`NONE`，输出 `.ai-badge--pass|edit|unkn|none`，tooltip 固定列出四态。 |
+| AI 协议与 DOM | `themes/arknights/scripts/markers/handlers/ai.js` | 合法状态为 `PASS`、`EDIT`、`UNKN`、`NONE`，输出 `.ai-badge--pass|edit|unkn|none`；根 badge 可聚焦并以唯一 tooltip ID / `aria-describedby` 关联四态图例。 |
 | AI 样式 | `themes/arknights/source/css/_custom/custom.styl` | tooltip 使用 visibility/opacity/transform 160ms 双向动画；状态色为 PASS 绿、EDIT 紫、UNKN 灰、NONE 橙。 |
 | 导航 active | `themes/arknights/source/css/_core/header/header.styl` | active 使用全断点 2.5px 透明占位底边与主题高亮底边，不再使用 5px 左边框及旧 padding 补偿。 |
 | 桌面侧栏 footer | `themes/arknights/source/css/_core/aside/aside.styl` | `aside > footer` 位于 sticky aside 底部，≥769px 使用 `max(0px, calc(30px - 1lh))`；`flex_layout.styl` 的 ≤768px 移动规则不变。 |
@@ -27,7 +27,7 @@
 | 主题脚本入口 | `themes/arknights/layout/includes/js-data.pug`、`themes/arknights/source/js/_src/tsconfig.json` | `arknights.js` 由 `_src/include/**/*.ts` 编译；不再输出独立 `project-tooltip.js` script 标签。 |
 | 项目卡 DOM | `themes/arknights/scripts/markers/handlers/projects.js` | 保持 `.project-card`、`--mx/--my` 消费所需的既有结构、懒加载图片和 `.project-name`；本轮未修改该 handler。 |
 | 项目卡样式 | `themes/arknights/source/css/_custom/custom.styl` | hover 视觉继续读取 `--mx/--my`；本轮未修改项目卡 CSS。 |
-| 文章内容边界 | `themes/arknights/layout/post.pug` | `#paginator` 是 `#post-content` 的子节点，截图控制器显式临时 detach 并按 generation 条件恢复。 |
+| 文章内容边界 | `themes/arknights/layout/post.pug` | `#paginator` 是 `#post-content` 的子节点，截图控制器显式临时 detach；同 root lease 串行，只有当前 lease 可恢复，且不会恢复旧节点覆盖新 paginator。 |
 | BGM 资源 | `themes/arknights/source/audio/bgm.mp3`、`themes/arknights/source/icons/sound.svg` | 本地 MP3 与 sound SVG 继续复用；audio 位于 Pjax 替换区外。 |
 | BGM 配置 | `_config.arknights.yml` | 根级最终值为 `enable: true`、`autoplay: false`、`loop: true`、`src: /audio/bgm.mp3`；Pug 通过 `url_for(theme.bgm.src)` 消费。 |
 | SnapDOM | `themes/arknights/source/lib/snapdom/3.1.1/` | 已 vendored classic 3.1.1 资源与 LICENSE，控制器首次点击懒加载；无 package/lock/tsconfig 改动。 |
@@ -103,7 +103,7 @@ defer arknights.js
 │  ├─ 等待字体与图片
 │  ├─ 截图 #post-content，排除 #paginator
 │  ├─ 长图整体缩放
-│  └─ generation 取消与 PNG 下载
+│  └─ root/lease 串行、generation 取消与 PNG 下载
 ├─ BgmControl
 │  ├─ 复用唯一、位于 Pjax 替换区外的 audio
 │  ├─ play / pause 与事件驱动状态
@@ -118,7 +118,7 @@ defer arknights.js
 | 模块 | 允许承担的职责 | 禁止承担的职责 |
 | --- | --- | --- |
 | `Toolbox.ts` | 工具箱开合、按钮发现与 `data-action` 分发、关闭行为、现有标注/分享/收藏、Pjax 状态恢复 | SnapDOM 加载、canvas 处理、文件名生成、BGM 播放状态机 |
-| `ScreenshotControl.ts` | SnapDOM Promise 缓存、资源前置等待、截图目标、缩放、PNG、取消、下载反馈 | 工具箱几何、标注、分享、收藏、BGM 播放 |
+| `ScreenshotControl.ts` | SnapDOM Promise 缓存、资源前置等待、截图目标、同 root lease 串行、缩放、PNG、generation 取消、paginator lease 恢复与下载反馈 | 工具箱几何、标注、分享、收藏、BGM 播放 |
 | `BgmControl.ts` | 唯一 audio 引用、播放/暂停、媒体事件、错误恢复、Pjax 按钮同步 | 工具箱展开、截图、页面内容修改 |
 | `ProjectTooltip.ts` | 项目卡 mousemove 与 CSS 变量更新、Pjax 重绑、重复绑定防护 | PJ 解析、卡片 DOM、CSS、项目数据修改 |
 
@@ -198,6 +198,8 @@ defer arknights.js
 8. 所有 marker 探针中的旧状态正例改为新枚举；旧状态必须增加“恢复原文且不生成 badge”的负例。
 9. `AGENTS.md` 与 `docs/2026-09-24-marker-interpreter-design.md` 中的当前协议、示例、DOM class 和投影同步更新。
 10. handler 的稳定错误码 `AI_INVALID_STATE` 保持不变，reason 更新为只列新四态。
+11. 根 `.ai-badge` 固定 `tabindex="0"`，tooltip 固定 `role="tooltip"` 并由根节点 `aria-describedby` 关联；ID 按字段、页面路径与 store occurrence ID 形成确定性唯一命名空间。
+12. 内部 SVG 保持 `aria-hidden="true"`；不得把 tooltip 放入 badge 内部可聚焦 button/link，也不得让同页重复 marker、content/excerpt 或多页面输出复用 tooltip ID。
 
 ### 5.4 AI tooltip 双向动画
 
@@ -227,7 +229,7 @@ defer arknights.js
 3. 打开终态为 `visibility:visible; opacity:1; transform:translateY(0) scale(1)`。
 4. `visibility` 的离散切换必须与 160ms 动画同步，关闭时延迟到动画结束，打开时立即生效。
 5. tooltip 保持绝对定位，不改变徽标布局，不被裁切。
-6. hover 继续作为主要入口；增加 `:focus-within` 只用于键盘可达补充，不改变现有 span/robot DOM。
+6. hover 继续作为主要入口；`:focus-within` 由根 badge 的 `tabindex="0"` 承接键盘焦点。保持 span/robot 元素结构，只增加唯一 tooltip `id`、根 `aria-describedby` 与焦点属性，不引入嵌套交互元素。
 7. `@media (prefers-reduced-motion: reduce)` 下将 opacity 过渡缩短为即时切换，取消 translate/scale 动画；隐藏状态仍必须生效。
 
 ### 5.5 导航 active 全断点契约
@@ -271,7 +273,7 @@ defer arknights.js
 3. 删除 `source/js/project-tooltip.js`。
 4. 从 `js-data.pug` 删除独立 `project-tooltip.js` script 标签和相关注释。
 5. 不新增单独 script、额外入口、package script 或 tsconfig include。
-6. B 批次已把 `jsVersion` 从 `20260947` 递增为 `20260948`，C 批次再递增为最终 `20260949`。
+6. B 批次已把 `jsVersion` 从 `20260947` 递增为 `20260948`，C 批次递增为 `20260949`；whole-branch 最终修复因截图 lease bundle 变化再递增为当前 `20260950`。
 
 ### 6.2 行为契约
 
@@ -393,11 +395,12 @@ snapdomPromise: Promise<SnapDomGlobal> | null
 
 1. 截图源必须是当前文章 DOM 的 `#post-content`。
 2. `#paginator` 当前嵌套在 `#post-content` 内，必须在调用 SnapDOM 前显式从 capture root 排除。
-3. 控制器在 capture root 中临时 detach `#paginator`，保存其原 parent 与 nextSibling；截图和 canvas 转换结束后在 `finally` 恢复到原位置。
-4. 若 Pjax 已使旧 parent 脱离文档，则不把旧 paginator 插回新页面，只释放旧引用。
-5. 截图开始到结束期间，截图按钮 `disabled=true`、`aria-busy=true`。
-6. 没有 `#post-content` 时不启动资源加载、不进入 busy 状态、不产生截图 Promise。
-7. 截图内容不得包含分页器、页码、上一页/下一页导航。
+3. 控制器以当前 `#post-content` 为 root 维护 active/pending lease；同一 root 在旧 `toCanvas` 真正 settled 前不得启动下一次执行，generation 只负责让旧结果失效，不代替串行化。
+4. 每次执行在 capture root 中临时 detach `#paginator`，保存其 lease、原 parent 与 nextSibling；只有仍持有该 root 当前 active lease 的执行可在 `finally` 恢复。
+5. 恢复前若 root 已有新的 `#paginator`，或旧 parent/root 已因 Pjax 脱离文档，则释放旧引用，不把旧节点插回或覆盖新分页器。
+6. 截图开始到结束以及同 root 新任务排队期间，截图按钮保持 `disabled=true`、`aria-busy=true`；pending lease 启动或取消后由其自身恢复 UI。
+7. 没有 `#post-content` 时不启动资源加载、不进入 busy 状态、不产生截图 Promise。
+8. 截图内容不得包含分页器、页码、上一页/下一页导航。
 
 ### 8.4 字体、图片与文档稳定
 
@@ -443,7 +446,7 @@ scale = min(
 2. `canvas.toBlob` 返回 `null` 或抛错时视为截图失败。
 3. 使用临时 `<a download>` 触发下载。
 4. 下载启动后在 `finally` 中 revoke object URL、恢复 paginator、清除 busy 状态。
-5. 一次点击只下载一个 PNG；截图期间重复点击不启动第二个任务。
+5. 同一 generation 的重复点击复用 active/pending Promise；generation 失效后的新点击在同 root 旧执行 settled 后串行启动，且最终只下载新 generation 的一个 PNG。
 
 ### 8.7 文件名
 
@@ -466,12 +469,13 @@ scale = min(
 `ScreenshotControl` 维护单调递增 generation：
 
 1. 初次加载为 0。
-2. `pjax:send` 或 `pjax:error` 立即递增，使所有旧截图请求失效。
+2. `pjax:send` 或 `pjax:error` 立即递增，使所有旧截图请求失效，并重新启用当前按钮以允许错误页立即重试。
 3. `pjax:success` 再递增并绑定新页面控件，旧 generation 不得恢复 busy 或写新页面状态。
 4. 每个异步阶段开始和结束都比较启动 generation 与当前 generation。
-5. generation 变化时不得 detach 新页面 paginator、不得创建下载、不得写旧状态到新按钮。
-6. 新页面若仍有 `#post-content`，新的截图按钮使用新 generation 独立执行。
-7. 资源加载 Promise 可跨 generation 复用，但捕获结果只对启动它的 generation 有效。
+5. generation 变化时不得为旧执行下载、detach 新 lease 的 paginator 或写旧状态到新按钮。
+6. `pjax:error` 保留的同一 root 若已有旧 `toCanvas`，立即点击产生 pending lease；按钮保持 busy，pending 只能在旧执行 settled 后启动。旧执行不得恢复已被替换的 paginator。
+7. 新页面若仍有 `#post-content`，新的截图按钮使用新 generation；不同 root 可独立执行，同一 root 始终按 lease 串行。
+8. 资源加载 Promise 可跨 generation 复用，但捕获结果只对启动它的 generation 有效。
 
 ## 9. BgmControl 规格
 
@@ -640,7 +644,7 @@ bgm:
 2. B 不依赖 C 的截图/BGM。
 3. B 修改 bundle，`jsVersion` 从当前 `20260947` 递增为 `20260948`；B 不修改 `cssVersion`。
 
-版本序列固定为：A 将 `cssVersion` 更新为 `20260951`；B 将 `jsVersion` 更新为 `20260948`；C 因同时修改工具箱 CSS 和 bundle，将 `cssVersion` 更新为 `20260952`、`jsVersion` 更新为 `20260949`。每个版本只递增一次。
+版本序列固定为：A 将 `cssVersion` 更新为 `20260951`；B 将 `jsVersion` 更新为 `20260948`；C 因同时修改工具箱 CSS 和 bundle，将 `cssVersion` 更新为 `20260952`、`jsVersion` 更新为 `20260949`；whole-branch 最终截图 lease 修复只修改 `arknights.js`，再将 `jsVersion` 更新为 `20260950`。每个版本只按实际产物递增一次。
 
 #### 回滚边界
 
@@ -693,7 +697,7 @@ pjax:send/error/success
 
 1. C 依赖 B 的 bundle 和 `jsVersion` 顺序。
 2. C 不修改 ProjectTooltip、PJ handler 或项目卡 CSS/DOM。
-3. C 同时修改工具箱 CSS 和 bundle，完成后 `cssVersion=20260952`、`jsVersion=20260949`。
+3. C 同时修改工具箱 CSS 和 bundle，完成 C 时 `cssVersion=20260952`、`jsVersion=20260949`；whole-branch 最终截图 lease 修复后当前 `jsVersion=20260950`。
 4. SnapDOM 通过本地资源接入，不引入 package、tsconfig 或模块依赖。
 5. C 只递增其实际修改的 CSS/JS 缓存版本；配置变更仅限根级 `_config.arknights.yml` 的四个 BGM 字段，其中 `bgm.src` 精确为 `/audio/bgm.mp3`，模板只通过 `url_for(theme.bgm.src)` 消费；不修改其它配置或版本项。
 
@@ -738,11 +742,11 @@ D 的文档修正可独立提交；若自动化失败，UI 缺陷回到 A—C �
 | `window.snapdom` 缺失或入口不匹配 | 按资源校验失败处理，不尝试调用猜测 API。 |
 | 字体等待不支持 | 继续；支持时等待 `document.fonts.ready`。 |
 | 图片 load/error | 等待到 settled；error 保留当前 DOM 状态。 |
-| 字体或图片等待超过 15 秒 | 截图失败，恢复 paginator 和按钮状态。 |
+| 字体或图片等待超过 15 秒 | 截图失败；仅当前 root lease 恢复自己的 paginator/按钮状态。 |
 | canvas blob 为 null | 截图失败，不创建空下载。 |
 | 目标超过安全预算 | 整体等比缩小，提示用户，不裁切。 |
-| Pjax generation 改变 | 取消旧任务，不下载、不更新新页面按钮。 |
-| paginator 恢复时旧 parent 已脱离文档 | 不把旧节点插回新文章。 |
+| Pjax generation 改变 | 取消旧结果；同 root 新请求排到旧 `toCanvas` settled 后，不重叠执行。 |
+| paginator 恢复时 lease 已过期、root 已有新节点或旧 parent 已脱离文档 | 不把旧节点插回新文章，不覆盖/夺回新分页器。 |
 
 ### 12.2 BGM
 
@@ -795,6 +799,7 @@ D 的文档修正可独立提交；若自动化失败，UI 缺陷回到 A—C �
 | BGM 禁用 fixture | 专项测试单独传入 `enable=false` | 无音乐按钮和 audio，其它工具正常；该 fixture 不代表也不得替代默认站点配置。 |
 | 扇形 | 五项展开 | 半径 66px，角度 0/22.5/45/67.5/90，无第 4 项起堆叠。 |
 | 扇形 | 桌面 hover/focus、reduced motion | 正常径向抽出与 1.08 放大；reduce 下无过渡但状态不变。 |
+| AI 键盘提示 | Tab/focus、重复 marker、同名同文案、content/excerpt 与多页面输出 | 根 badge 可聚焦；tooltip ID 全局唯一并由 `aria-describedby` 关联；SVG `aria-hidden`；无嵌套交互元素。 |
 | ARIA | Tab/Enter/Space | 所有按钮可操作；标注/收藏/BGM pressed，截图 busy，status 可读。 |
 | SnapDOM 懒加载 | 首次点击 | 只创建一个本地 script/Promise；成功后复用。 |
 | SnapDOM 失败 | 404、全局缺失、入口校验失败 | status 报错，busy 清除，不生成下载，同页不循环重试。 |
@@ -802,12 +807,12 @@ D 的文档修正可独立提交；若自动化失败，UI 缺陷回到 A—C �
 | 截图前置 | 字体 pending、图片 pending | 资源 settled 后才调用 SnapDOM；15 秒超时失败。 |
 | 截图长图 | 超过 16384 edge 或 33554432 device pixels | 整体等比缩小并显示提示，PNG 高度仍覆盖全文，不裁切。 |
 | 截图文件名 | 中文、空格、保留字符、超长标题 | 文件名安全、无路径分隔符、80 code-unit 上限、带本地时间戳；空标题回退 post。 |
-| 截图 Pjax | 等待字体/图片/canvas 时导航 | 旧 generation 无下载、不恢复新 paginator、不写新按钮状态。 |
+| 截图 Pjax | 字体/图片/canvas 阶段导航，以及 `pjax:send → pjax:error →` 同 root 立即点击 | 旧 generation 无下载、不写新按钮状态；同 root `toCanvas` 最大并发为 1；pending 最终只下载新 generation；旧 lease 不恢复或覆盖新 paginator。 |
 | BGM | 根级默认配置实际构建、首次点击、暂停、继续 | 每页恰有一个 audio；其 source 由 `url_for(theme.bgm.src)` 生成并解析为 `/audio/bgm.mp3`；唯一 `audio#bgm` 不含 `controls` 属性且无 `autoplay`；首击才播放；暂停/继续准确；输出 `loop`；`preload="metadata"`。 |
 | BGM | `play()` reject、media error | 状态不伪造；status 报错；重试路径可恢复。 |
 | BGM/Pjax | 播放中切页再切回 | 始终复用同一 audio，播放不中断，按钮按实际 paused 同步。 |
 | 搜索/Pjax | 搜索触发 Pjax、文章/项目/数据往返 | Toolbox、ProjectTooltip、Screenshot、BGM 均重绑一次且无重复事件。 |
-| 版本 | CSS/JS 产物 URL | 最终 `cssVersion=20260952`、`jsVersion=20260949`，无旧独立项目脚本 URL。 |
+| 版本 | CSS/JS 产物 URL | 最终 `cssVersion=20260952`、`jsVersion=20260950`，无旧独立项目脚本 URL。 |
 
 ### 13.1 BGM 模板数据流与专项 fixture
 
@@ -875,16 +880,16 @@ A1—C 自动化源码门禁已在各责任任务完成，搜索 sidecar 修复�
 node .temp/search-projection-lifecycle.test.js
 ```
 
-最终只对同一最终状态运行一次 clean + 完整 Hexo 构建，随后立即执行四项产物门禁：
+最终只对同一最终状态运行一次 clean + 完整 Hexo 构建，随后按固定顺序执行四项产物门禁：
 
 ```powershell
-$env:TZ = 'Asia/Shanghai'
 npm run clean
+$env:TZ = 'Asia/Shanghai'
 npm run build
 node .temp/marker-artifacts.js
-node .temp/r10-toolbox-geometry.js
-node .temp/nav-smoke.js
 node .temp/http-smoke.js
+node .temp/nav-smoke.js
+node .temp/r10-toolbox-geometry.js
 ```
 
 HTTP smoke 使用本地静态服务器对最终 `public/` 的代表性文章、项目、数据、搜索 JSON、Arklights bundle、CSS、MP3 与 SnapDOM 资源执行 `HEAD`/`GET`，记录路由、状态码、content-type 与资源长度。
@@ -892,7 +897,7 @@ HTTP smoke 使用本地静态服务器对最终 `public/` 的代表性文章、�
 artifact 探针必须检查：
 
 1. 根级 `_config.arknights.yml` 的 `bgm` 精确为 `enable:true`、`autoplay:false`、`loop:true`、`bgm.src=/audio/bgm.mp3`；默认站点不是 `enable=false` fixture。
-2. 三篇现有 AI 文章分别输出 PASS/PASS/EDIT，并只使用新四态。
+2. 三篇现有 AI 文章分别输出 PASS/PASS/EDIT，只使用新四态；每篇根 badge 可聚焦，tooltip 具唯一 ID 并由 `aria-describedby` 关联，三篇之间 ID 不碰撞，SVG 保持 `aria-hidden`。
 3. 项目页仍为一个 grid、一个 card，href/src/alt/loading/target/rel/--card-img/.project-name 不变。
 4. `public/projects/index.html` 不再引用 `js/project-tooltip.js`。
 5. `public/js/project-tooltip.js` 不存在。
@@ -903,7 +908,7 @@ artifact 探针必须检查：
 10. `public/lib/snapdom/3.1.1/snapdom.min.js` 与 `LICENSE` 存在且版本正确。
 11. `public/search.json` 的三篇 AI 条目分别以 `PASS 本文由AI辅助生成`、`PASS 本文由AI辅助生成`、`EDIT 测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改` 开头，状态与文案之间恰为一个空格；全文件不含 tooltip/四态说明、加密明文、旧协议、SVG 或 marker 内部串。
 12. 项目页、数据页无评论容器，文章页评论契约未被全局关闭。
-13. 产物 URL 使用 `cssVersion=20260952`、`jsVersion=20260949`。
+13. 产物 URL 使用 `cssVersion=20260952`、`jsVersion=20260950`。
 14. 专项 `enable=false` fixture 的关闭分支可单独通过，但不得影响或替代上述默认站点产物断言。
 
 ### 14.5 Git 检查
@@ -951,10 +956,10 @@ git status --short
 7. 工具箱五项顺序、66px 五角度扇形、40px 目标和 hover 抽出正确。
 8. 点击截图后下载真实 PNG；打开 PNG 确认只有正文、不含 paginator。
 9. 使用长文章 fixture 确认出现整体缩小提示，PNG 覆盖全文且未裁切。
-10. 截图期间 Pjax 导航，旧请求不下载、不污染新页面。
+10. 截图期间 Pjax 导航，旧请求不下载、不污染新页面；`pjax:error` 后立即点击时同 root 不重叠，只有新 generation 最终下载且 paginator 保持当前页面节点。
 11. 使用根级 `bgm.enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3` 的实际构建，确认唯一 `audio#bgm` 不含 `controls` 属性且无 `autoplay`，audio source 通过 `url_for(theme.bgm.src)` 解析为 `/audio/bgm.mp3`，并确认首击才播放、暂停/继续、循环、错误重试和 Pjax 跨页持久化正确。
 12. 搜索触发 Pjax，并在文章、项目、数据页往返，所有控制器无重复事件。
-13. 键盘可操作所有工具，status/pressed/busy 能被辅助技术感知。
+13. 键盘可操作所有工具；连续 Tab 聚焦 AI badge 时 tooltip 可见且辅助技术只关联本 badge 的唯一说明，status/pressed/busy 能被感知。
 14. 开启系统或浏览器 reduce-motion 后，tooltip 与工具箱无位移动画但功能完整。
 
 ### 15.3 外部验收状态
@@ -969,6 +974,7 @@ git status --short
 | B 的 ProjectTooltip bundle | `js-data.pug` 的 `jsVersion: 20260947 → 20260948` |
 | C 的工具箱 CSS | `meta-data.pug` 的 `cssVersion: 20260951 → 20260952` |
 | C 的 Screenshot/BGM/Toolbox bundle | `js-data.pug` 的 `jsVersion: 20260948 → 20260949` |
+| Whole-branch AI 键盘提示与截图 lease 修复 | `ScreenshotControl.ts` 改变 `arknights.js`：`jsVersion: 20260949 → 20260950`；CSS 不变 |
 | D 文档与测试 | 不递增版本 |
 
 只修改实际产物对应的版本号。不得因删除独立 ProjectTooltip script 而单独新增缓存机制，也不得修改 CSS 之外的无关版本配置。
@@ -992,8 +998,8 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 | SnapDOM 版本或 global 不匹配 | 首次点击运行时失败 | 固定 3.1.1 classic 资源、校验 global、缓存 rejected Promise、显示失败。 |
 | 长图造成 canvas OOM | 页面崩溃或空白 PNG | 16384 edge/33554432 device-pixel 预算、整体缩放、不重试超大裁切。 |
 | CORS 或失败图片阻塞截图 | 用户长期 busy | 图片 load/error 均 settle，15 秒超时失败并恢复 UI。 |
-| Pjax 发生在截图异步阶段 | 新页面下载旧文章图片或 DOM 被污染 | generation 在每个 await 和下载前校验，旧任务不写新状态。 |
-| paginator 临时 detach 未能恢复 | 文章分页消失 | 保存 parent/nextSibling，`finally` 恢复；Pjax 后不插回旧节点。 |
+| Pjax 发生在截图异步阶段 | 新页面下载旧文章图片、同 root `toCanvas` 重叠或 DOM 被污染 | generation 在每个 await 和下载前校验；同 root 以 lease 串行，旧任务不写新状态。 |
+| paginator 临时 detach 未能恢复或旧 lease 恢复过时 | 文章分页消失或旧节点覆盖新分页器 | 仅当前 active lease 在 `finally` 恢复；检测新 paginator 与断开 root，旧 lease 只释放引用。 |
 | audio 随 article 被替换 | 每次 Pjax 重播或出现多个 audio | audio 固定在 Pjax selector 外，控制器只初始化一次。 |
 | play 被浏览器拒绝 | UI 假播放 | 状态只认 audio 事件和 paused，Promise reject 显示失败。 |
 | 状态只靠颜色 | 色觉或辅助技术用户无法判断 | aria-pressed、aria-busy、动态 label 和 role=status 同时提供。 |
@@ -1011,8 +1017,8 @@ BGM 的 `bgm.src=/audio/bgm.mp3` 是根级主题配置值，构建时由 `url_fo
 
 ## 19. 实施与验收结论
 
-A1、A2、B、C 已按本规格完成：A1 删除页面隐藏标题改写、仅在项目/数据页关闭评论，并把 AI 状态硬切换为 `PASS/EDIT/UNKN/NONE`；A2 落地 160ms tooltip、2.5px 导航底边、桌面 footer 与五项工具箱静态契约；B 将项目悬停并入 `arknights.js`；C 以独立 `ScreenshotControl`、长生命周期 `BgmControl` 和本地 SnapDOM 3.1.1 完成截图/音乐接线。随后搜索审查把 Warehouse clone 的搜索交接改为当前文档私有、内容寻址的 sidecar：marker 纯文本与 Terms 在同一原 post 捕获，schema/身份/hash/加密状态严格校验，公开缓存可一次自愈，加密/模糊缓存不读取正文且始终 fail closed。最终版本仍为 `cssVersion=20260952`、`jsVersion=20260949`，根级 BGM 为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，Pug 通过 `url_for(theme.bgm.src)` 生成 Pjax 区外唯一 audio。
+A1、A2、B、C 已按本规格完成：A1 删除页面隐藏标题改写、仅在项目/数据页关闭评论，并把 AI 状态硬切换为 `PASS/EDIT/UNKN/NONE`；A2 落地 160ms tooltip、2.5px 导航底边、桌面 footer 与五项工具箱静态契约；B 将项目悬停并入 `arknights.js`；C 以独立 `ScreenshotControl`、长生命周期 `BgmControl` 和本地 SnapDOM 3.1.1 完成截图/音乐接线。随后搜索审查把 Warehouse clone 的搜索交接改为当前文档私有、内容寻址的 sidecar。Whole-branch 最终修复进一步让 AI 根 badge 可由键盘聚焦并关联唯一 tooltip，并以 root/lease 串行化截图、禁止旧 lease 恢复新 paginator。最终版本为 `cssVersion=20260952`、`jsVersion=20260950`，根级 BGM 仍为 `enable=true`、`autoplay=false`、`loop=true`、`bgm.src=/audio/bgm.mp3`，Pug 仍通过 `url_for(theme.bgm.src)` 生成 Pjax 区外唯一 audio。
 
-本轮在包含 `6e56e02` 的当前 HEAD 上完成最终复核：主题 TypeScript 双 `tsc`、8 个主题 UI 专项、9 个 marker 探针、搜索 snapshot 生命周期及全部相关 `node --check` 均退出码 0；`TZ=Asia/Shanghai` 下 `npm run clean` 删除数据库与 `public/` 后，唯一最终 `npm run build` 生成 77 个文件，紧接着的 artifact、geometry、119 项 nav smoke 与 9 个 HTTP 请求均退出码 0。额外 `public/search.json` 审计确认三篇 AI 条目分别以单空格的 `PASS`、`PASS`、`EDIT` 投影开头，且全文件无 tooltip/四态说明、加密测试明文、旧协议或 marker 内部串；主题两个 JS 产物经 TypeScript build 后无差异。完整原始摘录记录在本轮 D 报告。
+Whole-branch 最终修复状态已执行完整自动化复核：主题 TypeScript 双 `tsc`、8 个主题 UI 专项、9 个 marker 探针、搜索 snapshot 生命周期及全部相关 `node --check` 均退出码 0；AI 专项覆盖根 badge 聚焦、tooltip 唯一 ID / `aria-describedby`、重复 marker 与多页面隔离，截图专项覆盖 `pjax:send → pjax:error →` 同 root 即时重入、最大 `toCanvas` 并发 1、按钮/status/disabled 与新旧 paginator lease。同一最终状态按 `npm run clean` → `TZ=Asia/Shanghai npm run build` → artifact → HTTP smoke → nav smoke → geometry 顺序执行，Hexo 生成 77 个文件，artifact 通过，9 个 HTTP 请求均为 200，nav smoke 119 项零失败，geometry 通过。`public/search.json` 继续只含单空格 `PASS`、`PASS`、`EDIT` 纯文本投影，不含 tooltip/四态说明、加密测试明文、旧协议或 marker 内部串。完整原始摘录记录在 final-fix 报告。
 
-真实有头浏览器仍未执行；真实 PNG 首尾覆盖、音频实际播放/错误重试、tooltip 动画、六档断点、Pjax 标题/搜索/收藏/标注/工具箱交互及 reduce-motion 当前状态明确为 pending，不得表述为浏览器验收通过。
+真实有头浏览器仍未执行；真实 PNG 首尾覆盖、音频实际播放/错误重试、AI badge 键盘 tooltip、同 root `pjax:error` 截图重入、六档断点、Pjax 标题/搜索/收藏/标注/工具箱交互及 reduce-motion 当前状态明确为 pending，不得表述为浏览器验收通过。

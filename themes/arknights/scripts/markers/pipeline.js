@@ -63,7 +63,7 @@ function collectSourceFields(data) {
   return fields
 }
 
-function createContext(data, sourceField, mode) {
+function createContext(data, sourceField, mode, occurrenceId) {
   try {
     return Object.freeze({
       mode,
@@ -71,7 +71,8 @@ function createContext(data, sourceField, mode) {
       encrypt: Boolean(data.encrypt),
       password: data.password ?? null,
       sourceField,
-      sourcePath: data.path ?? data.source ?? null
+      sourcePath: data.path ?? data.source ?? null,
+      occurrenceId
     })
   } catch {
     return null
@@ -156,7 +157,7 @@ function prepareOccurrence(occurrence, state, data, field, registry) {
     return makeFailure(decoded.raw)
   }
 
-  const context = createContext(data, field, decoded.mode)
+  const context = createContext(data, field, decoded.mode, occurrence.id)
   if (context === null) {
     return makeFailure(decoded.raw)
   }

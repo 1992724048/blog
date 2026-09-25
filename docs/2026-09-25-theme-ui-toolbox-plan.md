@@ -24,6 +24,7 @@
 - 仅 `source/projects/index.md` 与 `source/data/index.md` 增加 `comments: false`；文章页继续沿用主题 `page.comments` 与评论组件逻辑。
 - AI 旧值 `IGNORE`、`NOTREVIEW` 及任何别名原样失败，稳定错误码仍为 `AI_INVALID_STATE`；不提供兼容读取。
 - 缓存版本只按实际产物递增：A2 只改 CSS 产物，`cssVersion 20260950 -> 20260951` 且不递增 JS；B 只改 `arknights.js` 产物，`jsVersion 20260947 -> 20260948` 且不改 CSS；C 改 CSS 与 `arknights.js`，`cssVersion 20260951 -> 20260952` 且 `jsVersion 20260948 -> 20260949`。`search.js` 未变化时不得为其另增版本或缓存参数。
+- Whole-branch 最终审查修复取代本计划第 4 节中的单一 `capturePromise` / generation-only paginator 快照：当前实现按 `#post-content` root 维护 active/pending lease，同 root 串行，只有当前 lease 可恢复 paginator；因 `arknights.js` 再变更，最终 `jsVersion=20260950`。AI 根 badge 同步增加 `tabindex="0"`、唯一 tooltip ID 与 `aria-describedby`。
 - `Toolbox.ts` 本批次只增加统一 `data-action`/document 委托，以及既有分享、收藏保存/取消状态的最小 status 写入，不新增截图、BGM、标注、收藏等业务；现有文件已接近 800 行，后续可另提 `Highlight`、`Favorites`、`Status` 拆分方案，但必须先经用户确认，不在 A—C 或 D 中顺手扩大重构。
 - `npm --prefix themes/arknights run build` 只在 B、C 的 TypeScript 源发生变更后运行；A2 的 Pug/Stylus 变更不运行主题 TypeScript build。
 - 完整 `npm run build` 只在 D 的同一最终状态运行一次；PowerShell 固定先执行 `$env:TZ = 'Asia/Shanghai'`。
@@ -794,7 +795,7 @@ console.log('project tooltip: ok')
 
 | 文件 | 上游 3.1.1 来源 | SHA-256 |
 | --- | --- | --- |
-| `snapdom.min.js` | `dist/snapdom.js` | `21aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc` |
+| `snapdom.min.js` | `dist/snapdom.js` | `1aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc` |
 | `LICENSE` | 包根 `LICENSE` | `c5fbd8d2221c17ff18fc7f3fee7ecf3346fb5a3f5bb2dbd3eb08f1c0397ed1a2` |
 
 npm 包固定为 `3.1.1`，tarball shasum `a3576df7bd5eba8a82d40e5d3e274d25e092bbb0`，integrity `sha512-QMLk2B6ijJArvlQNWlVIJjPNG+29edjgOczmvM2VkONr0TQ6AcTvCqPTJPzTiYi6p/Bt0BcVFeXqYHQWEGnwwA==`。本地文件只改目标文件名，不改内容。
@@ -817,7 +818,7 @@ const base = path.join(root, 'themes/arknights/source/lib/snapdom/3.1.1')
 const script = fs.readFileSync(path.join(base, 'snapdom.min.js'))
 const license = fs.readFileSync(path.join(base, 'LICENSE'))
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex')
-assert.equal(sha256(script), '21aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc')
+assert.equal(sha256(script), '1aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc')
 assert.equal(sha256(license), 'c5fbd8d2221c17ff18fc7f3fee7ecf3346fb5a3f5bb2dbd3eb08f1c0397ed1a2')
 const licenseText = license.toString('utf8')
 assert.match(licenseText, /MIT License/)
@@ -2421,7 +2422,7 @@ assert.equal(exists('public/audio/bgm.mp3'), true)
 assert.equal(exists('public/lib/snapdom/3.1.1/snapdom.min.js'), true)
 assert.equal(
   sha256(fs.readFileSync(path.join(root, 'public/lib/snapdom/3.1.1/snapdom.min.js'))),
-  '21aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc'
+  '1aa8d2b3f17c8f0610a3ad3fae033e451ccd2ff47d3bacc4a7cbbc31802e03fc'
 )
 assert.equal(exists('public/lib/snapdom/3.1.1/LICENSE'), true)
 assert.equal(
@@ -2431,7 +2432,7 @@ assert.equal(
 assert.match(css, /-webkit-mask:\s*url\(['"]?\.\.\/icons\/sound\.svg['"]?\)/)
 assert.match(css, /(?<!-webkit-)mask:\s*url\(['"]?\.\.\/icons\/sound\.svg['"]?\)/)
 assert.match(representativeArticle.html, /arknights\.css\?v=20260952/)
-assert.match(representativeArticle.html, /arknights\.js\?v=20260949/)
+assert.match(representativeArticle.html, /arknights\.js\?v=20260950/)
 console.log('marker artifacts: ok')
 ```
 

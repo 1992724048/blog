@@ -1,5 +1,7 @@
 'use strict'
 
+const { createHash } = require('node:crypto')
+
 const AI_BADGES = Object.freeze({
   PASS: Object.freeze({ key: 'pass', label: 'PASS', description: '已人工审核通过' }),
   EDIT: Object.freeze({ key: 'edit', label: 'EDIT', description: '经人工审核并被人工修改' }),
@@ -13,6 +15,7 @@ const HTML_TEXT_ENTITIES = Object.freeze({
   '"': '&quot;',
   "'": '&#39;'
 })
+const OCCURRENCE_ID_PATTERN = /^o[0-9]+$/
 const ROBOT_ICON =
   '<svg class="ai-badge__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -58,6 +61,21 @@ function readArgumentFields(args, index) {
 
 function escapeHtmlText(value) {
   return value.replace(/[&<>"']/g, character => HTML_TEXT_ENTITIES[character])
+}
+
+function createTooltipId(context) {
+  if (context === null || typeof context !== 'object' ||
+      !['content', 'excerpt'].includes(context.sourceField) ||
+      typeof context.occurrenceId !== 'string' ||
+      !OCCURRENCE_ID_PATTERN.test(context.occurrenceId) ||
+      (context.sourcePath !== null && typeof context.sourcePath !== 'string')) {
+    throw new Error('AI tooltip identity is invalid')
+  }
+  const pathNamespace = createHash('sha256')
+    .update(context.sourcePath ?? '', 'utf8')
+    .digest('hex')
+    .slice(0, 16)
+  return `arknights-ai-tip-${context.sourceField}-${pathNamespace}-${context.occurrenceId}`
 }
 
 const TIP_ROWS = Object.values(AI_BADGES)
@@ -114,17 +132,18 @@ function parseAi(args, context) {
   }
 }
 
-function renderAiBadge(node, _context) {
+function renderAiBadge(node, context) {
   const badge = AI_BADGES[node.state]
   const text = node.text === null
     ? ''
     : `<span class="ai-badge__text">${escapeHtmlText(node.text)}</span>`
+  const tooltipId = createTooltipId(context)
 
-  return `<span class="ai-badge ai-badge--${badge.key}">` +
+  return `<span class="ai-badge ai-badge--${badge.key}" tabindex="0" aria-describedby="${tooltipId}">` +
     `<span class="ai-badge__icon">${ROBOT_ICON}</span>` +
     `<span class="ai-badge__status">${escapeHtmlText(badge.label)}</span>` +
     text +
-    `<span class="ai-badge__tip" role="tooltip">` +
+    `<span class="ai-badge__tip" id="${tooltipId}" role="tooltip">` +
     `<span class="ai-badge__tip-title">AI 生成内容标记</span>` +
     `<span class="ai-badge__tip-table" role="table">` +
     TIP_ROWS +

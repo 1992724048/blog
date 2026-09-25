@@ -1728,7 +1728,7 @@ const MAX_CAPTURE_PIXELS = 33_554_432;
 const MAX_FILENAME_CODE_UNITS = 80;
 class ScreenshotControl {
     currentGeneration = 0;
-    capturePromise = null;
+    captureStates = new WeakMap();
     snapDomPromise = null;
     isCurrent = (generation) => {
         return generation === this.currentGeneration;
@@ -1873,8 +1873,8 @@ class ScreenshotControl {
         ].join('');
         return `${title}-${date}-${time}.png`;
     };
-    detachPaginator = (root, launchGeneration) => {
-        const paginator = root.querySelector('#paginator');
+    detachPaginator = (lease) => {
+        const paginator = lease.root.querySelector('#paginator');
         if (paginator === null) {
             return null;
         }
@@ -1883,9 +1883,10 @@ class ScreenshotControl {
             return null;
         }
         const restore = {
-            launchGeneration: launchGeneration,
-            paginator: paginator,
-            parent: parent,
+            lease,
+            launchGeneration: lease.generation,
+            paginator,
+            parent,
             nextSibling: paginator.nextSibling
         };
         parent.removeChild(paginator);
@@ -1895,7 +1896,12 @@ class ScreenshotControl {
         if (restore === null) {
             return;
         }
-        if (restore.launchGeneration !== this.currentGeneration && !restore.parent.isConnected) {
+        const state = this.captureStates.get(restore.lease.root);
+        const currentPaginator = restore.lease.root.querySelector('#paginator');
+        if (state?.active !== restore.lease ||
+            currentPaginator !== null ||
+            !restore.lease.root.contains(restore.parent) ||
+            (restore.launchGeneration !== this.currentGeneration && !restore.lease.root.isConnected)) {
             return;
         }
         const nextSibling = restore.nextSibling !== null && restore.parent.contains(restore.nextSibling)
@@ -1947,15 +1953,39 @@ class ScreenshotControl {
         button.disabled = false;
         button.setAttribute('aria-busy', 'false');
     };
-    cancelCurrentGeneration = () => {
-        this.currentGeneration += 1;
-        this.capturePromise = null;
-        this.bindCurrentButton();
-    };
-    captureCurrent = async (root, button, launchGeneration) => {
-        let paginatorRestore = null;
+    setCaptureButton = (button) => {
         button.disabled = true;
         button.setAttribute('aria-busy', 'true');
+    };
+    getCaptureState = (root) => {
+        const existing = this.captureStates.get(root);
+        if (existing !== undefined) {
+            return existing;
+        }
+        const state = {
+            active: null,
+            activePromise: null,
+            pending: null,
+            pendingPromise: null
+        };
+        this.captureStates.set(root, state);
+        return state;
+    };
+    isRequestCurrent = (request) => {
+        const root = document.querySelector('#post-content');
+        const button = document.querySelector('.toolbox-screenshot[data-action="screenshot"]');
+        return this.isCurrent(request.generation) && root === request.root && button === request.button;
+    };
+    pendingOwnsButton = (state, lease) => {
+        const pending = state.pending;
+        return pending !== null &&
+            pending.button === lease.button &&
+            this.isRequestCurrent(pending);
+    };
+    captureCurrent = async (lease) => {
+        const { root, button, generation: launchGeneration } = lease;
+        let paginatorRestore = null;
+        this.setCaptureButton(button);
         this.writeStatus(button.dataset.labelPreparing || '');
         try {
             const imagesReady = this.waitForImages(root);
@@ -1984,7 +2014,7 @@ class ScreenshotControl {
             if (!this.isCurrent(launchGeneration)) {
                 return;
             }
-            paginatorRestore = this.detachPaginator(root, launchGeneration);
+            paginatorRestore = this.detachPaginator(lease);
             if (!this.isCurrent(launchGeneration)) {
                 return;
             }
@@ -2009,14 +2039,62 @@ class ScreenshotControl {
         }
         finally {
             this.restorePaginator(paginatorRestore);
-            button.disabled = false;
-            button.setAttribute('aria-busy', 'false');
+            const state = this.captureStates.get(root);
+            if (state?.active === lease && !this.pendingOwnsButton(state, lease)) {
+                button.disabled = false;
+                button.setAttribute('aria-busy', 'false');
+            }
         }
     };
-    capture = () => {
-        if (this.capturePromise !== null) {
-            return this.capturePromise;
+    startCapture = (request) => {
+        const state = this.getCaptureState(request.root);
+        if (!this.isRequestCurrent(request)) {
+            return Promise.resolve();
         }
+        if (state.active !== null) {
+            return state.activePromise ?? Promise.resolve();
+        }
+        const lease = {
+            root: request.root,
+            button: request.button,
+            generation: request.generation
+        };
+        state.active = lease;
+        const execution = this.captureCurrent(lease);
+        const trackedPromise = execution.finally(() => {
+            if (state.active === lease) {
+                state.active = null;
+                state.activePromise = null;
+            }
+        });
+        state.activePromise = trackedPromise;
+        return trackedPromise;
+    };
+    startPendingCapture = (state, request) => {
+        if (state.pending !== request) {
+            return Promise.resolve();
+        }
+        state.pending = null;
+        state.pendingPromise = null;
+        return this.startCapture(request);
+    };
+    enqueueCapture = (state, request) => {
+        const activePromise = state.activePromise;
+        if (activePromise === null) {
+            return this.startCapture(request);
+        }
+        const pendingPromise = activePromise.then(() => this.startPendingCapture(state, request), () => this.startPendingCapture(state, request));
+        state.pending = request;
+        state.pendingPromise = pendingPromise;
+        this.setCaptureButton(request.button);
+        this.writeStatus(request.button.dataset.labelPreparing || '');
+        return pendingPromise;
+    };
+    cancelCurrentGeneration = () => {
+        this.currentGeneration += 1;
+        this.bindCurrentButton();
+    };
+    capture = () => {
         const root = document.querySelector('#post-content');
         if (root === null) {
             return Promise.resolve();
@@ -2025,15 +2103,26 @@ class ScreenshotControl {
         if (button === null) {
             return Promise.resolve();
         }
-        const launchGeneration = this.currentGeneration;
-        const execution = this.captureCurrent(root, button, launchGeneration);
-        const trackedPromise = execution.finally(() => {
-            if (this.capturePromise === trackedPromise) {
-                this.capturePromise = null;
-            }
-        });
-        this.capturePromise = trackedPromise;
-        return trackedPromise;
+        const state = this.getCaptureState(root);
+        const request = {
+            root,
+            button,
+            generation: this.currentGeneration
+        };
+        if (state.active?.generation === request.generation &&
+            state.active.button === button &&
+            state.activePromise !== null) {
+            return state.activePromise;
+        }
+        if (state.pending?.generation === request.generation &&
+            state.pending.button === button &&
+            state.pendingPromise !== null) {
+            return state.pendingPromise;
+        }
+        if (state.active === null) {
+            return this.startCapture(request);
+        }
+        return this.enqueueCapture(state, request);
     };
     constructor() {
         document.addEventListener('pjax:send', this.cancelCurrentGeneration);
