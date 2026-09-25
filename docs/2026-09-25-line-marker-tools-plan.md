@@ -29,9 +29,9 @@
 11. **AGENTS.md 同步**：A/B/C/D 各自在其批次内同步规格第 15 节「AGENTS 活文档待更新范围」的对应条目，不得只写进提交说明；D 收口 filter alias、实测优先级表、`--bail` 语义、Source Tree 探针清单与最终版本值。
 12. **每任务一 commit、不 push**：A/B/C/D 每批一个原子 commit（提交信息见 §11 表），不执行 `git push`；审查发现的问题由原执行 Agent 追加独立 commit 并重跑该批门禁。
 13. **`.temp/` 不入库**：所有探针、receipt、staging 与 `public/` 产物只存在于 `.temp/` 或构建目录，`.gitignore` 已含 `.temp/`、`public/`、`db.json`，不得提交。
-14. **拆分规模与依赖**：`pipeline.js`、四个 `pipeline/*.js`、`environment.d.ts`、`Toolbox.ts`、四个 Toolbox 控制器/持久化/StatusLease、`BgmControl.ts`、`ProjectTooltip.ts` 逐文件 ≤500 行；`ScreenshotControl.ts`（当前 482 行）**明确排除**在本轮行数门禁外，仅因 A 只经 `window.screenshotControl` 接受 facade 委托，排除不豁免其行为门禁，也不作为后续先例。依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`；pipeline 子模块之间不得互相 `require`、不得反向 `require('pipeline.js')`，共享值由 `pipeline.js` 显式注入。
+14. **拆分规模与依赖**：`pipeline.js`、四个 `pipeline/*.js`、`environment.d.ts`、`Toolbox.ts`、四个 Toolbox 控制器/持久化/StatusLease、`BgmControl.ts`、`ProjectTooltip.ts` 逐文件 ≤500 行；`ScreenshotControl.ts`（当前 482 行）**明确排除**在本轮行数门禁外，仅因 A 只经 `window.screenshotControl` 接受 facade 委托，排除不豁免其行为门禁，也不作为后续先例。依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`Share|Favorite -> StatusLease`、`BgmControl.ts -> ToolboxStatusLease.ts`（第四条边是本计划对规格第 12.1.1 节的唯一加边，理由与「为何不选 facade 代理写入」见 §2.6 裁决记录）；pipeline 子模块之间不得互相 `require`、不得反向 `require('pipeline.js')`，共享值由 `pipeline.js` 显式注入。
 15. **事件唯一 owner 与 A 批基线**：facade 独占 toolbox `data-action` document click 委托、外点判断、Escape、既有 `pjax:send/success`；标注 controller 独占 `mousedown`/`selectionchange`/mark/toolbar/color click 与 `main` scroll；Share 只有自身一个一次性 timer；Favorite 不创建 UI timer；`BgmControl.ts` 保留唯一既有 `pjax:success`（`syncButton`）listener。A 结束时 10 个 listener 计数与拆分前逐项一致（A 不新增任何 Pjax listener）；C 才允许 `BgmControl.ts` 增加 `pjax:send`/`pjax:error`/`pjax:success`。
-16. **拆分纯搬运边界**：A 对标注/分享/收藏只搬运不改行为；规格第 16.3 节的状态机与 status lease 行为修复属用户已要求的显式行为变更，唯一新增公开方法是 `bgmControl.clearStatus(): void`；除该方法外不得顺手扩张 facade/API。
+16. **拆分纯搬运边界**：A 对标注/分享/收藏只搬运不改行为；唯一的搬运形态变化是 `.toolbox-status` 的写入从各 controller 内的 `writeStatus` 收敛到 A 阶段已是最小实现的 lease（同一节点、同一 `data-label-*` 文案、`hidden === false`，无新增 timer / observer / listener，可见结果逐字不变），规格第 16.3 节的状态机与 status lease 行为修复属用户已要求的显式行为变更，唯一新增公开方法是 `bgmControl.clearStatus(): void`；除该方法外不得顺手扩张 facade/API。
 17. **加密 fail-closed 不得放宽**：`public` 才进入 tokenization 与正文改写；`encrypted`（frontmatter password、tag 命中密码、`origin` 残留）跳过扫描/handler/公开 projection 且 `projectText` 返回 `null`；`ambiguous` 在读取正文前抛 `ENCRYPTION_STATE_AMBIGUOUS`。
 18. **不递归**：handler 渲染的 HTML、Alerts detached Markdown render、Editor 原样 body 与其它字段中出现的新 header/旧 marker/tag 文本都不签发 occurrence、不触发第二次 dispatch。
 19. **仅新增 5 个 TS 文件**：`include/` 目录最终恰 24 个文件（当前 19 + `ToolboxAnnotationController.ts`、`ToolboxPersistence.ts`、`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts`）；除规格第 12.1 节表内 10 项与 `MonacoEditor.ts`/`Expands.ts` 两个定点改动外不得新增或移除任何 TS 文件。
@@ -59,9 +59,9 @@
 | --- | --- | --- | --- |
 | `themes/arknights/source/js/_src/include/ToolboxAnnotationController.ts` | 新增 | A1 | 标注模式、选区工具栏、五色、`hl-mark` 增删/恢复 |
 | `themes/arknights/source/js/_src/include/ToolboxPersistence.ts` | 新增 | A1 | `arknights:highlights:*` / `arknights:favorites` / 标注颜色读写校验序列化 |
-| `themes/arknights/source/js/_src/include/ToolboxShareController.ts` | 新增 | A1 | `share()`、URL 复制、`.copied` 反馈、自有一次性 timer |
-| `themes/arknights/source/js/_src/include/ToolboxFavoriteController.ts` | 新增 | A1 | `favorite()`、收藏集合增删、`.saved` 反馈，无 UI timer |
-| `themes/arknights/source/js/_src/include/ToolboxStatusLease.ts` | 新增 | A1 | 共享 `.toolbox-status` 的 generation/token/timer/observer（A 只接线，行为在 C） |
+| `themes/arknights/source/js/_src/include/ToolboxShareController.ts` | 新增 | A1 | `share()`、URL 复制、`.copied` 反馈、自有一次性 timer；status 经 `claimStatus(text, { owner: 'share' })` 写入 |
+| `themes/arknights/source/js/_src/include/ToolboxFavoriteController.ts` | 新增 | A1 | `favorite()`、收藏集合增删、`.saved` 反馈，无 UI timer；status 经 `claimStatus(text, { owner: 'favorite' })` 写入 |
+| `themes/arknights/source/js/_src/include/ToolboxStatusLease.ts` | 新增 | A1 | `.toolbox-status` 的唯一写入者：A 阶段为最小实现（写 `textContent`/`hidden` + 记 `owner`，零 timer、零 observer），C3-2 叠加 timer 与 `MutationObserver` |
 | `themes/arknights/source/js/_src/include/Toolbox.ts` | 修改 | A1 | 降为 facade，保留开合/委托/重置（当前 952 行） |
 | `themes/arknights/source/js/_src/include/BgmControl.ts` | 修改 | A1 | 组合 status lease adapter，状态机在 C（当前 118 行） |
 | `themes/arknights/source/js/_src/include/environment.d.ts` | 修改 | A1 | 新增 `clearStatus(): void` 与 `ToolboxApi` 冻结类型（当前 25 行） |
@@ -148,7 +148,7 @@
 | `themes/arknights/source/css/_core/header/header.styl` | 修改 | C2 | 一级 `.navBlock` 桌面 72px / 36px / `border-box` / 居中的基础规则与 active label 归零 |
 | `themes/arknights/source/css/_core/header/flex_layout.styl` | 修改 | C2 | 断点覆盖：`@media ( min-width 1024px )` 内收敛 72×36 固定宽度、`@media ( max-width 1023px )` 内回落到 `width 100%` / `min-width 0` / 左对齐 |
 | `themes/arknights/source/js/_src/include/BgmControl.ts` | 修改 | C3 | 单一状态机 + `retireOperation` / `invalidateLifecycle` / `enterFailed` + 三 Pjax 事件 |
-| `themes/arknights/source/js/_src/include/ToolboxStatusLease.ts` | 修改 | C3 | `claimStatus` / `invalidateStatusLease` / `clearStatus` 行为实现 |
+| `themes/arknights/source/js/_src/include/ToolboxStatusLease.ts` | 修改 | C3 | 在 A 阶段最小实现上叠加唯一 timer + `MutationObserver`，并与 `retireOperation` / `invalidateLifecycle` 集成 |
 | `themes/arknights/source/js/_src/include/Toolbox.ts` | 修改 | C3 | `applyState(true)`（打开）分支调用 `window.bgmControl.clearStatus()` |
 | `themes/arknights/source/js/arknights.js` | 重新生成 | C3 | `npm --prefix themes/arknights run build` 产物 |
 | `themes/arknights/layout/includes/meta-data.pug` | 修改 | C3 | `cssVersion` `20260954` → `20260955` |
@@ -365,11 +365,32 @@ interface Window {
 }
 
 // ToolboxStatusLease.ts（namespace ToolboxModules）
-interface StatusLease { token: number; node: HTMLElement; message: string; observer: MutationObserver; timer: number | null }
-function claimStatus(message: string, delay: number): void
+interface StatusClaimOptions { owner: string; delay?: number }
+interface StatusLease {
+  token: number
+  node: HTMLElement
+  message: string
+  owner: string
+  observer: MutationObserver | null   // A 阶段恒为 null；C3-2 起由 claimStatus 创建
+  timer: number | null                // A 阶段恒为 null；C3-2 起按 delay 创建
+}
+function claimStatus(message: string, options: StatusClaimOptions): void
 function invalidateStatusLease(): HTMLElement | null
 function clearStatus(): void
 ```
+
+> **`claimStatus` 只有一个写法**：`(message, { owner, delay? })`。规格第 16.3 节的伪代码形参是 `claimStatus(message, delay)`，等价于 `claimStatus(message, { owner: 'bgm', delay })`；A 阶段的 `ToolboxShareController` / `ToolboxFavoriteController` 用 `claimStatus(text, { owner: 'share' })` / `claimStatus(text, { owner: 'favorite' })`（不传 `delay`，A 阶段 lease 不含 timer）。全仓禁止再出现 `claimStatus(message, delay)` 位置参数写法。
+
+**lease 写入入口与加边裁决（本计划对规格第 12.1.1 / 16.3 节的唯一加边，规格文件本轮不改动）**
+
+| 事实 | 内容 |
+| --- | --- |
+| 规格逐字 | 第 12.1.1 节第 981 行的依赖方向只列 `Toolbox.ts -> Annotation\|Share\|Favorite`、`Annotation\|Share\|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`；第 16.3 节的 lease 伪代码形参是 `claimStatus(message, delay)` |
+| A 阶段必须成立 | A1-4 / A1-5 的 share/favorite 在 A 批即经 lease 写 `.toolbox-status`（不再各自 `document.querySelector('.toolbox-status')` 直接写 DOM），因此 `theme-ui-toolbox.test.js` 的 share/favorite status 断言在 A1-16 / A3-6 即须通过；`.toolbox-status` 的写入者自 A 结束起唯一（lease） |
+| 形参收敛 | 全仓只保留 `claimStatus(message, { owner, delay? })` 一种写法（见上方引用块）；`delay` 省略即不建 timer，A 阶段两个 controller 正是这种调用 |
+| 加边内容 | 新增 `Share -> StatusLease` 与 `Favorite -> StatusLease` 两条**出边**；反向禁令全部保留：`ToolboxStatusLease.ts` 不得引用 `Toolbox.ts` / `BgmControl.ts` / 任何 controller（Global Constraints 第 14 条与 A1-2 的 `test_toolbox_dependency_edges` 断言），Share / Favorite 仍互不引用，也不得引用 facade |
+| 为何不选 facade 代理写入 | 若由 facade 代写 status，`.toolbox-status` 会出现 facade 与 lease 两个写入者，且 `window.toolbox` 需新增内部写入方法，直接破坏「公开面只有 `toggle/annotate/share/favorite`」的冻结契约（规格第 12.1.1 节冻结面） |
+| `observer` / `timer` 联合类型 | A 阶段两者恒为 `null`（零 timer、零 observer）；C3-2 起 `claimStatus` 内部创建后非 null。类型保持 `MutationObserver \| null` / `number \| null` 的联合形态以同时覆盖两个阶段，不分裂出第二份 `StatusLease` 形状 |
 
 ```typescript
 // BgmControl.ts（规格 16.3 逐字）
@@ -545,6 +566,21 @@ function test_toolbox_dependency_edges() {
   const favorite = fs.readFileSync(path.join(includeDir, 'ToolboxFavoriteController.ts'), 'utf8')
   assert.equal(countCalls(favorite, 'setTimeout'), 0, 'favorite controller must not create a timer')
   assert.equal(countCalls(facadeText, 'setTimeout'), 0, 'facade must not own a status timer')
+  for (const name of ['ToolboxShareController.ts', 'ToolboxFavoriteController.ts']) {
+    const text = fs.readFileSync(path.join(includeDir, name), 'utf8')
+    assert.ok(text.includes('/// <reference path="ToolboxStatusLease.ts" />'),
+      `${name} must declare its dependency on the shared status lease`)
+    assert.match(text, /claimStatus\([^)]*\{ owner: '(share|favorite)' \}\)/,
+      `${name} must write the shared status through claimStatus with its own owner token`)
+    assert.ok(!stripComments(text).includes('.toolbox-status'),
+      `${name} must not touch the shared status node directly`)
+  }
+  const lease = fs.readFileSync(path.join(includeDir, 'ToolboxStatusLease.ts'), 'utf8')
+  assert.equal(countCalls(lease, 'setTimeout'), 0, 'the A stage lease owns no timer')
+  assert.equal(countCalls(lease, 'MutationObserver'), 0, 'the A stage lease owns no observer')
+  for (const dead of ['ToolboxShareController.ts', 'ToolboxFavoriteController.ts', 'ToolboxAnnotationController.ts']) {
+    assert.ok(!stripComments(lease).includes(dead), `ToolboxStatusLease.ts must not reference ${dead}`)
+  }
   // 两种形态分别断言：onDocumentClick 是「定义 + 静态注册」2 次；
   // onOutsideClick 是「定义 + applyState 动态挂载 + 动态摘除」3 次。
   // 这两个标识符不是调用型（都不带括号），因此用 countReferences 而不是 countCalls。
@@ -584,10 +620,11 @@ console.log('ok line-marker-pipeline structure')
 
 A1-1 的 `test_module_size()` 调用与 `ok line-marker-pipeline structure` 留在 A1-1 代码块内以便独立运行；本段只追加依赖、Expands 与 owner 归属断言并复用同一条 ok 行，**不再重复调用** `test_module_size()`（A1-16 的门禁说明中的执行序列同样以 A2-19 追加后的最终顺序为准）。计数类断言先经 `stripComments` 剥离 `//` 与 `/* */` 注释再统计，避免注释或文档字符串里的同名字符串造成假命中；`stripComments` 保留 `https://` 这类含 `//` 但前面不是行首的协议串（`(^|[^:])\/\/` 的 `[^:]` 分支只在前一个字符不是 `:` 时才截断）。运行 → 期望 `ENOENT ... ToolboxAnnotationController.ts`（仍 RED）。
 
-- **reference 白名单只列 5 项**：facade 直接触及的是三个同层 controller（Annotation / Share / Favorite）与两个 `window.*` 控制器适配（`ScreenshotControl.ts` / `BgmControl.ts`）；`ToolboxPersistence.ts` 由同层 controller 引用、`ToolboxStatusLease.ts` 由 `BgmControl.ts` 引用（Global Constraints 第 14 条的依赖方向），facade 不得直接引用。`MonacoEditor.ts` / `Expands.ts` 与 facade 无依赖关系，既不在白名单里，也额外断言 facade 不含这两条 reference。
+- **reference 白名单只列 5 项**：facade 直接触及的是三个同层 controller（Annotation / Share / Favorite）与两个 `window.*` 控制器适配（`ScreenshotControl.ts` / `BgmControl.ts`）；`ToolboxPersistence.ts` 由同层 controller 引用、`ToolboxStatusLease.ts` 由 `BgmControl.ts` **与** Share / Favorite 两个 controller 引用（Global Constraints 第 14 条的依赖方向与 §2.6 裁决记录的新增出边），facade 不得直接引用。`MonacoEditor.ts` / `Expands.ts` 与 facade 无依赖关系，既不在白名单里，也额外断言 facade 不含这两条 reference。
 - **已死的 `common/base.ts` reference 必须删除**：基线 `Toolbox.ts` 与拆出的 facade 只用 `document.querySelector` 与 `window.*`，不调用 `common/base.ts` 的 `getElement` / `isParent` / `getParent` / `format` 任何一个；`outFile` 拼接下 reference 只影响类型检查阶段，删除无运行时影响。
 - **同层 controller 两两不互引**：`Annotation` / `Share` / `Favorite` 三个文件之间任一方向出现对方文件名即失败，保证三者只能经 `ToolboxPersistence.ts` 交换数据。
-- **`ToolboxStatusLease.ts` 的 `setTimeout` 断言不在 A 阶段**：A1-7 的三个 lease 函数体是空实现 no-op（见 A1-7），此时 `setTimeout` 调用数必然为 0；真实计时器由 C3-2 落地，该条 `=== 1` 断言随 C3-2 一并加入本探针（持有 `countCalls` 的文件只有本探针）。
+- **lease 在 A 阶段的计数断言是 `=== 0`**：A1-7 的 A 阶段实现是最小实现（写 `textContent` / `hidden = false` + 记 `owner`，零 timer、零 observer，见 A1-7），因此 `countCalls(lease, 'setTimeout')` 与 `countCalls(lease, 'MutationObserver')` 都必须为 0；真实计时器 / observer 与它们对应的 `=== 1` 断言随 C3-2 一并加入本探针（持有 `countCalls` 的文件只有本探针）。
+- **share / favorite 的 status 写入归属被本段锁死**：两者都必须 `/// <reference path="ToolboxStatusLease.ts" />`、以 `claimStatus(..., { owner: 'share' | 'favorite' })` 写入，并且源码中不得再出现 `.toolbox-status`（§2.6 裁决记录的新增出边只允许指向 lease，反向引用与第二个写入者都被本段与上面的 sibling 断言同时拦住）。
 
 - [ ] **A1-3 新建 `ToolboxPersistence.ts`**，把 `Toolbox.ts` 第 84-104、775-835、866-881、754-757 行的 `read`/`write`/`highlightKey`/`persistHighlights` 的纯数据部分/`restoreHighlights` 的纯数据部分/`readFavorites`/`currentAnnotateColor` 搬迁为零 DOM、零事件、零 timer 的数据层：
 
@@ -613,10 +650,11 @@ declare namespace ToolboxModules {
 }
 ```
 
-- [ ] **A1-4 新建 `ToolboxShareController.ts`**：`share()`、`navigator.share` 分支、URL 复制、`.copied` 反馈、唯一 `setTimeout(..., COPIED_DELAY)`。禁止 localStorage、全局事件、截图/BGM：
+- [ ] **A1-4 新建 `ToolboxShareController.ts`**：`share()`、`navigator.share` 分支、URL 复制、`.copied` 反馈、唯一 `setTimeout(..., COPIED_DELAY)`；**status 写入经 lease**（`claimStatus(text, { owner: 'share' })`），不再自己 `document.querySelector('.toolbox-status')` 写 DOM（§2.6 裁决记录）。禁止 localStorage、全局事件、截图/BGM：
 
 ```typescript
 /// <reference path="ToolboxPersistence.ts" />
+/// <reference path="ToolboxStatusLease.ts" />
 
 declare namespace ToolboxModules {
   const COPIED_DELAY: 1200
@@ -625,14 +663,42 @@ declare namespace ToolboxModules {
     share(): void
   }
 
-  function createShareController(): ShareController
+  // 关闭回调由 facade 在构造时注入（`() => this.applyState(false)`）：方向仍是 facade -> controller
+  function createShareController(closeToolbox: () => void): ShareController
 }
 ```
 
-- [ ] **A1-5 新建 `ToolboxFavoriteController.ts`**：`favorite()`、收藏集合增删、`.saved` / `aria-pressed` / `title` / `aria-label` 同步更新；**不创建任何 UI timer**。禁止标注、全局事件、截图/BGM：
+**A1-4 必须解决的搬运细节**：基线 `copyShareUrl` 的 timer 内调用 `this.applyState(false)` 关闭工具箱（`Toolbox.ts:858`），`navigator.share` 分支在 `.then` 里也调用 `applyState(false)`（`Toolbox.ts:841`）。controller 不得反向引用 facade 的 private `applyState`，因此这两处由 facade 注入的 `closeToolbox` 闭包承接；这是 facade → controller 方向的依赖，不新增 `window.toolbox` 公开方法、不新增 listener / timer、也不构成 Global Constraints 第 16 条的 API 扩张。若实施时改用其它等效机制，必须同时满足这四条约束。
+
+`copyShareUrl` 相对基线 `Toolbox.ts:848-864` **只有 status 写入一行变化**，其余（`button.classList.add('copied')`、唯一 `setTimeout(..., COPIED_DELAY)`、`navigator.clipboard.writeText(url).then(complete).catch(() => {})` 与 `try/catch`）逐字搬运，只把 `this.applyState(false)` 换成 `this.closeToolbox()`：
+
+```typescript
+private copyShareUrl = (url: string): void => {
+  const button = this.shareButton
+  const complete = (): void => {
+    if (button === null) {
+      return
+    }
+    claimStatus(button.dataset.labelCopied || '', { owner: 'share' })
+    button.classList.add('copied')
+    setTimeout(() => {
+      button.classList.remove('copied')
+      this.closeToolbox()
+    }, COPIED_DELAY)
+  }
+  try {
+    navigator.clipboard.writeText(url).then(complete).catch(() => {})
+  } catch (e) {}
+}
+```
+
+本 controller 内**不出现** `.toolbox-status` 的 DOM getter，也不引用 `applyState`（facade 私有）；A 阶段 `claimStatus` 不带 `delay`，因此 `.copied` 的 1200ms 回收仍由本 controller 自有的唯一 timer 承担，与 lease 的 `timer`（C3-2 才存在）无关。
+
+- [ ] **A1-5 新建 `ToolboxFavoriteController.ts`**：`favorite()`、收藏集合增删、`.saved` / `aria-pressed` / `title` / `aria-label` 同步更新（后者即 `theme-ui-toolbox.test.js:89/138/144/150/166` 的断言对象，`applyFavoriteState` 逐字搬运基线 `Toolbox.ts:882-895`）；**status 写入经 lease**（`claimStatus(text, { owner: 'favorite' })`），不再直接操作 `.toolbox-status`；**不创建任何 UI timer**。禁止标注、全局事件、截图/BGM：
 
 ```typescript
 /// <reference path="ToolboxPersistence.ts" />
+/// <reference path="ToolboxStatusLease.ts" />
 
 declare namespace ToolboxModules {
   interface FavoriteController {
@@ -641,6 +707,30 @@ declare namespace ToolboxModules {
   }
 
   function createFavoriteController(): FavoriteController
+}
+```
+
+`favorite()` 相对基线 `Toolbox.ts:897-914` **只有 status 写入一处变化**（原 `this.writeStatus(wasSaved ? ... : ...)` 改为同文案的 `claimStatus(..., { owner: 'favorite' })`）：
+
+```typescript
+public favorite = (): void => {
+  const favorites = this.readFavorites()
+  const path = window.location.pathname
+  const wasSaved = favorites[path] !== undefined
+  if (wasSaved) {
+    delete favorites[path]
+  } else {
+    favorites[path] = { url: window.location.href, title: document.title, time: Date.now() }
+  }
+  this.write(ToolboxModules.FAVORITES_KEY,
+    Object.keys(favorites).length === 0 ? null : JSON.stringify(favorites))
+  this.applyFavoriteState()
+  const button = this.favoriteButton
+  if (button !== null) {
+    claimStatus(wasSaved
+      ? button.dataset.labelRemovedStatus || ''
+      : button.dataset.labelSavedStatus || '', { owner: 'favorite' })
+  }
 }
 ```
 
@@ -667,37 +757,87 @@ declare namespace ToolboxModules {
     restore(): void
     closeColors(): void
     dismissPendingSelection(): void
+    refreshToolbarButtons(): void
   }
 
   function createAnnotationController(): AnnotationController
 }
 ```
 
-`closeColors()` 是 `onDocumentClick` 的唯一下沉入口，`dismissPendingSelection()` 承接基线 `applyState(false)` 的 `this.pendingRange = null`（关闭工具箱时丢弃待标注选区）；两者都不新增 listener，也不由 facade 触碰标注内部状态。
+`closeColors()` 是 `onDocumentClick` 的唯一下沉入口，`dismissPendingSelection()` 承接基线 `applyState(false)` 的 `this.pendingRange = null`（关闭工具箱时丢弃待标注选区）；`refreshToolbarButtons()` 承接基线 `Toolbox.ts:345-356`（只读 `annotateToolbar` 并调用 `selectionRange` / `isAnnotating` / `hideToolbar` / `updateToolbarButtons`，四个依赖全是标注内部），因此它**归 `ToolboxAnnotationController`、不是 facade 成员**——显式登记以免拆分时被当成死代码丢掉；它的三个调用点（基线 `:647` / `:654` / `:661` / `:691`，`annotateSelection` 与 `clearSelectionHighlights` 内部）同样随之搬迁。四者都不新增 listener，也不由 facade 触碰标注内部状态。
 
-- [ ] **A1-7 新建 `ToolboxStatusLease.ts`**：共享 `.toolbox-status` 的 `statusGeneration` / token / `MutationObserver` / 唯一 timer，只提供规格第 16.3 节的 lease API。A 阶段**只接线、不实现行为**：`claimStatus` / `invalidateStatusLease` / `clearStatus` 的伪代码实现属 C3-2，A1 只固定签名、`StatusLease` 形状与「A 结束后 `BgmControl.ts` 仍只有既有唯一 `pjax:success`（`syncButton`）listener」这条边界：
+- [ ] **A1-7 新建 `ToolboxStatusLease.ts`**：共享 `.toolbox-status` 的 `statusGeneration` / token / `MutationObserver` / 唯一 timer，只提供规格第 16.3 节的 lease API。A 阶段落**最小实现**（写 `textContent` / `hidden = false` + 记 `owner`，**零 timer、零 observer**），C3-2 在同一 lease 上叠加 timer + `MutationObserver` 与 `retireOperation` / `invalidateLifecycle` 集成；A1 同时固定签名、`StatusLease` 形状与「A 结束后 `BgmControl.ts` 仍只有既有唯一 `pjax:success`（`syncButton`）listener」这条边界：
 
 ```typescript
 declare namespace ToolboxModules {
-  interface StatusLease { token: number; node: HTMLElement; message: string; observer: MutationObserver; timer: number | null }
+  interface StatusClaimOptions { owner: string; delay?: number }
+  interface StatusLease {
+    token: number
+    node: HTMLElement
+    message: string
+    owner: string
+    observer: MutationObserver | null
+    timer: number | null
+  }
 
-  function claimStatus(message: string, delay: number): void
+  function claimStatus(message: string, options: StatusClaimOptions): void
   function invalidateStatusLease(): HTMLElement | null
   function clearStatus(): void
 }
 ```
 
-A 阶段的三个真实顶层函数体固定为**空实现 no-op**——不读 DOM、不写 status、不创建 `MutationObserver`、不创建 timer：
+A 阶段的三个真实顶层函数体是**最小实现**（不是空实现 no-op）：`claimStatus` 递增 `statusGeneration`、丢弃旧 lease、解析 `.toolbox-status`、写 `textContent` 与 `hidden = false`、记录 `owner`；`invalidateStatusLease` 丢弃 lease 并交还其 node；`clearStatus` 只在确有自有 lease 时清空该 node。**零 timer、零 `MutationObserver`**（两者都留到 C3-2 叠加）：
 
 ```typescript
-function claimStatus(_message: string, _delay: number): void {}
-function invalidateStatusLease(): null { return null }
-function clearStatus(): void {}
+// private: statusGeneration = 0; statusLease: StatusLease | null = null
+let statusGeneration = 0
+let statusLease: ToolboxModules.StatusLease | null = null
+
+function claimStatus(message: string, options: ToolboxModules.StatusClaimOptions): void {
+  statusGeneration += 1
+  statusLease = null
+  const node = document.querySelector<HTMLElement>('.toolbox-status')
+  if (node === null) {
+    return
+  }
+  node.textContent = message
+  node.hidden = false
+  statusLease = {
+    token: statusGeneration,
+    node,
+    message,
+    owner: options.owner,
+    observer: null,
+    timer: null
+  }
+}
+
+function invalidateStatusLease(): HTMLElement | null {
+  statusGeneration += 1
+  const lease = statusLease
+  statusLease = null
+  return lease === null ? null : lease.node
+}
+
+function clearStatus(): void {
+  const ownedNode = invalidateStatusLease()
+  if (ownedNode === null) {
+    return
+  }
+  ownedNode.textContent = ''
+  ownedNode.hidden = true
+}
 ```
 
-> **`declare namespace` 只贡献类型，不产生运行时对象。** 主题用 `outFile` 把 `include/**/*.ts` 拼接成单一作用域脚本，因此 `claimStatus` / `invalidateStatusLease` / `clearStatus` 必须作为**真实的顶层声明**（顶层 `function` / `const`，与 `declare namespace ToolboxModules` 中的类型声明并存）出现在拼接产物里，`ToolboxStatusLease.ts`、`BgmControl.ts`、`Toolbox.ts` 才能共享同一份实现；把实现体写进 `declare namespace` 会既编译不过又在运行时得到 `ReferenceError`。A 阶段这三个顶层声明体内 `setTimeout` 调用数为 **0**（空实现 no-op），因此 A1-2 不落 `setTimeout` 断言；真实计时器与它对应的 `countCalls(lease, 'setTimeout') === 1` 静态断言由 **C3-2** 落地。
+A 阶段行为等价性：这段最小实现与基线 `Toolbox.ts:128-135` 的 `writeStatus(message)`（写 `textContent`、`hidden = message === ''`）在 share / favorite 两条调用路径上**可见结果逐字相同**——两处传入的都是非空 `data-label-*` 文案，因此 `hidden` 都为 `false`；差别只在 `message === ''` 这一分支上 A 恒写 `hidden = false`（写入方即 owner，租约未到期前不隐藏），该分支在本轮 A 批次不被任何调用点命中（C3-2 起由 timer callback / `clearStatus` 负责回收）。BGM 在 A 阶段从不 `claimStatus`，因此 facade `applyState(true)` 调用的 `clearStatus()` 命中 `lease === null` 分支并直接返回，即规格第 16.3 节的「BGM 无 lease 时 toolbox 打开 no-op」。
 
-- [ ] **A1-8 把 `Toolbox.ts` 降为 facade**：只保留 `toolbox` / `toggleButton` 等自身 DOM getter、`applyState`、`toggle()`、`dispatchAction`、`onToolboxClick`、**`onDocumentClick`（色板自动关闭，唯一 owner）**、`onOutsideClick`、`onKeyup`、`onPjaxSuccess`、`onPjaxSend`；标注相关的 `mousedown` / `selectionchange` / mark click / toolbar click / color click 与 `main` scroll 改由 `ToolboxAnnotationController` 注册，**静态 9 个 `document` listener 净计数不变**（归属见 A1-6 的 owner 表）。`applyState` 相对基线**只新增打开分支的 `clearStatus()` 一行**，其余契约逐字保留：`classList.toggle('toolbox-open', open)`、`aria-expanded` 同步、关闭分支丢弃待标注选区。**`clearStatus()` 位于 `applyState(true)`（打开）分支**——规格第 12.1.1 节与第 16.3 节末段都写明是打开分支，且实测打开才是 lease 释放点：工具箱打开期间截图/分享/收藏会写共享 status，打开动作必须让旧 BGM lease 失效；关闭时无人写 status，无需释放：
+> **`declare namespace` 只贡献类型，不产生运行时对象。** 主题用 `outFile` 把 `include/**/*.ts` 拼接成单一作用域脚本，因此 `claimStatus` / `invalidateStatusLease` / `clearStatus` 必须作为**真实的顶层声明**（顶层 `function` / `let`，与 `declare namespace ToolboxModules` 中的类型声明并存）出现在拼接产物里，`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts`、`BgmControl.ts`、`Toolbox.ts` 才能共享同一份实现；把实现体写进 `declare namespace` 会既编译不过又在运行时得到 `ReferenceError`。A 阶段这三个顶层声明体内 `setTimeout` 与 `MutationObserver` 调用数均为 **0**（最小实现零 timer、零 observer），因此 A1-2 落的是两条 `=== 0` 断言；真实计时器 / observer 与它们对应的 `=== 1` 静态断言由 **C3-2** 落地。
+
+- [ ] **A1-8 把 `Toolbox.ts` 降为 facade**：只保留 `toolbox` / `toggleButton` 等自身 DOM getter、`applyState`、`toggle()`、`dispatchAction`、`onToolboxClick`、**`onDocumentClick`（色板自动关闭，唯一 owner）**、`onOutsideClick`、`onKeyup`、`onPjaxSuccess`、`onPjaxSend`；标注相关的 `mousedown` / `selectionchange` / mark click / toolbar click / color click 与 `main` scroll 改由 `ToolboxAnnotationController` 注册，**静态 9 个 `document` listener 净计数不变**（归属见 A1-6 的 owner 表）。
+
+  **显式归属登记（基线私有成员 → 拆分后归属，防止实施时被漏掉或重复实现）**：`refreshToolbarButtons`（基线 `Toolbox.ts:345`）归 `ToolboxAnnotationController`（A1-6 已列入其接口），facade 不保留、也不转发；facade 侧与 `theme-ui-toolbox.test.js:89/138/144/150/166` 直接相关的 title / favorite `aria-pressed` 契约由 `ToolboxFavoriteController` 的 `applyFavoriteState`（基线 `:882-895`，写 `title` / `aria-label` / `aria-pressed`）承担，探针只依赖「title 非空 + `aria-pressed` 随收藏状态翻转」这一可见结果，不依赖 `refreshToolbarButtons` 的归属细节。
+
+  `applyState` 相对基线**只新增打开分支的 `clearStatus()` 一行**，其余契约逐字保留：`classList.toggle('toolbox-open', open)`、`aria-expanded` 同步、关闭分支丢弃待标注选区。**`clearStatus()` 位于 `applyState(true)`（打开）分支**——规格第 12.1.1 节与第 16.3 节末段都写明是打开分支，且实测打开才是 lease 释放点：工具箱打开期间截图/分享/收藏会写共享 status，打开动作必须让旧 BGM lease 失效；关闭时无人写 status，无需释放：
 
 ```typescript
 private applyState = (open: boolean): void => {
@@ -868,7 +1008,7 @@ node .temp/project-tooltip.test.js
 node .temp/theme-ui-bgm.test.js
 ```
 
-`.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_size()` 在 A2 完成前不调用（A2-19 追加时再启用），A1 阶段只运行 `test_module_size()` / `test_toolbox_dependency_edges()` / `test_expands_contract()` / `test_annotation_controller_surface()`。两条 `node --check` 是**后续批次要改动这两个探针的语法门禁**：`.temp/line-marker-pipeline.test.js` 在 A2-19 追加 pipeline 段、并在 C3-2 追加 lease timer 断言，`.temp/theme-ui-bgm.test.js` 在 C3-1 追加 `loadBgmProbe()` 并把第 51、164 行两处 `loadTypeScript(window, path)` 改为 `transpile` + `join('\n')` 后单次 `window.eval`（两处调用点：`loadTypeScript(window, '…/BgmControl.ts')` 与 `loadTypeScript(disabledDom.window, '…/BgmControl.ts')`），因此这两个文件在本序列里同时带 `node --check` 与实际执行两行。`npm --prefix themes/arknights run build` 会同时重生成 `source/js/arknights.js` 与 `source/js/search.js`（§1 已把后者登记为副产物；本轮无 `_src/search/search.ts` 改动，其 diff 应为空）。
+`.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_size()` 在 A2 完成前不调用（A2-19 追加时再启用），A1 阶段只运行 `test_module_size()` / `test_toolbox_dependency_edges()` / `test_expands_contract()` / `test_annotation_controller_surface()`。`.temp/theme-ui-toolbox.test.js` 的 share / favorite status 断言（`writeStatus` → `claimStatus` 之后仍写同一个 `.toolbox-status` 节点、同一份 `data-label-*` 文案、`hidden === false`）以及 title / favorite `aria-pressed` 断言**在 A 批即须通过**：A 阶段 lease 已是最小实现且已是这两个 controller 的唯一 status 写入者，此处若失败说明 A1-4 / A1-5 / A1-7 有搬运偏差，不得推到 C3-2 再验。两条 `node --check` 是**后续批次要改动这两个探针的语法门禁**：`.temp/line-marker-pipeline.test.js` 在 A2-19 追加 pipeline 段、并在 C3-2 追加 lease timer 断言，`.temp/theme-ui-bgm.test.js` 在 C3-1 追加 `loadBgmProbe()` 并把第 51、164 行两处 `loadTypeScript(window, path)` 改为 `transpile` + `join('\n')` 后单次 `window.eval`（两处调用点：`loadTypeScript(window, '…/BgmControl.ts')` 与 `loadTypeScript(disabledDom.window, '…/BgmControl.ts')`），因此这两个文件在本序列里同时带 `node --check` 与实际执行两行。`npm --prefix themes/arknights run build` 会同时重生成 `source/js/arknights.js` 与 `source/js/search.js`（§1 已把后者登记为副产物；本轮无 `_src/search/search.ts` 改动，其 diff 应为空）。
 
 ---
 
@@ -1778,6 +1918,71 @@ const {
   MEMORY_ESCAPE_MATRIX,
   MEMORY_ESCAPE_MONACO
 } = require('./line-marker-memory-fixture')
+const { defaultPipeline } = require('../themes/arknights/scripts/markers/pipeline')
+const { CARRIER_SYMBOL } = require('../themes/arknights/scripts/markers/carrier')
+const { alertsHandler } = require('../themes/arknights/scripts/markers/handlers/alerts')
+
+// 计数 wrapper：只包裹 fixture 用 NUL 标记的那一个 occurrence 所属 handler（本组 fixture 为
+// `alertsHandler`）。registry 保存的是 handler 对象引用并在 dispatch 时动态调用
+// `handler.render(...)` / `handler.toPlainText(...)`，因此方法级包装对 `register.js` 自动注册
+// 出来的 `defaultPipeline` 同样生效；探针不需要（也不允许）手动注册或创建第二套 pipeline。
+// §2.3 的 `Handler` 只要求 `services` 逐次 `Object.freeze`，handler 对象本身不得整体冻结，
+// 否则本包装在 strict mode 下抛 TypeError。
+function installCounters(handler, counts) {
+  const originals = {}
+  for (const stage of ['render', 'toPlainText']) {
+    const original = handler[stage]
+    assert.equal(typeof original, 'function', `handler ${handler.name} must expose a callable ${stage}`)
+    originals[stage] = original
+    handler[stage] = function countedStage(...args) {
+      const result = original.apply(this, args)
+      counts[stage] += 1
+      return result
+    }
+  }
+  return () => {
+    for (const stage of ['render', 'toPlainText']) {
+      handler[stage] = originals[stage]
+    }
+  }
+}
+
+// 真实 `Post#render` 执行 helper（可运行骨架）：隔离 Hexo 实例 + `register.js` 自动注册 + 真实渲染。
+// 可复用片段取自 `.temp/marker-hexo-integration.test.js`：第 26-30 行（`new Hexo(root, { silent: true })`
+// 后 `await hexo.init()`，注册由 `register.js` 自动完成，init 后不得再调 `registerMarkerFilters`）与
+// 第 425-462 行（在 `after_post_render` priority 8 读 `data.markdown[CARRIER_SYMBOL]`，再取
+// `getOccurrences()` 快照 `{ name, state }`）。每次调用 new 一个新实例并在 finally 里 `exit()`，
+// 因此同一进程内多次渲染互不共享 carrier 与 pipeline。
+async function renderMemoryFixture(source) {
+  const counts = { render: 0, toPlainText: 0 }
+  const restoreCounters = installCounters(alertsHandler, counts)
+  const hexo = new Hexo(root, { silent: true })
+  let occurrences = null
+  try {
+    await hexo.init()
+    hexo.extend.filter.register('after_post_render', data => {
+      occurrences = data.markdown[CARRIER_SYMBOL]
+        .getOccurrences()
+        .map(item => ({ name: item.name, state: item.state }))
+    }, 8)
+    const rendered = await hexo.post.render('memory-probe.md', {
+      content: source,
+      type: 'post',
+      path: 'memory-probe.md'
+    })
+    return {
+      data: {
+        content: rendered.content,
+        projection: defaultPipeline.projectText(rendered, 'content'),
+        occurrences
+      },
+      store: { countState: stage => counts[stage] }
+    }
+  } finally {
+    restoreCounters()
+    await hexo.exit()
+  }
+}
 
 function test_expands_rebind_idempotence() {
   const dom = new JSDOM(`<!doctype html><body>
@@ -1811,21 +2016,25 @@ function test_expands_rebind_idempotence() {
     assert.equal(clickCounts.get(header), 1, 'exactly one click listener per ex-header')
     assert.equal(keypressCounts.get(header), 1, 'exactly one keypress listener per ex-header')
   }
+  // 局部变量不得与模块级的 `root`（`path.resolve(__dirname, '..')`）同名：
+  // 同名会在块级作用域内形成 TDZ，使本函数后半段的 `root.classList` 在 tsc 的
+  // `--checkJs` 下报 TS2448（Block-scoped variable used before its declaration），运行时也会抛
+  // ReferenceError。因此展开盒容器一律叫 `expandBox`。
   const header = headers[0]
-  const root = header.closest('.expand-box')
+  const expandBox = header.closest('.expand-box')
   // 不硬编码期望字面量：以 DOM 声明的初值为基准断言「切换后必须写成相反值」，
   // 断言的是 reverse() 必须写 aria-expanded，而不是 fixture 恰好带了某个字面量
   const initial = header.getAttribute('aria-expanded')
   assert.ok(initial === 'true' || initial === 'false', 'handler output must declare an initial aria-expanded')
   header.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-  assert.equal(root.classList.contains('fold'), true)
+  assert.equal(expandBox.classList.contains('fold'), true)
   assert.equal(header.getAttribute('aria-expanded'), String(initial !== 'true'))
   header.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-  assert.equal(root.classList.contains('open'), true)
+  assert.equal(expandBox.classList.contains('open'), true)
   assert.equal(header.getAttribute('aria-expanded'), initial)
   const spaceHeader = headers[0]
   spaceHeader.dispatchEvent(new window.KeyboardEvent('keypress', { key: ' ', bubbles: true, cancelable: true }))
-  assert.equal(root.classList.contains('fold'), true, 'Space must toggle exactly once')
+  assert.equal(expandBox.classList.contains('fold'), true, 'Space must toggle exactly once')
   assert.equal(spaceHeader.getAttribute('aria-expanded'), String(initial !== 'true'))
 }
 ```
@@ -1833,8 +2042,8 @@ function test_expands_rebind_idempotence() {
 **规格 18.2「handler 生成 NUL」段**（与 before 源字段 NUL 段分工见 §13.2 覆盖表）：`render` 输出 NUL 时 `render=1 / toPlainText=0`（投影根本不被计算）；仅 `toPlainText` 输出 NUL 时 `render=1 / toPlainText=1` 且先丢弃已生成 HTML。两者都只调用一次 marker fallback，DOM 精确为 `markerFailureHtml(raw)`、投影精确为 `markerFailureProjection(raw)` 即 `normalizeLineEndings(raw)`，occurrence 恰为 `failed`，最终 DOM 与投影的 NUL 计数为 0：
 
 ```js
-function test_handler_generated_nul_is_marker_scoped() {
-  const { data, store } = renderMemoryFixture(MEMORY_RENDER_NUL)
+async function test_handler_generated_nul_is_marker_scoped() {
+  const { data, store } = await renderMemoryFixture(MEMORY_RENDER_NUL)
   assert.equal(store.countState('render'), 1)
   assert.equal(store.countState('toPlainText'), 0, 'a NUL render output must stop before projection')
   assert.equal(data.content.includes('<pre class="arknights-marker-source">'), true)
@@ -1842,7 +2051,7 @@ function test_handler_generated_nul_is_marker_scoped() {
   assert.equal(data.occurrences.filter(item => item.state === 'failed').length, 1)
   assert.equal(data.occurrences.filter(item => item.state === 'consumed').length, 4)
 
-  const projectionRun = renderMemoryFixture(MEMORY_PROJECTION_NUL)
+  const projectionRun = await renderMemoryFixture(MEMORY_PROJECTION_NUL)
   assert.equal(projectionRun.store.countState('render'), 1)
   assert.equal(projectionRun.store.countState('toPlainText'), 1)
   assert.equal(projectionRun.data.content.includes(NUL), false, 'the discarded render output must not survive')
@@ -1851,6 +2060,12 @@ function test_handler_generated_nul_is_marker_scoped() {
   assert.equal(projectionRun.data.occurrences.filter(item => item.state === 'failed').length, 1)
 }
 ```
+
+**`store.countState(stage)` 的语义（唯一写法，A2-22 与 A2-23 共用）**：`countState('render'|'toPlainText')` 统计**被 `installCounters` 包裹的那一个 handler**（本组 fixture 是 `alertsHandler`，由 fixture 中注入 NUL 的那个 occurrence 唯一确定）在该阶段**被真正调用且成功返回**的次数。它是 handler 调用计数器，不是 occurrence 计数器：
+
+- **为何是 1 而非 5**：`MEMORY_SOURCE` 共 5 个 occurrence（Alerts、Editor、三张 LinkCard），但只有携带 NUL 的那一个 handler 被包裹，其余 4 个成功终态的 handler 不参与计数；`failed: 1 / consumed: 4` 才是 occurrence 维度的断言，两者互不替代。
+- **共享 fixture body 内非递归的 `[#]>AI|` 不参与**：`MEMORY_SOURCE` 的 Alerts body 内含一行 `[#]>AI|`，按 Global Constraints 第 18 条它只是 body 文本，不签发 occurrence、不触发第二次 dispatch，因此既不把 occurrence 数抬到 6，也不让 `countState` 变成 5。
+- `MEMORY_RENDER_NUL` 的 `toPlainText` 恒为 0：render 输出已带 NUL，投影根本不被计算；`MEMORY_PROJECTION_NUL` 的 `render=1 / toPlainText=1`，且已生成的 HTML 先被丢弃。
 
 **规格 17.1 安全转义矩阵段**：五个字段级上下文（HTML text / HTML attribute / URL / CSS declaration / Monaco source）各跑一次真实 `Post#render`，断言「上下文校验拒绝或逐字转义后仍安全」，并且**不使用任何正则删除** `<script>`、事件属性或危险协议。规格第 17.1 节的第六个上下文 Markdown **不在本段**：它的规则只约束「把 Alerts body 交给 detached `renderMarkdown`」，危险输入在 service 层判定为 `HANDLER_SERVICE_ERROR`（负例见上面 6 条硬断言第 5 条的 `MEMORY_JAVASCRIPT_LINK`），不进入字段序列化矩阵；该排除同时写在本段与 A2-21 的 fixture 注释里。
 
@@ -1865,7 +2080,7 @@ function assertPayloadOnlyInMarkerSource(html, payload, name) {
   }
 }
 
-function test_security_escaping_matrix() {
+async function test_security_escaping_matrix() {
   const cases = [
     { name: 'htmlText', source: MEMORY_SOURCE.replace('[title] 协议提示', MEMORY_ESCAPE_MATRIX.htmlText), forbid: ['<script>alert(1)</script>'] },
     { name: 'htmlAttribute', source: MEMORY_SOURCE.replace('[descr] 纯文本说明', MEMORY_ESCAPE_MATRIX.htmlAttribute), forbid: ['onmouseover="alert(1)"'] },
@@ -1875,29 +2090,29 @@ function test_security_escaping_matrix() {
     { name: 'monaco', source: MEMORY_ESCAPE_MONACO, forbid: ['<script>'] }
   ]
   for (const item of cases) {
-    const { data } = renderMemoryFixture(item.source)
+    const { data } = await renderMemoryFixture(item.source)
     for (const pattern of item.forbid) {
       assert.ok(!data.content.includes(pattern), `${item.name} must not emit ${pattern} verbatim`)
     }
     assert.ok(!data.content.includes('arknights-line-marker-v1:'), `${item.name} must not leak tokens`)
     assert.ok(!data.content.includes(NUL), `${item.name} must not leak NUL`)
   }
-  const htmlText = renderMemoryFixture(cases[0].source).data.content
+  const htmlText = (await renderMemoryFixture(cases[0].source)).data.content
   assert.ok(htmlText.includes('&lt;script&gt;') || htmlText.includes('<pre class="arknights-marker-source">'),
     'html text context must be escaped or rejected, never stripped by regex')
-  const monaco = renderMemoryFixture(MEMORY_ESCAPE_MONACO).data.content
+  const monaco = (await renderMemoryFixture(MEMORY_ESCAPE_MONACO)).data.content
   assert.ok(monaco.includes('&lt;script&gt;'), 'Monaco source must be escaped as HTML text before textContent reading')
   // CSS 上下文：payload 被 style 解析器否决后只允许出现在 escaped marker source，
   // 活动上下文的判据是「不存在携带 payload 的 <style data-arknights-link-card-style>」
   // （attr 值与元素文本两处都查），而不是对 payload 做全文缺席断言。
-  const css = renderMemoryFixture(cases[3].source).data.content
+  const css = (await renderMemoryFixture(cases[3].source)).data.content
   assert.ok(!/<style data-arknights-link-card-style="[^"]*"[^>]*>[^<]*url\(javascript:/g.test(css),
     'css payload must never reach an active style element')
   assertPayloadOnlyInMarkerSource(css, 'url(javascript:', 'css')
 }
 ```
 
-`renderMemoryFixture(source)` 是本文件的共用 helper：创建隔离 Hexo 实例、注册 `defaultPipeline` 与五 handler、执行真实 `Post#render`，并返回 `{ data, store }`，其中 `store` 是包住 handler 的计数 wrapper，提供 `countState('render'|'toPlainText')`、`occurrences`（`{ name, state }` 快照）与 `data.projection`（`defaultPipeline.projectText(data, 'content')`）。
+`renderMemoryFixture(source)` 是本文件的共用 helper（骨架见本节首个代码块）：创建隔离 Hexo 实例、`register.js` 自动注册 `defaultPipeline` 与五 handler、执行真实 `Post#render`，并返回 `{ data, store }`。`data.content` 是渲染结果，`data.projection` 是 `defaultPipeline.projectText(data, 'content')`，`data.occurrences` 是 `after_post_render` priority 8 从 `data.markdown[CARRIER_SYMBOL].getOccurrences()` 取到的 `{ name, state }` 快照；`store.countState` 的定义见上一段。本文件不再重复实现该 helper。
 
 本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-handlers.test.js` 的全部错误码**（共 20 条，缺一条即门禁不完整）：
 
@@ -1911,7 +2126,7 @@ function test_security_escaping_matrix() {
 
 （Project 的 3 条 handler 码由 A2-19 承载，见该探针的错误码表；`LINK_CARD_INVALID_URL` 两个探针各有一份 fixture。）
 
-- [ ] **A2-23 写 `.temp/line-marker-hexo.test.js`**：真实 alias/store 探针 + 真实 `Post#render` 拒绝重试 + priority 5 透传 + `filters/alerts.js` 加密同源：
+- [ ] **A2-23 写 `.temp/line-marker-hexo.test.js`**：真实 alias/store 探针 + 真实 `Post#render` 共享 fixture 复跑 + 显式 excerpt 字段不合法时的 `INVALID_EXCERPT_FIELD` fail-closed + 拒绝重试 + priority 5 透传 + `filters/alerts.js` 加密同源：
 
 ```js
 const assert = require('node:assert/strict')
@@ -1919,7 +2134,11 @@ const path = require('node:path')
 const Hexo = require('hexo')
 const root = path.resolve(__dirname, '..')
 const { MEMORY_SOURCE } = require('./line-marker-memory-fixture')
+const { defaultPipeline } = require('../themes/arknights/scripts/markers/pipeline')
+const { CARRIER_SYMBOL } = require('../themes/arknights/scripts/markers/carrier')
 
+// 只检查 filter store 形态：既不 init 也不渲染，因此 base_dir 取临时目录即可
+// （临时目录下没有 themes/arknights，`register.js` 不会自动注册，本段也不需要它）。
 function test_filter_alias_and_store() {
   const hexo = new Hexo(path.join(root, '.temp/line-marker-hexo-probe'), { silent: true })
   const spy = () => {}
@@ -1930,10 +2149,40 @@ function test_filter_alias_and_store() {
     'literal name store must not receive the public registration')
 }
 
-function test_shared_memory_fixture_is_the_single_source() {
-  const probeRoot = path.join(root, '.temp/line-marker-hexo-probe')
-  const data = { content: MEMORY_SOURCE, path: path.join(probeRoot, 'shared.md'), type: 'post' }
-  const result = renderThroughRealPostRender(probeRoot, data)
+// 真实 `Post#render` 执行 helper（可运行骨架）：隔离 Hexo 实例 + `register.js` 自动注册 + 真实渲染。
+// 可复用片段与 A2-22 的 `renderMemoryFixture` 同源，均取自 `.temp/marker-hexo-integration.test.js`：
+// 第 26-30 行（`new Hexo(root, { silent: true })` + `await hexo.init()`，注册由 `register.js` 自动完成，
+// init 后不得再调 `registerMarkerFilters`、不得创建第二套 pipeline）与第 425-462 行
+// （`after_post_render` priority 8 读 `data.markdown[CARRIER_SYMBOL]` 再取 `getOccurrences()` 快照）。
+// base_dir 必须是仓库根 `root`：只有根目录的 `_config.yml` 才带 `theme: arknights`，
+// 临时目录下没有主题，`register.js` 不会被自动加载，真实渲染路径也就无从建立。
+async function renderThroughRealPostRender(data) {
+  const hexo = new Hexo(root, { silent: true })
+  let occurrences = null
+  try {
+    await hexo.init()
+    hexo.extend.filter.register('after_post_render', rendered => {
+      occurrences = rendered.markdown[CARRIER_SYMBOL]
+        .getOccurrences()
+        .map(item => ({ name: item.name, state: item.state }))
+    }, 8)
+    const rendered = await hexo.post.render(String(data.path), data)
+    return {
+      content: rendered.content,
+      projection: defaultPipeline.projectText(rendered, 'content'),
+      occurrences
+    }
+  } finally {
+    await hexo.exit()
+  }
+}
+
+async function test_shared_memory_fixture_is_the_single_source() {
+  const result = await renderThroughRealPostRender({
+    content: MEMORY_SOURCE,
+    type: 'post',
+    path: 'shared-memory-fixture.md'
+  })
   assert.equal(result.occurrences.length, 5, 'the shared fixture must yield five occurrences')
   assert.ok(result.occurrences.every(item => item.state === 'consumed'))
   assert.ok(!result.content.includes('arknights-line-marker-v1:'))
@@ -1947,15 +2196,35 @@ function test_shared_memory_fixture_is_the_single_source() {
   }
 }
 
-test_filter_alias_and_store()
-test_shared_memory_fixture_is_the_single_source()
-// (a) priority 5 透传 / (b) 拒绝重试 / (c) 加密同源 三段各自提供 test_* 函数后追加调用
-console.log('ok line-marker-hexo')
+// 规格第 13.1 节 INVALID_EXCERPT_FIELD：frontmatter 有 own `excerpt` 但不是 string 时
+// 必须在读正文前 fail-closed，且拒绝后字段回到入口原值（不输出半成品）。
+async function test_invalid_excerpt_field_is_fail_closed() {
+  const data = { content: MEMORY_SOURCE, excerpt: 42, type: 'post', path: 'invalid-excerpt-field.md' }
+  await assert.rejects(
+    renderThroughRealPostRender(data),
+    error => error.code === 'INVALID_EXCERPT_FIELD'
+  )
+  assert.equal(data.excerpt, 42, 'a rejected render must restore the original excerpt value')
+  assert.equal(data.content, MEMORY_SOURCE, 'a rejected render must not leave materialized content behind')
+}
+
+async function main() {
+  test_filter_alias_and_store()
+  await test_shared_memory_fixture_is_the_single_source()
+  await test_invalid_excerpt_field_is_fail_closed()
+  // (a) priority 5 透传 / (b) 拒绝重试 / (c) 加密同源 三段各自提供 test_* 函数后追加 await 调用
+  console.log('ok line-marker-hexo')
+}
+
+main().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})
 ```
 
-本文件**必须** `require('./line-marker-memory-fixture')` 并复用其 `MEMORY_SOURCE`，不得内联第二份 fixture 文本；`line-marker-handlers.test.js` 与本文件对同一 fixture 的断言因此天然一致，规格第 18.2 节的「共享」要求由单一模块而不是两份拷贝保证。`renderThroughRealPostRender(probeRoot, data)` 是两文件共用的执行 helper 形态（各自在本文件内实现一次即可，不要求跨文件共享实现）：创建隔离 Hexo、注册 `defaultPipeline` 与五 handler、走真实 `Post#render`，返回 `{ content, projection, occurrences }`。
+本文件**必须** `require('./line-marker-memory-fixture')` 并复用其 `MEMORY_SOURCE`，不得内联第二份 fixture 文本；`line-marker-handlers.test.js` 与本文件对同一 fixture 的断言因此天然一致，规格第 18.2 节的「共享」要求由单一模块而不是两份拷贝保证。`renderThroughRealPostRender(data)` 是本文件的执行 helper（骨架见上方代码块）：创建隔离 Hexo、走 `register.js` 自动注册后的真实 `Post#render`，返回 `{ content, projection, occurrences }`；形态与 A2-22 的 `renderMemoryFixture` 一致但各自在本文件内实现一次，不要求跨文件共享实现。**不传 base_dir**：base_dir 固定为仓库根，保证主题脚本被自动加载（`store.countState` 的定义见 A2-22，本文件不重复该计数器）。
 
-同文件另加三段：(a) priority 5 透传——真实 `Post#render` 同时启用 alerts 5 与 spoiler 5，断言执行后 `data.content` 内 block placeholder 逐字节不变、`countExact` 仍为 1、显式 excerpt 的 opaque token 唯一、after 9 完成全部物化，注入的 `> [!NOTE]` 与 `??x??` 仍生效；(b) 拒绝重试——对后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、`after_post_render`（priority < 9）各注入一次拒绝，断言 `Post#render` reject、after 9 未执行、同 data 再次 render 时先从 `carrier.originalField` 修复后重新 tokenization；(c) 加密同源——仅 frontmatter `password` 的 public data 正常把 `> [!NOTE]` 转为 `.alert`，tag 命中密码 / `encrypt: true` / `origin` 残留三类 encrypted data 的 `content`/`excerpt`/`more` 逐字节未被改写，ambiguous data 抛 `ENCRYPTION_STATE_AMBIGUOUS` 且字段未被改写，并对 `alerts.js` 源码断言 `data.encrypt`/`data.password` 直读零命中。**（c）的零命中断言范围按 §2.5 裁决记录只覆盖 `themes/arknights/scripts/filters/alerts.js` 单文件**：`spoiler.js` / `meta-description.js` / `terms.js` 的自判是显式残留，探针必须额外断言这三文件在本批**未被改动**（`git diff --name-only` 中不出现它们），把「已知残留」与「意外漂移」区分开，禁止写成目录级零命中。
+同文件另加三段（`INVALID_EXCERPT_FIELD` 段已写在上面的骨架里，不在这三段中重复）：(a) priority 5 透传——真实 `Post#render` 同时启用 alerts 5 与 spoiler 5，断言执行后 `data.content` 内 block placeholder 逐字节不变、`countExact` 仍为 1、显式 excerpt 的 opaque token 唯一、after 9 完成全部物化，注入的 `> [!NOTE]` 与 `??x??` 仍生效；(b) 拒绝重试——对后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、`after_post_render`（priority < 9）各注入一次拒绝，断言 `Post#render` reject、after 9 未执行、同 data 再次 render 时先从 `carrier.originalField` 修复后重新 tokenization；(c) 加密同源——仅 frontmatter `password` 的 public data 正常把 `> [!NOTE]` 转为 `.alert`，tag 命中密码 / `encrypt: true` / `origin` 残留三类 encrypted data 的 `content`/`excerpt`/`more` 逐字节未被改写，ambiguous data 抛 `ENCRYPTION_STATE_AMBIGUOUS` 且字段未被改写，并对 `alerts.js` 源码断言 `data.encrypt`/`data.password` 直读零命中。**（c）的零命中断言范围按 §2.5 裁决记录只覆盖 `themes/arknights/scripts/filters/alerts.js` 单文件**：`spoiler.js` / `meta-description.js` / `terms.js` 的自判是显式残留，探针必须额外断言这三文件在本批**未被改动**（`git diff --name-only` 中不出现它们），把「已知残留」与「意外漂移」区分开，禁止写成目录级零命中。
 
 - [ ] **A2-24 样式**：`admonition.styl` 的 `@css { :root { ... } }` 块新增 `--adm-icon-important`，`for name in note warning success failure detail` 循环改为 `note warning success failure important` 使 `.i-important` 使用 `--adm-icon-important`；`code.styl` 为 `.monaco-editor-code` 增加固定 `min-height 300px`（不可配置）。
 - [ ] **A2-25 运行 A2 全量门禁**：
@@ -2025,7 +2294,7 @@ node -e "const{execSync}=require('node:child_process');const out=execSync('git g
 
 - [ ] **A3-4 递增缓存版本**：`meta-data.pug` 的 `- var cssVersion = "20260952"` → `"20260953"`；`js-data.pug` 的 `- var jsVersion = "20260950"` → `"20260951"`。
 - [ ] **A3-5 同步 `AGENTS.md`**（规格第 15 节条目 1/2/3/5/6/10/11/12）：Architecture 写入 `after_render:html` → `_after_html_render` alias 事实与实测优先级表（含 `footnotes.js` 恒等 no-op 说明）；priority 5 placeholder 可见性；Source Tree 登记 `handlers/{project,alerts,editor,link-card}.js` 与 `pipeline/{materialize,failure,project-grid,projection}.js`，删除 `sentinel.js`/`projects.js` 条目与旧 inline/autolink 描述；Toolbox 模块树与 ≤500 行门禁（含 `ScreenshotControl.ts` 排除理由只限「A 仅 facade 委托」）；`Expands.ts` 定点口径；本地定制地图的样式导入变更；加密策略单一来源四条链路与 §2.5 裁决记录列出的三处显式残留自判（必须写成「marker/search/加密生成三条链路 + GitHub Alert filter 已同源，`spoiler.js`/`meta-description.js`/`terms.js` 为显式残留」，不得写成全站零残留）；`.temp/` 探针清单（九个既有 + 10 个新增 `line-marker-*.test.js` + 1 个新增 `line-marker-artifacts.js` 产物脚本 + `line-marker-memory-fixture.js` 共享 fixture 模块）；删除旧 filters 条目。
-- [ ] **A3-6 运行批次 A 完整门禁**：
+- [ ] **A3-6 运行批次 A 完整门禁**（`node .temp/theme-ui-toolbox.test.js` 的 share / favorite status 与 title / `aria-pressed` 断言必须在 A 批通过：A 阶段 lease 已是这两个 controller 的唯一 `.toolbox-status` 写入者，此处失败即 A1-4 / A1-5 / A1-7 搬运有偏差，不得顺延到 C）：
 
 ```bash
 npm --prefix themes/arknights run build
@@ -2622,16 +2891,17 @@ async function test_status_lease_rejects_identical_external_write() {
 //   console.log('theme UI BGM state machine: ok')
 ```
 
-- [ ] **C3-2 实现 `ToolboxStatusLease.ts`**，按规格 16.3 伪代码逐字实现 `claimStatus(message, delay)` / `invalidateStatusLease()` / `clearStatus()`，observer 精确观察 `{ attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true }`；`claimStatus` 第 4 步先 `observer.takeRecords()` 丢弃本次自有写入；observer callback 即使外部写入与 `lease.message` 相同文本也视为其它 owner 接管。
+- [ ] **C3-2 在 A1-7 的最小实现上叠加 timer 与 `MutationObserver`**，按规格 16.3 伪代码逐字补全 `claimStatus(message, { owner, delay })` 的第 2、5 步与 `invalidateStatusLease()` 的第 2-5 步（释放旧 lease 时 `clearTimeout` + `disconnect`）、`timer callback` 分支，并把 `retireOperation` / `invalidateLifecycle` 接进同一条 lease 生命周期：observer 精确观察 `{ attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true }`；`claimStatus` 第 4 步先 `observer.takeRecords()` 丢弃本次自有写入；observer callback 即使外部写入与 `lease.message` 相同文本也视为其它 owner 接管。**A 阶段已写好的部分逐字保留**：generation 递增、丢弃旧 lease、`node.textContent = message`、`node.hidden = false`、记录 `owner`，以及 `clearStatus()` 的「仅 ownedNode 非 null 时清空」语义（规格 16.3 的 timer callback 与 `clearStatus()` 共用同一实现）。
 
-  **A1-7 推迟到本任务的 lease timer 静态门禁在此落地**（A 阶段函数体是空实现 no-op，`setTimeout` 调用数必然为 0，所以 A1-2 不落这条断言）：`.temp/line-marker-pipeline.test.js`（全仓唯一持有 `countCalls` 的探针）在其 A1-2 段 `test_toolbox_dependency_edges()` 末尾追加
+  **lease timer / observer 静态门禁在此从 `=== 0` 翻到 `=== 1`**（A 阶段是最小实现，`countCalls` 必然为 0，所以 A1-2 只落 `=== 0`）：`.temp/line-marker-pipeline.test.js`（全仓唯一持有 `countCalls` 的探针）在其 A1-2 段 `test_toolbox_dependency_edges()` 末尾把 A1-7 那两条 `=== 0` 断言替换为
 
   ```js
   const lease = fs.readFileSync(path.join(includeDir, 'ToolboxStatusLease.ts'), 'utf8')
   assert.equal(countCalls(lease, 'setTimeout'), 1, 'C3-2 lands the single real status timer')
+  assert.equal(countCalls(lease, 'MutationObserver'), 1, 'C3-2 lands the single real status observer')
   ```
 
-  `ToolboxShareController.ts` 的 `=== 1` 与 `ToolboxFavoriteController.ts` 的 `=== 0` 两条断言保持不变；本任务不新增探针文件，只在既有 `.temp/line-marker-pipeline.test.js` 上追加这一条（因此 C3-7 的门禁序列必须包含该探针）。
+  `ToolboxShareController.ts` 的 `=== 1` 与 `ToolboxFavoriteController.ts` 的 `=== 0` 两条断言、以及两条 controller 必须经 `claimStatus` 写 status 的断言保持不变；本任务不新增探针文件，只在既有 `.temp/line-marker-pipeline.test.js` 上替换这两行（因此 C3-7 的门禁序列必须包含该探针）。
 
 - [ ] **C3-3 重写 `BgmControl.ts` 状态机**（§2.6 签名）：六态 `paused / starting / playing / failed / retrying-load / retrying-play`；`retireOperation` 只接受 `OperationToken`（`LifecycleToken`、旧 `O`、非 token 一律返回 `false` 且写入计数为 0）；成功终态写回前恰好调用一次 `retireOperation(O)`；`retrying-load -> retrying-play` 中途不 retire；`enterFailed` 按 token 类型分别调用 `retireOperation(token)` 或 `advanceOperationGeneration()` 恰好一次并同步置 `mediaFailed = true`；`invalidateLifecycle(reason)` 递增 lifecycle 恰好 1 次、调用 `invalidateStatusLease()` 恰好 1 次、重绑 persistent listener 恰好 1 次、自身不改 operation；三个 Pjax 事件各注册**一个** listener，其中 `pjax:error` 仅由 `BgmControl.ts` 处理。
 - [ ] **C3-4 确认 `Toolbox.ts` 的 `applyState(true)`（打开）分支**调用 `window.bgmControl?.clearStatus()`（A1-8 已加入，C 只回归；关闭分支不得出现该调用）。
@@ -3054,7 +3324,7 @@ finally {
 | §15 原子性第 3/4/5/6 条（版本链） | A3-4、B4-3、C3-5、D 不递增（Global Constraints 9） |
 | §16.1 GitHub Alert 明暗交互态 | C1-1、C1-2、C1-3 |
 | §16.2 桌面导航 | C2-1、C2-2、C2-3 |
-| §16.3 BGM 与共享 status 生命周期 | A1-7（lease 签名）、A1-8（`applyState(true)` 打开分支）、C3-1、C3-2、C3-3、C3-4 |
+| §16.3 BGM 与共享 status 生命周期 | A1-7（lease 签名 + A 阶段最小实现，share / favorite 已在其 A 批门禁内经 lease 写 status）、A1-4 / A1-5（`claimStatus(text, { owner })` 写入归属）、A1-8（`applyState(true)` 打开分支）、C3-1、C3-2（叠加 timer / observer）、C3-3、C3-4 |
 | §17.1 上下文序列化 | A2-10、A2-11、A2-12、A2-13、A2-14、A2-22 `test_security_escaping_matrix` |
 | §17.2 搜索 sidecar | A2-20（`search-projection-lifecycle.test.js` 更新）、A2-25、D1-2 |
 | §17.3 纯文本投影表 | A2-10..A2-14 的 `toPlainText`、A2-19、A2-22 |
@@ -3210,8 +3480,10 @@ finally {
 | `renderPostThroughMarked` / `runPostRender` | A2-19 的真实 renderer 等价入口与 before→render→after 封装 |
 | `assertPayloadOnlyInMarkerSource` | A2-22 CSS 上下文判据：payload 只允许出现在 escaped marker source 内 |
 | `loadBgmProbe` 及其 19 个方法 | C3-1 的 BGM 计数探针；方法面与映射见 C3-1 的对照表（`ariaBusyWrites()` 是相对构造后基线快照的 delta） |
-| `renderMemoryFixture` / `renderThroughRealPostRender` | A2-22 / A2-23 的真实 `Post#render` 执行 helper；返回 `{ content, projection, occurrences }` |
-| `.temp/line-marker-pipeline.test.js` 承载规格 12.1.1 第 5 条样式导入回归与 C3-2 的 lease timer 静态门禁 | 规格 18.4 的 probe 映射表未单列该条，该 probe 已承载 12.1.1 的规模与依赖门禁；C3-2 的 `countCalls` 也只能落在同一文件（全仓唯一持有该 helper 的探针） |
+| `renderMemoryFixture` / `renderThroughRealPostRender` | A2-22 / A2-23 的真实 `Post#render` 执行 helper；A2-22 返回 `{ data: { content, projection, occurrences }, store }`，A2-23 返回 `{ content, projection, occurrences }`；两者形态一致、各自在本文件内实现一次，均为「隔离 Hexo 实例（`new Hexo(root, { silent: true })` + `await hexo.init()`，由 `register.js` 自动注册，init 后不手动注册）+ 真实 `hexo.post.render`」，可复用片段取自 `.temp/marker-hexo-integration.test.js` 第 26-30 行与第 425-462 行 |
+| `installCounters` / `store.countState` | A2-22 的 handler 阶段计数 wrapper 与其计数入口；`countState` 只计被包裹的那一个 handler 成功进入该阶段的次数（语义见 A2-22），因此 NUL 断言恒为 1 而非 5 |
+| `StatusClaimOptions` / `StatusLease.owner` | §2.6 lease 写入入口的 options 形状与 owner 归属字段；`claimStatus` 的全仓唯一写法是 `(message, { owner, delay? })`（裁决记录见 §2.6） |
+| `.temp/line-marker-pipeline.test.js` 承载规格 12.1.1 第 5 条样式导入回归与 lease 的 timer / observer 静态门禁 | 规格 18.4 的 probe 映射表未单列该条，该 probe 已承载 12.1.1 的规模与依赖门禁；A1-2 落 lease 的 `=== 0`（最小实现零 timer、零 observer）、C3-2 把它换成 `=== 1`，`countCalls` 也只能落在同一文件（全仓唯一持有该 helper 的探针） |
 | `A1_MODULES` / `sliceFrom` / `createTokenStoreStub` / `scanMarkersFixture` | 探针内部局部辅助函数，不进入任何交付物 |
 
 ### 13.5 命令可执行性
@@ -3226,7 +3498,7 @@ finally {
 
 - 全部代码围栏成对使用 ```` ``` ````；`text` / `javascript` / `js` / `typescript` / `styl` / `powershell` / `bash` / `abnf` 标注一致，无嵌套围栏、无未闭合围栏。
 - 落盘文档无 emoji（功能符号一律写作文字或纯文本符号）。
-- 全文使用 LF 换行，末尾保留单个换行；不包含行尾空白（`git diff --check` 为交付前必跑项，见 §10 与 §13.7）。
+- 全文使用 LF 换行（无 CR），文件以「最后一个内容行 + 一个空行」收尾（即以 `0a 0a` 结束，不追加第二个空行、不使用 CRLF）；不包含行尾空白（`git diff --check` 为交付前必跑项，见 §10 与 §13.7）。
 
 ### 13.7 交付前自检命令
 
