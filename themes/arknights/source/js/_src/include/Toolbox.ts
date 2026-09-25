@@ -125,6 +125,63 @@ class Toolbox {
     this.applyState(toolbox === null || !toolbox.classList.contains('toolbox-open'))
   }
 
+  private writeStatus = (message: string): void => {
+    const status = document.querySelector<HTMLElement>('.toolbox-status')
+    if (status === null) {
+      return
+    }
+    status.textContent = message
+    status.hidden = message === ''
+  }
+
+  private dispatchAction = (action: string): void => {
+    switch (action) {
+      case 'toolbox':
+        this.toggle()
+        break
+      case 'annotate':
+        this.annotate()
+        break
+      case 'share':
+        this.share()
+        break
+      case 'favorite':
+        this.favorite()
+        break
+      case 'screenshot': {
+        const capture = window.screenshotControl?.capture()
+        if (capture !== undefined) {
+          void Promise.resolve(capture).catch(() => undefined)
+        }
+        this.applyState(false)
+        break
+      }
+      case 'bgm': {
+        const toggle = window.bgmControl?.toggle()
+        if (toggle !== undefined) {
+          void Promise.resolve(toggle).catch(() => undefined)
+        }
+        this.applyState(false)
+        break
+      }
+    }
+  }
+
+  private onToolboxClick = (event: MouseEvent): void => {
+    const target = event.target as Element | null
+    if (target === null || typeof target.closest !== 'function') {
+      return
+    }
+    const button = target.closest<HTMLElement>('#to-toolbox, .toolbox-item')
+    if (button === null) {
+      return
+    }
+    const action = button.getAttribute('data-action')
+    if (action !== null) {
+      this.dispatchAction(action)
+    }
+  }
+
   private onOutsideClick = (event: MouseEvent): void => {
     const target = event.target as Element | null
     if (target !== null && typeof target.closest === 'function' && target.closest('.toolbox') !== null) {
@@ -794,6 +851,7 @@ class Toolbox {
       if (button === null) {
         return
       }
+      this.writeStatus(button.dataset.labelCopied || '')
       button.classList.add('copied')
       setTimeout(() => {
         button.classList.remove('copied')
@@ -839,13 +897,20 @@ class Toolbox {
   public favorite = (): void => {
     const favorites = this.readFavorites()
     const path = window.location.pathname
-    if (favorites[path] !== undefined) {
+    const wasSaved = favorites[path] !== undefined
+    if (wasSaved) {
       delete favorites[path]
     } else {
       favorites[path] = { url: window.location.href, title: document.title, time: Date.now() }
     }
     this.write(Toolbox.FAVORITES_KEY, Object.keys(favorites).length === 0 ? null : JSON.stringify(favorites))
     this.applyFavoriteState()
+    const button = this.favoriteButton
+    if (button !== null) {
+      this.writeStatus(wasSaved
+        ? button.dataset.labelRemovedStatus || ''
+        : button.dataset.labelSavedStatus || '')
+    }
   }
 
   private onPjaxSuccess = (): void => {
@@ -857,15 +922,21 @@ class Toolbox {
     this.applyAnnotateColor()
   }
 
+  private onPjaxSend = (): void => {
+    this.applyState(false)
+    this.hideToolbar()
+  }
+
   constructor() {
     document.addEventListener('keyup', this.onKeyup)
     document.addEventListener('mousedown', this.onMouseDown)
+    document.addEventListener('click', this.onToolboxClick)
     document.addEventListener('click', this.onMarkClick)
     document.addEventListener('click', this.onToolbarClick)
     document.addEventListener('click', this.onDocumentClick)
     document.addEventListener('selectionchange', this.onSelectionChange)
     document.addEventListener('pjax:success', this.onPjaxSuccess)
-    document.addEventListener('pjax:send', this.hideToolbar)
+    document.addEventListener('pjax:send', this.onPjaxSend)
     const main = document.querySelector('main')
     if (main !== null) {
       main.addEventListener('scroll', this.hideToolbar, { passive: true })
@@ -878,3 +949,4 @@ class Toolbox {
 }
 
 var toolbox = new Toolbox()
+Object.assign(window, { toolbox: toolbox })

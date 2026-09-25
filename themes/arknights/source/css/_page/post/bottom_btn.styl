@@ -63,6 +63,16 @@
   height 16px
   display block
   transition transform .3s
+.bottom-btn .i-bgm-icon
+  display block
+  width 16px
+  height 16px
+  background-color currentColor
+  -webkit-mask url('../icons/sound.svg') no-repeat center / contain
+  mask url('../icons/sound.svg') no-repeat center / contain
+.bottom-btn .toolbox-bgm[aria-pressed="true"]
+  background-color var(--theme-subcolor)
+  color var(--theme-text-hover)
 .bottom-btn .i-color
   @media ( min-width 769px )
     &:hover .i-icon
@@ -94,7 +104,7 @@
     &:nth-child(3)
       transform translate(0, -50%) rotate(-45deg) scaleX(1.2)
 
-// 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 由后续 document 委托接线）
+// 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 由 document 委托接线）
 // 独立锚定 .bottom-btn 左下角，与右列共用 --btn-inset 底部基线（桌面 sticky / ≤768px fixed 同锚）；
 // .toolbox 高度 = 唯一常规子项 .toolbox-toggle（40px），故 toggle 底缘 = 基线 = #color-mode 底缘
 // 扇形几何：以工具箱按钮为原点，五项按 66px 半径、0° / 22.5° / 45° / 67.5° / 90° 向右上张开

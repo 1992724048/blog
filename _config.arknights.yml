@@ -103,8 +103,8 @@ search:
 
 # 背景音乐
 bgm:
-  enable: false
-  autoplay: true
+  enable: true
+  autoplay: false
   loop: true
   src: /audio/bgm.mp3
 

@@ -1,4 +1,4 @@
-//- 底部按钮组：右列 .bottom-btn-stack 单列 flex 栈（DOM 顺序即视觉顺序）；工具箱独立锚定左下角（与 #color-mode 底缘齐平）；本阶段只提供静态 DOM，业务交互由后续 document 委托接线
+//- 底部按钮组：右列 .bottom-btn-stack 单列 flex 栈（DOM 顺序即视觉顺序）；工具箱独立锚定左下角（与 #color-mode 底缘齐平）；工具项通过 document 委托分发到各控制器
 .bottom-btn
   .bottom-btn-stack
     button#to-top.i-top(type="button" onClick="scrolls.scrolltop();" title=__('btn.totop') aria-label=__('btn.totop') style="opacity: 0; display: none;")
@@ -33,7 +33,7 @@
         svg.i-icon.i-annotate(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
           path(d="m9 11-6 6v3h9l3-3")
           path(d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4")
-      button.toolbox-item.toolbox-share(type="button" data-action="share" title=__('btn.share') aria-label=__('btn.share'))
+      button.toolbox-item.toolbox-share(type="button" data-action="share" title=__('btn.share') aria-label=__('btn.share') data-label-copied=__('toolbox.shareCopied'))
         svg.i-icon.i-share(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
           circle(cx="18" cy="5" r="3")
           circle(cx="6" cy="12" r="3")
@@ -41,13 +41,17 @@
           path(d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98")
         svg.i-icon.i-check(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
           path(d="M20 6L9 17l-5-5")
-      button.toolbox-item.toolbox-favorite(type="button" data-action="favorite" title=__('btn.favorite') aria-label=__('btn.favorite') aria-pressed="false" data-label-default=__('btn.favorite') data-label-saved=__('btn.favorited'))
+      button.toolbox-item.toolbox-favorite(type="button" data-action="favorite" title=__('btn.favorite') aria-label=__('btn.favorite') aria-pressed="false" data-label-default=__('btn.favorite') data-label-saved=__('btn.favorited') data-label-saved-status=__('toolbox.favoriteSavedStatus') data-label-removed-status=__('toolbox.favoriteRemovedStatus'))
         svg.i-icon.i-star(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
           polygon(points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2")
       if is_post()
-        button.toolbox-item.toolbox-screenshot(type="button" data-action="screenshot" data-snapdom-src=url_for('/lib/snapdom/3.1.1/snapdom.min.js') title=__('toolbox.screenshot') aria-label=__('toolbox.screenshot') aria-busy="false")
+        button.toolbox-item.toolbox-screenshot(type="button" data-action="screenshot" data-snapdom-src=url_for('/lib/snapdom/3.1.1/snapdom.min.js') title=__('toolbox.screenshot') aria-label=__('toolbox.screenshot') aria-busy="false" data-label-preparing=__('toolbox.screenshotPreparing') data-label-scaled=__('toolbox.screenshotScaled') data-label-success=__('toolbox.screenshotSuccess') data-label-scaled-success=__('toolbox.screenshotScaledSuccess') data-label-failed=__('toolbox.screenshotFailed'))
+          svg.i-icon.i-screenshot(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")
+            path(d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z")
+            circle(cx="12" cy="13" r="4")
       if theme.bgm.enable
-        button.toolbox-item.toolbox-bgm(type="button" data-action="bgm" title=__('toolbox.bgmPlay') aria-label=__('toolbox.bgmPlay') aria-pressed="false")
+        button.toolbox-item.toolbox-bgm(type="button" data-action="bgm" title=__('toolbox.bgmPlay') aria-label=__('toolbox.bgmPlay') aria-pressed="false" aria-busy="false" data-label-play=__('toolbox.bgmPlay') data-label-pause=__('toolbox.bgmPause') data-label-error=__('toolbox.bgmError') data-label-playing-status=__('toolbox.bgmPlayingStatus') data-label-paused-status=__('toolbox.bgmPausedStatus') data-label-failed-status=__('toolbox.bgmFailedStatus'))
+          span.i-bgm-icon(aria-hidden="true")
     .toolbox-status(role="status" aria-live="polite" aria-atomic="true" hidden)
   //- 选中文字工具栏（Word 式浮动条）：仅标注模式（body.annotating）下选中文字时由 JS 定位显示（类 .open）
   //- 定位口径与样式契约见 bottom_btn.styl「选中文字工具栏」段；默认隐藏（visibility hidden，不可 Tab 聚焦）
