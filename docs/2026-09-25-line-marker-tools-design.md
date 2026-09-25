@@ -70,21 +70,35 @@ header 的规范形状为：
 [#]>NAME|
 ```
 
-词法边界使用以下 EBNF；`EOF` 是显式终止符，`EndBoundary` 是零宽前瞻，不消费边界行：
+词法边界使用以下 EBNF。`FieldLine` 命中多行 opening 后，必须继续消费 `BodyLine` 直到精确 `MultilineClosing`；这些 body 行不再独立参加 `FieldLine` 或 `EndBoundary` 判定：
 
 ```ebnf
-Marker         = Header, { FieldLine }, EndBoundary, EOF ;
-Header         = "[#>", Name, "|", PhysicalLineEnd ;
-Name           = UpperAlpha, { UpperAlpha | Digit | "_" | "-" } ;
-FieldLine      = "[", [ RawFieldName ], "]", FieldTail, PhysicalLineEnd ;
-Utf16Unit     = ?U+0000..U+FFFF? ;
-RawFieldName  = { Utf16Unit - U+005D } ;
-FieldTail     = { Utf16Unit } ;
-PhysicalLineEnd= CRLF / LF / CR / EOF ;
-EndBoundary    = ?首个空行或不满足 FieldLine 的物理行? / EOF ;
+Marker             = Header, { FieldLine }, EndBoundary, EOF ;
+Header             = "[#>", Name, "|", PhysicalLineEnd ;
+Name               = UpperAlpha, { UpperAlpha | Digit | "_" | "-" } ;
+FieldLine          = OrdinaryFieldLine / MultilineFieldLine ;
+OrdinaryFieldLine  = FieldLabel, FieldTail, PhysicalLineEnd ;
+MultilineFieldLine = FieldLabel, MultilineOpening, *BodyLine, MultilineClosing ;
+FieldLabel         = "[", [ RawFieldName ], "]" ;
+Utf16Unit          = ?U+0000..U+FFFF? ;
+LineCodeUnit       = ?U+0000..U+FFFF 去除 U+000A/U+000D 后的 code unit? ;
+RawFieldName       = { LineCodeUnit - U+005D } ;
+FieldTail          = { LineCodeUnit } ;
+SP                 = %x20 ;
+HTAB               = %x09 ;
+WSP                = 1*( SP / HTAB ) ;
+HorizontalSpace    = *WSP ;
+MultilineOpening   = *HorizontalSpace, "|", *HorizontalSpace, "$[", PhysicalLineEnd ;
+BodyLine           = BodyContent, PhysicalLineEnd ;
+BodyContent        = ?由 LineCodeUnit 组成、且该物理行水平 trim 后不等于 "]$" 的序列? ;
+MultilineClosing   = "]$", PhysicalLineEnd ;
+PhysicalLineEnd    = CRLF / LF / CR / EOF ;
+EndBoundary        = ?首个空行、不满足 FieldLine 的物理行，或没有下一物理行? ;
 ```
 
-`FieldLine` 是 lexer 的词法边界，不是宽松的 handler schema：非空物理行必须从 `[` 开始，并在同一行存在立即闭合的 `]`；parser 随后才检查位置/命名字段名、值和 handler schema。`FieldTail` 保留全部 UTF-16 code unit（含中文），raw field name 含非 ASCII 时虽可被捕获，但必然在 `INVALID_FIELD_NAME` 阶段失败。opening 后的内容由第 4.6 节的多行状态消费，不重新进入 `FieldLine` 判定。
+`LineCodeUnit` 明确排除 U+000A/U+000D，因此 `FieldLabel`、`FieldTail` 和 `BodyContent` 都不能跨物理行；CRLF 只能由 `PhysicalLineEnd` 的 `CRLF` 分支消费。`EOF` 在这里始终是零宽标记，不消费任何 source code unit。`PhysicalLineEnd` 只有 `CRLF`、`LF` 或 `CR` 分支会消费一个实际物理终止符；其 `EOF` 分支只表示当前位置没有终止符。物理终止符被 lexer 消费以完成行扫描，但是否进入 marker 的 `raw`/`sourceRange` 由第 4.1 节第 7 条决定：最后一条物理行的终止符可以被消费，却必须排除在 marker 范围之外。`EndBoundary` 只是零宽前瞻，不消费边界行；`Marker` 末尾的 `EOF` 是前瞻成功后发出的零宽 marker 终止符，不是第二次 source 切片。边界行仍完整留在 suffix 中。若没有边界行，`EndBoundary` 在 source EOF 处成功，末尾 `EOF` 仍不增加任何字符。
+
+`FieldLine` 是 lexer 的词法边界，不是宽松的 handler schema：非空物理行必须从 `[` 开始，并在同一行存在立即闭合的 `]`；parser 随后才检查位置/命名字段名、值和 handler schema。`FieldTail` 保留该物理行内容中的全部 UTF-16 code unit（含中文），物理终止符由 `PhysicalLineEnd` 单独记录；raw field name 含非 ASCII 时虽可被捕获，但必然在 `INVALID_FIELD_NAME` 阶段失败。实现先检查 `FieldLabel` 右侧首个非水平空白是否为 `|`：精确时只能走 `MultilineFieldLine`；不精确时产生 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。多行状态中的 `BodyLine` 由 `MultilineClosing` 优先截断，精确 `]$` 与近似 closing 均不会作为普通 body 成功解析。
 
 强制边界：
 
@@ -93,8 +107,8 @@ EndBoundary    = ?首个空行或不满足 FieldLine 的物理行? / EOF ;
 3. `Name` 区分大小写。生产 registry 只能命中 `AI`、`Project`、`Alerts`、`Editor`、`LinkCard`。
 4. `TEST` 只作为 parser 与 synthetic registry 测试示例，默认 registry 不注册它。
 5. header 后可以没有参数行；已知 handler 会因缺少必填字段失败，未知名称仍按 `UNKNOWN_MARKER` 失败。
-6. 连续参数行在首个空行或不满足参数行外形的物理行处结束。边界行不属于 marker，也不得被 marker 改写；`// comment` 是不以 `[` 开头的边界行。
-7. `sourceRange.start` 是 header 第一个 `[` 的偏移；`sourceRange.end` 是 marker 最后一条物理行最后一个内容 code unit 之后的位置。只排除这条最终物理行自己的 CRLF/CR/LF 终止符；所有非最终物理行的终止符（包括 header 行）都属于 marker 并保留在 `raw`。若 marker 终止于 EOF，则 `end === source.length`。
+6. Header 后连续消费 `FieldLine`；一旦某行进入 `MultilineOpening`，其后的 body lines 由该 `FieldLine` 消费，只有精确 `MultilineClosing` 后的下一物理行才重新尝试 `FieldLine`。完整多行字段结束后，marker 在首个空行或不满足 `FieldLine` 外形的物理行处结束；边界行不属于 marker，也不得被 marker 改写，`// comment` 是不以 `[` 开头的边界行。
+7. `sourceRange.start` 是 header 第一个 `[` 的偏移；`sourceRange.end` 是 marker 最后一条物理行最后一个内容 code unit 之后的位置。只排除这条最终物理行自己的 CRLF/CR/LF 终止符；所有非最终物理行的终止符（包括 header 行、opening 行和 body 行）都属于 marker 并保留在 `raw`。若 marker 终止于 EOF，则 `end === source.length`；`EndBoundary` 与 marker 末尾 `EOF` 均不消费边界行或额外 code unit。
 8. `sourceRange` 永远不得用于 after 9 的 HTML 切片。after 9 只能使用第 12.3 节由真实 placeholder DOM 得到的 `renderedPlaceholderRange`。
 9. 所有 marker 均为 block-only。行中 marker、标题中的 marker、链接或图片字段中的 marker 均不进入 registry。
 10. 旧 `[#]<NAME>{...}`、旧 `[&]NAME|...|` 及其它前缀均不属于新协议，不得被兼容读取。
@@ -220,18 +234,9 @@ schema 的 `coerce(token, schema)` 是唯一消费入口：
 
 ### 4.6 多行值、去缩进与结束
 
-多行字段的 opening 与 closing 使用以下 EBNF；字段标签既可为命名形式，也可为 `[]`：
+多行字段使用第 4.1 节正式 grammar 中的 `MultilineFieldLine = FieldLabel, MultilineOpening, *BodyLine, MultilineClosing`；字段标签既可为命名形式，也可为 `[]`。第 4.1 节的 `BodyContent` 只表示可成功消费的非 closing 物理行，精确 `]$` 优先由 `MultilineClosing` 消费，近似 closing 则进入失败路径而不会被当作正文。
 
-```ebnf
-FieldOpen         = "[" ;
-FieldLabel        = FieldOpen [ RawFieldName ] "]" ;
-HorizontalSpace   = *WSP ;
-MultilineOpening  = FieldLabel *HorizontalSpace "|" *HorizontalSpace "$[" PhysicalLineEnd ;
-MultilineClosing  = "]$" PhysicalLineEnd ;
-WSP               = 1*( SP / HTAB ) ;
-```
-
-opening 在普通值尾注释处理之前识别。对字段标签右侧原始 `FieldTail` 只跳过前导水平空白以查看首 code unit，不得先删除尾随水平空白；若首个非水平空白 code unit 是 `|`，该行即进入 opening 判定，并且从字段标签 `]` 到物理行末必须精确匹配 `MultilineOpening`。因此 `[body]|$[` 与 `[body] |$[` 都合法，标签与 `|` 之间及 `|` 后均可有任意多个 SP/HTAB；但 `$` 与 `[` 必须相邻，`[` 后必须直接遇到物理行终止符或 EOF，不得有尾随空白、尾注释或其它内容。为避免同一输入在普通值与多行状态间含糊，首 code unit 为 `|` 的任何不精确形式都返回 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。精确 opening 只允许出现在 schema 声明 `allowMultiline: true` 的字段；其它字段返回 `MULTILINE_NOT_ALLOWED`。
+opening 在普通值尾注释处理之前识别。对字段标签右侧原始 `FieldTail` 只跳过前导水平空白以查看首 code unit，不得先删除尾随水平空白；若首个非水平空白 code unit 是 `|`，该行即进入 opening 判定，并且从字段标签 `]` 之后的 suffix 到物理行末必须精确匹配 `MultilineOpening`。因此 `[body]|$[` 与 `[body] |$[` 都合法，标签与 `|` 之间及 `|` 后均可有任意多个 SP/HTAB；但 `$` 与 `[` 必须相邻，`[` 后必须直接遇到物理行终止符或 EOF，不得有尾随空白、尾注释或其它内容。为避免同一输入在普通值与多行状态间含糊，首 code unit 为 `|` 的任何不精确形式都返回 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。精确 opening 只允许出现在 schema 声明 `allowMultiline: true` 的字段；其它字段返回 `MULTILINE_NOT_ALLOWED`。
 
 closing 与 EOF 规则如下：
 
@@ -279,15 +284,15 @@ opening、closing 与字段级 `sourceRange` 规则：
 - 多行未闭合到 EOF 时，`end === source.length`；EOF 前无内容可排除的终止符。
 - 多行内容中的 `[#]>`、旧 marker 或 tag 文本均是普通正文，不签发新 occurrence。
 
-以下均为 lexer 级 fixture，表中的 `PREFIX` 是位于 marker 之前的字面 ASCII 文本。每个 fixture 均断言 `start === PREFIX.length`、`raw === source.slice(start, end)`、`end === start + raw.length`，且表中 `SUFFIX` 精确等于 `source.slice(end)`：
+以下均为 lexer 级 fixture，表中的 `PREFIX` 是位于 marker 之前的字面 ASCII 文本。每个 fixture 均断言 `start === PREFIX.length === 6`、`raw === source.slice(start, end)`、`end === start + raw.length`，并按下表精确计算 `end` 与 `source.slice(end)`；这同时证明 header、opening、body 行的终止符仍属于 `raw`，而 closing 所在最终物理行的终止符被排除：
 
-| 物理换行 | 完整 source（JavaScript 转义表示） | 期望 raw（JavaScript 转义表示） | SUFFIX |
-| --- | --- | --- | --- |
-| LF | `"PREFIX[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$\n"` | `"[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$"` | `"\n"` |
-| CRLF | `"PREFIX[#]>Alerts\|\r\n[type] NOTE\r\n[body] \|$[\r\nbody\r\n]$\r\n"` | `"[#]>Alerts\|\r\n[type] NOTE\r\n[body] \|$[\r\nbody\r\n]$"` | `"\r\n"` |
-| CR | `"PREFIX[#]>Alerts\|\r[type] NOTE\r[body] \|$[\rbody\r]$\r"` | `"[#]>Alerts\|\r[type] NOTE\r[body] \|$[\rbody\r]$"` | `"\r"` |
+| 物理换行 | 完整 source（JavaScript 转义表示） | 期望 `start` | 期望 `end` | 期望 raw（JavaScript 转义表示） | SUFFIX |
+| --- | --- | ---: | ---: | --- | --- |
+| LF | `"PREFIX[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$\n"` | `6` | `source.length - 1` | `"[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$"` | `"\n"` |
+| CRLF | `"PREFIX[#]>Alerts\|\r\n[type] NOTE\r\n[body] \|$[\r\nbody\r\n]$\r\n"` | `6` | `source.length - 2` | `"[#]>Alerts\|\r\n[type] NOTE\r\n[body] \|$[\r\nbody\r\n]$"` | `"\r\n"` |
+| CR | `"PREFIX[#]>Alerts\|\r[type] NOTE\r[body] \|$[\rbody\r]$\r"` | `6` | `source.length - 1` | `"[#]>Alerts\|\r[type] NOTE\r[body] \|$[\rbody\r]$"` | `"\r"` |
 
-三种 `raw` 都包含 header 行的终止符；唯一被排除的是 closing 所在最终物理行的终止符。
+三种 `raw` 都包含 header、opening 和 body 行的原始终止符；唯一被排除的是 closing 所在最终物理行的终止符，且 `EndBoundary`/末尾 `EOF` 不会把边界行或额外 code unit 纳入范围。边界 fixture 在 closing 后追加 `// boundary` 时，`source.slice(end)` 必须先保留该行自己的物理终止符，再完整保留 `// boundary`；不得把 boundary 纳入 `raw`。
 
 可执行边界 fixture：
 
@@ -328,7 +333,7 @@ opening、closing 与字段级 `sourceRange` 规则：
 5. parser 先按第 4.5 节完成词法分类，再由 `coerce` 消费；handler 不接收原始字符串自行重判 `42`、hex、boolean 或 `null`。
 6. 只有 `nullable: true` 的可选字段接受显式 `null`，并把缺省与 `null` 统一为 `defaultValue`；`nullable: false` 的字段收到 `null` 返回 `INVALID_VALUE`，必填字段同理。
 7. Alerts `open` 是 `nullable: false` 的可选 boolean：缺省为 `true`，显式值只能为 `true|false`，显式 `null` 返回 `INVALID_VALUE`。
-8. AI `text`、Alerts `title/color`、LinkCard `img/style` 是 `nullable: true`；LinkCard `descr` 为 `nullable: false` 的可选 string，缺省得到 `null`，显式 `null` 返回 `INVALID_VALUE`，显式空串合法。Project 三字段和 Editor 四字段均不接受 `null`。
+8. AI `text`、Alerts `title/color`、LinkCard `img/style` 是 `nullable: true`；LinkCard `descr` 的 schema kind 为 `string`，且固定为 `required:false`、`nullable:false`、`defaultValue:null`：缺省得到有效值 `null`，显式 string（包括 `""`）原样保留，显式 `null` 返回 `INVALID_VALUE`。Project 三字段和 Editor 四字段均不接受 `null`。
 9. 默认值在全部显式字段完成绑定与类型消费后应用；应用默认值不跳过必填检查或 handler 业务校验。
 10. 参数行中的字段名、值和错误诊断不得写回源文件。
 
@@ -441,7 +446,7 @@ handler 的受控接口固定为：
 | `Project` | `name`, `link`, `image` | 三项全部必填 | 三项均不接受 `null` |
 | `Alerts` | `type`, `open`, `title`, `color`, `body` | `type`, `body` | `open` 缺省为 `true`，显式只接受 boolean；`title/color` 缺省或显式 `null` 为 `null` |
 | `Editor` | `language`, `number`, `theme`, `body` | `body` | `language="plaintext"`；`number=1`；`theme="vs-dark"`；四项均不接受 `null` |
-| `LinkCard` | `avatar`, `link`, `img`, `descr`, `style` | `avatar`, `link` | `img/style` 缺省或显式 `null` 为 `null`；`descr` 缺省为 `null`、显式 `null` 非法、显式空串合法；其余不接受 `null` |
+| `LinkCard` | `avatar`, `link`, `img`, `descr`, `style` | `avatar`, `link` | `img/style` 缺省或显式 `null` 为 `null`；`descr` 的 schema 为 `string`、`required:false`、`nullable:false`、`defaultValue:null`，缺省所得有效值为 `null`，显式 `null` 非法、显式空串合法；其余不接受 `null` |
 
 所有 handler 同时接受对应的位置名和命名字段。例如 AI 的第一位置既可写 `[] PASS`，也可写 `[state] PASS`。
 
@@ -671,12 +676,12 @@ Alerts marker 复用旧可展开提示样式，不复用 GitHub Alert 类。IMPO
 | `avatar` | string | 显示名称，trim 后非空 |
 | `link` | URL string | `http:`、`https:` 或受控根相对路径 |
 | `img` | URL/null | 缺省或 `null` 时不输出背景图 |
-| `descr` | string/null | 缺省为 `null`；显式值只接受 string，显式 `null` 非法；空串合法；按纯文本输出，不按 Markdown 渲染 |
+| `descr` | string | schema kind 为 `string`，`required:false`、`nullable:false`、`defaultValue:null`；缺省得到有效值 `null`，显式值只接受 string，显式 `null` 非法，显式空串合法；按纯文本输出，不按 Markdown 渲染 |
 | `style` | CSS declarations/null | 缺省或 `null` 时不输出 scoped style |
 
-这里的 `avatar` 明确表示卡片显示名称，不表示头像图片 URL。`img` 是卡片背景图；本协议不增加第二个头像 URL 字段。
+这里的 `avatar` 明确表示卡片显示名称，不表示头像图片 URL。`img` 是卡片背景图；本协议不增加第二个头像 URL 字段。`descr` 的 schema kind 始终是 `string`，不是可消费 `string | null` 的 nullable 字段；`string | null` 只描述应用 `defaultValue:null` 后的有效值。
 
-LinkCard 使用第 8.1 节相同 URL 策略。协议相对 URL 虽可被 parser 保留，但 LinkCard handler 必须拒绝。`descr` 的缺省与显式空串是两个不同状态：缺省得到 `null` 并省略节点；`[descr]` 或 `[descr]   ` 经普通值 trim 后得到 `""`，必须输出空 `.link-descr` 节点。显式 `[descr] null` 在 schema 阶段返回 `INVALID_VALUE`，不得归一为缺省。
+LinkCard 使用第 8.1 节相同 URL 策略。协议相对 URL 虽可被 parser 保留，但 LinkCard handler 必须拒绝。`descr` 的缺省与显式空串是两个不同状态：缺省按 schema 默认得到有效值 `null` 并省略节点；`[descr]` 或 `[descr]   ` 经普通值 trim 后得到 `""`，必须输出空 `.link-descr` 节点。显式 `[descr] null` 在 schema 阶段返回 `INVALID_VALUE`，不得归一为缺省。
 
 ### 11.2 输出
 
@@ -710,7 +715,7 @@ LinkCard 使用第 8.1 节相同 URL 策略。协议相对 URL 虽可被 parser 
 - 根元素始终是带安全 `href`、`target="_blank"` 和 `rel="noopener noreferrer"` 的 `.link-card`。
 - `img` 非 null 时它是第一个子元素，输出 `.link-background`，使用安全 `src`、显示名称 alt 与 `loading="lazy"`；img null 时不保留占位元素。
 - `avatar` 始终输出到 `.link-data > .link-title`；本协议不输出头像图片或 `.link-ico`。
-- `descr` 非 null 时紧随 `.link-title` 输出 `.link-descr`；显式空串输出精确为 `<div class="link-descr"></div>` 的空节点。只有缺省所得的 `descr === null` 才省略该节点。
+- 有效值 `descr !== null` 时紧随 `.link-title` 输出 `.link-descr`；显式空串输出精确为 `<div class="link-descr"></div>` 的空节点。只有缺省所得的有效值 `descr === null` 才省略该节点。
 - `.link-main` 始终存在。仅当 `img === null && descr === null` 时 class 精确为 `link-main link-simple`；其余情况精确为 `link-main`。该判定不把显示名称计作描述。
 - `.link-simple` fixture 的直接子元素只有 `.link-data > .link-title`；有背景图或描述时不得带 `link-simple`。
 - DOM 不输出行内 style、事件属性、任意 data 字段或未列出的包装层。
@@ -724,14 +729,16 @@ style 输入是单行 declaration list，不是 stylesheet。解析前已按第 
 ```abnf
 SP               = %x20 ;
 HTAB             = %x09 ;
+DQUOTE           = %x22 ;
+SQUOTE           = %x27 ;
 DIGIT            = %x30-39 ;
 NONZERO-DIGIT    = %x31-39 ;
 ALPHA            = %x41-5A / %x61-7A ;
 HEXDIG           = DIGIT / %x41-46 / %x61-66 ;
 WSP              = 1*( SP / HTAB ) ;
 
-ValueChar        = SP / HTAB / %x21-26 / %x28-2F /
-                   %x30-3A / %x3C-5B / %x5D-7E ;
+ValueChar        = SP / HTAB / DQUOTE / SQUOTE / %x21 / %x23-26 /
+                   %x28-2F / %x30-3A / %x3C-5B / %x5D-7E ;
 ValueText        = 1*ValueChar ;
 StyleList        = *WSP Declaration
                    *( *WSP ";" *WSP Declaration )
@@ -767,15 +774,18 @@ SignedLength     = [ "-" ] Length ;
 Length2          = Length WSP Length ;
 Length3          = Length2 WSP Length ;
 Length4          = Length3 WSP Length ;
-LengthList       = Length / Length2 / Length3 / Length4 ;
-SignedLength2    = SignedLength WSP SignedLength ;
-SignedLength3    = SignedLength2 WSP SignedLength ;
-SignedLength4    = SignedLength3 WSP SignedLength ;
-SignedLengthList = SignedLength / SignedLength2 / SignedLength3 /
-                   SignedLength4 ;
-Shadow           = "none" / ( [ Color ] ( Length2 / Length3 / Length4 )
-                   [ Color ] ) ;
-Outline          = "none" / ( Color 1*WSP "solid" 1*WSP Length ) ;
+LengthList        = Length / Length2 / Length3 / Length4 ;
+SignedLength2     = SignedLength WSP SignedLength ;
+SignedLength3     = SignedLength2 WSP SignedLength ;
+SignedLength4     = SignedLength3 WSP SignedLength ;
+SignedLengthList  = SignedLength / SignedLength2 / SignedLength3 /
+                    SignedLength4 ;
+ShadowLengths     = Length2 / Length3 / Length4 ;
+ShadowColorBefore = Color 1*WSP ShadowLengths ;
+ShadowColorAfter  = ShadowLengths 1*WSP Color ;
+Shadow            = "none" / ShadowLengths /
+                    ShadowColorBefore / ShadowColorAfter ;
+Outline           = "none" / ( Color 1*WSP "solid" 1*WSP Length ) ;
 
 RootPathSegment  = 1*( ALPHA / DIGIT / "." / "_" / "~" / "!" / "$" / "&" /
                    "(" / ")" / "*" / "+" / "," / "=" / ":" / "@" / "%" / "-" ) ;
@@ -787,7 +797,9 @@ DeclarationValue = Color / BackgroundImage / Number / LengthList /
                    SignedLengthList / Shadow / Outline ;
 ```
 
-`ValueChar` 只是按分号切 declaration 前的词法包络：`SP/HTAB` 与 `/` 必须允许，因而正例中的 `url("/images/card.png")` 可被完整解析；分号、反斜杠、NUL、其它 C0 控制符和 DEL 不在 `ValueChar` 内。允许 `/` 不等于允许外部 URL：完整 `Declaration` 仍只能消费 `DeclarationValue`，其中唯一 URL 产生式是要求单根斜杠开头并带匹配引号的 `RootUrl`。实现必须先按括号深度和匹配引号切出 `DeclarationText`，再对去除首尾 WSP 的 value 做 property-specific 完整匹配，不能用正则“提取看似合法片段”，也不能把 `ValueChar` 当作授权集合。
+`DQUOTE` 与 `SQUOTE` 是 `RootUrl` 所需的显式 quote terminal；二者都列入 `ValueChar`，因此双引号和单引号包裹的根路径都可被词法包络完整读取。`RootUrl` 正例必须分别覆盖 `url("/images/card.png")` 与 `url('/images/card.png')`，两种引号都必须闭合匹配。`ValueChar` 仍只是按分号切 declaration 前的词法包络：`SP/HTAB` 与 `/` 必须允许，因而正例中的 `url("/images/card.png")` 可被完整解析；分号、反斜杠、NUL、其它 C0 控制符和 DEL 不在 `ValueChar` 内。允许 `/` 不等于允许外部 URL：完整 `Declaration` 仍只能消费 `DeclarationValue`，其中唯一 URL 产生式是要求单根斜杠开头并带匹配引号的 `RootUrl`。实现必须先按括号深度和匹配引号切出 `DeclarationText`，再对去除首尾 WSP 的 value 做 property-specific 完整匹配，不能用正则“提取看似合法片段”，也不能把 `ValueChar` 当作授权集合。
+
+`Shadow` 只引用本表已定义的 `Color` 与 `Length` 产生式：`ShadowLengths` 要求 2 至 4 个 `Length`，`ShadowColorBefore` 与 `ShadowColorAfter` 是互斥的 before/after 颜色分支。两条颜色分支各自最多消费一个 `Color`，没有“前后各一个颜色”的产生式；因此 `#fff 0 0 #000` 必须失败。
 
 `Hex4`、`Hex6`、`Hex8` 分别完整定义 4/6/8 位 hex，因此正例 `#fff` 与 `#123456` 都可解析；5/7 位、带缺失 `#`、含非 hex code unit 或其它长度均失败。上表 `Rgb`/`Rgba`/`Hsl`/`Hsla` 的展示换行仅为文档排版，语法仍是单行。RGB/RGBA 的前三个通道由 `RgbNumbers`/`RgbPercentages` 固定为全部 number 或全部 percentage；数值通道范围 `0..255`，百分比通道 `0..100%`，alpha 数值范围 `0..1`、百分比范围 `0..100%`，hue 数值绝对值不超过 100000。number 不接收指数、前导 `+`、NaN 或 Infinity。
 
@@ -802,7 +814,7 @@ property 与 value 的完整映射：
 | `padding` | `LengthList`，即 1 至 4 个非负 `Length`；每个值 `0..256` |
 | `margin` | `SignedLengthList`，即 1 至 4 个 `SignedLength`；每个值绝对值不超过 256 |
 | `outline-offset` | 单个非负 `Length`，`0..64` |
-| `box-shadow` | `none`，或 2 至 4 个非负 `Length` 加至多一个 `Color`；不含 `inset` |
+| `box-shadow` | `none`，或 `ShadowLengths`（2 至 4 个非负 `Length`），或 `Color` + `ShadowLengths`，或 `ShadowLengths` + `Color`；颜色至多一个，不含 `inset` |
 | `outline` | `none`，或一个 `Color` + `solid` + 单个非负 `Length` |
 
 `RootPath` 的每个 segment 不得是 `.` 或 `..`，不得含反斜杠、空白、控制字符、非 ASCII code unit、`?`、`#` 或未列入 ABNF 的标点；百分号只接受合法 `%HH` triplet。禁止协议相对、HTTP(S)、data、blob、javascript、远程字体和任何其它 URL。其它 property 禁止 `url()`。
@@ -818,6 +830,8 @@ property 与 value 的完整映射：
 ```text
 --card-title: #fff;--card-bg: #123456;padding: 8px 1rem;margin: 0 8px;box-shadow: 0 2px 8px rgba(0,0,0,0.25);background-image: url("/images/card.png")
 ```
+
+Shadow 正例还必须分别覆盖无颜色、颜色在长度之前（`#fff 0 0 4px`）和颜色在长度之后（`0 0 4px #fff`）三条分支；同一值不得同时出现前后颜色。
 
 规范序列化：
 
@@ -837,6 +851,7 @@ property 与 value 的完整映射：
 | `margin: 0 auto` | `LINK_CARD_INVALID_STYLE`，margin 只接受受限长度 |
 | `padding: calc(1px + 2px)` | `LINK_CARD_INVALID_STYLE` |
 | `box-shadow: inset 0 0 4px #000` | `LINK_CARD_INVALID_STYLE` |
+| `box-shadow: #fff 0 0 #000` | `LINK_CARD_INVALID_STYLE`，Shadow 颜色至多一个 |
 | `--card-bg:#fff;--card-bg:#000` | `LINK_CARD_INVALID_STYLE`，重复 property |
 | `transition: all 1s` | `LINK_CARD_INVALID_STYLE`，未知 property |
 | `@import url("/remote.css")` | `LINK_CARD_INVALID_STYLE`，stylesheet 语法禁止 |
@@ -847,9 +862,9 @@ handler 只把通过完整 grammar 的规范声明输出到第 11.2 节唯一 sc
 
 ### 11.4 投影
 
-- `descr === null`：只返回 `avatar`。
-- `descr === ""`：仍只返回 `avatar`，不得留下尾随 ASCII 空格。
-- `descr` 为非空 string：`avatar` 与 `descr` 之间一个 ASCII 空格。
+- 有效值 `descr === null`：只返回 `avatar`。
+- 有效值 `descr === ""`：仍只返回 `avatar`，不得留下尾随 ASCII 空格。
+- 有效值 `descr` 为非空 string：`avatar` 与 `descr` 之间一个 ASCII 空格。
 - 不返回 link、img、style、颜色、类名或 tooltip。
 
 ### 11.5 数据源边界
@@ -1272,7 +1287,18 @@ statusGeneration: monotonically increasing integer
 statusLease: { token, node, message, observer, timer } | null
 ```
 
-`reconcile({ publishStatus })` 只渲染当前 `playbackState`，不得把旧 Promise 的结果直接写成最终状态，也不得因 pending 状态下 `audio.paused === true` 而自行取消操作；只有原生事件、当前 generation 的 Promise 终态、显式 `audio.error !== null` 检查或 Pjax 失效可以迁移状态。`starting/retrying-load/retrying-play` 均令当前按钮 `aria-busy="true"`；`playing/paused/failed` 令其为 `false`。只有 `playing` 令 `aria-pressed="true"`。初始化与 `pjax:success` 只调用 `publishStatus:false`；`playing/paused` 的新终态可发布 2500ms 状态，`failed` 发布不自动清除的持久错误，`starting` 与两个 retrying 状态不发布中间文案。
+`reconcile({ publishStatus })` 只渲染当前 `playbackState`，不得把旧 Promise 的结果直接写成最终状态，也不得因 pending 状态下 `audio.paused === true` 而自行取消操作；只有原生事件、当前 generation 的 Promise 终态、显式 `audio.error !== null` 检查或 Pjax 失效可以迁移状态。`starting/retrying-load/retrying-play` 均令当前按钮 `aria-busy="true"`；`playing/paused/failed` 令其为 `false`。只有 `playing` 令 `aria-pressed="true"`。初始化与 `pjax:success` 的健康路径只调用 `publishStatus:false`；若 Pjax 失效检查命中媒体失败，仍由 `enterFailed()` 负责进入失败并保持持久错误。`playing/paused` 的新终态可发布 2500ms 状态，`failed` 发布不自动清除的持久错误，`starting` 与两个 retrying 状态不发布中间文案。
+
+`enterFailed(reason, token)` 是进入 `failed` 的唯一私有入口，原生事件、Promise continuation、`reconcile` 的 `audio.error` 检查和 Pjax 失效都必须经过它；任何分支不得直接写 `playbackState = "failed"` 或 `mediaFailed = true`：
+
+```text
+enterFailed(reason, token)
+  1. token 不是当前 operation/lifecycle generation 时 no-op
+  2. 递增 operationGeneration，结束当前 busy
+  3. 同步设置 mediaFailed = true
+  4. 设置 playbackState = "failed"
+  5. 在 audio/button 仍连接时发布不自动清除的 failed status
+```
 
 用户 toggle 与媒体事件的合法状态迁移固定为；每行异步 continuation 开始前都先核对捕获的 generation 仍是当前值，否则整行 no-op：
 
@@ -1281,16 +1307,17 @@ statusLease: { token, node, message, observer, timer } | null
 | `paused` | toggle | 递增 generation，调用一次 `audio.play()` | `starting` |
 | `failed` | toggle | 递增 generation，调用一次 `audio.load()` | `retrying-load` |
 | `retrying-load` | `load()` 正常返回 | 清 `mediaFailed`，随后调用一次 `audio.play()` | `retrying-play` |
-| `retrying-load` | `load()` 同步抛错 | 保留 `mediaFailed=true`，发布错误 | `failed` |
-| `starting` / `retrying-play` | 当前 generation 的 play Promise resolve 且 `audio.paused === false` | 结束 busy | `playing` |
-| `starting` / `retrying-play` | `audio.play()` 同步抛错、当前 generation 的 Promise reject，或 resolve 但仍 paused | 设置 `mediaFailed=true`，发布错误 | `failed` |
-| `playing` / 任一 pending 状态 | toggle | 先递增 generation 使旧 Promise 失效，再调用 `audio.pause()` | `paused` |
-| 任意状态 | 原生 `play` | 递增 generation，结束 busy；仅当 `audio.paused === false && mediaFailed === false && audio.error === null` 时成功，否则保持失败语义 | `playing` / `failed` |
-| 任意状态 | 原生 `pause` / `ended` | 递增 generation，结束 busy；`mediaFailed/error` 仍为真时保持失败，否则按实际暂停 | `paused` / `failed` |
-| 任意状态 | 原生 `error` 或当前 `audio.error !== null` | 递增 generation，设置 `mediaFailed=true`，发布错误 | `failed` |
-| 任意状态 | Pjax send/error/success 失效 | 递增 generation；按当前 media 实况重算 paused/playing/failed | 对应实况状态 |
+| `retrying-load` | `load()` 同步抛错 | 调用 `enterFailed()` | `failed` |
+| `starting` / `retrying-play` | 当前 generation 的 play Promise resolve 且 `audio.paused === false && mediaFailed === false && audio.error === null` | 结束 busy | `playing` |
+| `starting` / `retrying-play` | `audio.play()` 同步抛错、当前 generation 的 Promise reject，或 resolve 但不满足 `audio.paused === false && mediaFailed === false && audio.error === null` | 调用 `enterFailed()` | `failed` |
+| `playing` / 任一 pending 状态 | toggle | 先递增 generation 使旧 Promise 失效，再调用一次 `audio.pause()` | `paused` |
+| `playing` / 任一 pending 状态 | toggle 且 `audio.pause()` 同步抛错 | 调用 `enterFailed()` | `failed` |
+| 任意状态 | 原生 `play` | 健康条件 `audio.paused === false && mediaFailed === false && audio.error === null` 成立时递增 generation、结束 busy 并进入 `playing`；否则调用 `enterFailed()` | `playing` / `failed` |
+| 任意状态 | 原生 `pause` / `ended` | `mediaFailed === false && audio.error === null` 时递增 generation、结束 busy 并进入 `paused`；否则调用 `enterFailed()` | `paused` / `failed` |
+| 任意状态 | 原生 `error` 或当前 `audio.error !== null` | 调用 `enterFailed()` | `failed` |
+| 任意状态 | Pjax send/error/success 失效 | 健康媒体状态下递增 generation 并按 `audio.paused` 重算 `playing/paused`；若 `mediaFailed` 或 `audio.error` 为真则调用 `enterFailed()` | 对应实况状态 |
 
-`mediaFailed` 只在进入 `failed` 时置为 `true`。唯一清除点是 `failed` 用户重试中的 `load()` 正常返回：必须先清零再调用 `play()`；随后 play resolve 保持 `false`，play reject 或任何新 `error` 立即重新置为 `true`。初始化、pause、普通 `play()`、Pjax success、status timer 和 DOM reconcile 都不得清零。只有 `failed` toggle 才执行 `load()`；普通 `paused -> starting` 不重载媒体。所有旧 generation 的 resolve/reject 都不得修改 `mediaFailed`、状态、status、timer 或 `aria-busy`。
+`mediaFailed` 只在 `enterFailed()` 中置为 `true`，且该函数必须与 `playbackState = "failed"` 同步完成。唯一清除点是 `failed` 用户重试中的 `load()` 正常返回：必须先清零再调用 `play()`；随后 play resolve 保持 `false`，play reject、pause 抛错或任何新 `error` 立即通过 `enterFailed()` 重新置为 `true`。初始化、pause、普通 `play()`、Pjax success、status timer 和 DOM reconcile 都不得清零。只有 `failed` toggle 才执行 `load()`；普通 `paused -> starting` 不重载媒体。所有旧 generation 的 resolve/reject 都不得修改 `mediaFailed`、状态、status、timer 或 `aria-busy`；测试必须能证明每条失败路径都调用 `enterFailed()` 且观察到 `mediaFailed === true`。
 
 共享 `.toolbox-status` 使用 BGM 私有 `MutationObserver` lease，不新增公开 DOM attribute。observer 必须观察 `attributes`（仅 `hidden`）、`childList`、`characterData` 与 `subtree`：
 
@@ -1320,7 +1347,7 @@ timer callback / clearStatus()
 
 所有当前 generation 的退出路径结束自己的 busy；旧 generation 不得覆盖新操作。状态文案只读取按钮现有 `data-label-playing-status`、`data-label-paused-status` 和 `data-label-failed-status`，不新增配置或硬编码中文。
 
-确定性 fixture 必须覆盖：`failed -> retrying-load -> retrying-play -> playing|failed` 的两条终态、`load()`/`play()` 同步抛错、`load()` 返回后 play reject 重置 `mediaFailed`、普通 paused play 不调用 load、原生 play 后旧 Promise reject、pause 后旧 Promise resolve、连续 play→pause→play、外部写入与 BGM 完全相同文本、2500ms 前后截图覆盖 status、BGM 无 lease 时 toolbox 打开 no-op，以及 Pjax send/error/success 与旧 Promise 交错。
+确定性 fixture 必须覆盖：`failed -> retrying-load -> retrying-play -> playing|failed` 的两条终态、`load()`/`play()`/`pause()` 同步抛错、`load()` 返回后 play reject 重置 `mediaFailed`、普通 paused play 不调用 load、原生 `play` 健康与失败、原生 `pause`、`ended`、`error`（含旧 Promise 交错）、`pjax:send/error/success` 在健康与 `mediaFailed` 媒体状态下失效、连续 play→pause→play、外部写入与 BGM 完全相同文本、2500ms 前后截图覆盖 status、BGM 无 lease 时 toolbox 打开 no-op，以及所有进入 `failed` 的路径都调用 `enterFailed()` 并同步得到 `mediaFailed === true`。
 
 ## 17. 安全、搜索与描述
 
@@ -1360,7 +1387,7 @@ timer callback / clearStatus()
 | `Project` | `name`；连续网格相邻 name 以一个 LF 分隔 |
 | `Alerts` | `TYPE title` 加 LF 加 `markdownToPlainText` 结果 |
 | `Editor` | 完整 body |
-| `LinkCard` | `descr` 缺省所得 null 或显式空串时为 `avatar`；非空时为 `avatar descr`，不产生尾随空格 |
+| `LinkCard` | 有效值 `descr` 为缺省所得 `null` 或显式空串时投影为 `avatar`；非空时为 `avatar descr`，不产生尾随空格 |
 | 失败 marker | 完整原始 marker 源文本 |
 
 投影函数不得返回 handler DOM、内部字段对象或原始 HTML。
@@ -1373,7 +1400,7 @@ timer callback / clearStatus()
 
 | 用例 | 必须断言的输入/输出 |
 | --- | --- |
-| EBNF/header | 仅物理行首 `[#]>Name\|` 命中；CRLF/CR/LF/EOF 终止；名称与尾 pipe 精确；按第 4.6 节三组 escaped fixture 断言 header 终止符属于 raw、只排除最终 closing 行终止符 |
+| EBNF/header | 仅物理行首 `[#]>Name\|` 命中；`FieldLine` 必须按正式 grammar 选择普通值或 `MultilineOpening`→`*BodyLine`→`MultilineClosing`；CRLF/CR/LF/EOF 终止；名称与尾 pipe 精确；断言 `EndBoundary` 不消费边界行，并按第 4.6 节三组 escaped fixture 断言 header 终止符属于 raw、只排除最终 closing 行终止符 |
 | 名称/block-only | 五类生产名称命中，`TEST` 只进 synthetic registry；行中/标题/link/image 内 header 零 dispatch |
 | 边界 | 空行、`// comment`、普通行、其它 header、EOF 终止 marker；边界行不吞入，range 只不含 marker 最后一条物理行的终止符 |
 | 字段 | `[]`、命名、混用、顺序、未知、重复、越界、缺必填与 field-level `sourceRange` 全部覆盖 |
@@ -1404,16 +1431,16 @@ timer callback / clearStatus()
 | Project | 页面/URL 注入、只按 sourceRange 恰好一个 CRLF/CR/LF 分组、失败/文本/空行 flush、投影 LF、Pjax 绑定 |
 | Alerts | 五类型、open/null、IMPORTANT class/icon/default、嵌套 Markdown、URL sanitize、detached 无递归、展开 DOM、非 `.alert`、纯文本 service |
 | Editor | 默认值、number 边界、theme 边界、hidden direct-child pre、body 逐字、无旧控制属性、Pjax/CDN |
-| LinkCard | 完整 DOM、descr 缺省所得 null/显式空串/非空三态、`.link-main`/`.link-simple` 判定、Hex4/6/8 与 ValueChar/颜色/长度/声明 ABNF 正反 fixture、scope、资源/动画/HTML/JS 拒绝、无文件读取 |
+| LinkCard | 完整 DOM、descr schema `string`/`nullable:false` 与缺省有效值 null/显式空串/非空三态、`.link-main`/`.link-simple` 判定、Hex4/6/8 与 ValueChar/颜色/长度/声明 ABNF 正反 fixture、scope、资源/动画/HTML/JS 拒绝、无文件读取 |
 | service/handler | service 能力白名单、detached render、handler throw/非法返回、render 成功但 projection 失败仍整枚恢复 |
 | 通用失败 | 未知/重复/缺字段、单枚 escaped pre、字段安全 fallback、原文 projection、内部 placeholder/token/NUL 清零 |
 | content/excerpt | content、显式 excerpt tokenRange、派生 excerpt、无 more 分隔符逐字等值、description、renderer 拒绝边界 |
 | 加密 | 共享 policy 的 public/encrypted/ambiguous；before 读取正文前判定；encrypted/ambiguous 不扫描、不创建公开 projection |
 | more | 抛异常 getter/setter 配独立计数，before/after/projectText 读写均为 0 |
 
-#### 内存 Hexo handler fixture
+#### 内存 Alerts/Editor/LinkCard handler 终态 fixture
 
-`.temp/line-marker-handlers.test.js` 和 `.temp/line-marker-hexo.test.js` 必须共享下面这段仅存在于测试进程内的 source，并通过真实 `Hexo#post.render`、Marked 15.0.12、after 9 执行。该门禁不读取 `source/` 或 `public/`，也不得把内存 fixture 冒充真实站点内容：
+`.temp/line-marker-handlers.test.js` 和 `.temp/line-marker-hexo.test.js` 必须共享下面这段仅存在于测试进程内的 source，并通过真实 `Hexo#post.render`、Marked 15.0.12、after 9 执行。该 fixture 只声明 Alerts、Editor、LinkCard 三类 handler 的成功终态；AI 与 Project 由真实 source→artifact 映射及既有 marker 门禁覆盖，不在这段内存 source 中伪造成功 occurrence。该门禁不读取 `source/` 或 `public/`，也不得把内存 fixture 冒充真实站点内容：
 
 ```text
 [#]>Alerts|
@@ -1450,7 +1477,7 @@ const marker = "[#]>Project|";
 
 该 fixture 的硬断言：
 
-1. content 恰有五个 occurrence，全部 `consumed`，最终无 placeholder/token/NUL。
+1. content 恰有五个 occurrence（Alerts×1、Editor×1、LinkCard×3），全部 `consumed`，最终无 placeholder/token/NUL；本 fixture 不产生 AI 或 Project occurrence。
 2. Alerts 恰为 `.admonition.adm-note.open`，含 `i-adm i-note`、受控 `<strong>`/link HTML，不生成第二个 AI badge；projection 为 `NOTE 协议提示\n正文包含 Markdown 与 链接。`。
 3. Editor 恰有 `pre.monaco-editor-source[hidden][aria-hidden="true"]`，其 `textContent` 与 body 逐字相同；body 中 `[#]>Project|` 只是 Monaco 文本。
 4. 第一张 LinkCard 有 scoped style、`.link-main`、background、title、descr；第二张无 img/descr，精确使用 `.link-main.link-simple` 且省略 `.link-descr`；第三张的显式空 descr 输出精确空节点 `<div class="link-descr"></div>`，使用 `.link-main` 而非 `.link-simple`。三张 projection 分别为 `示例站点 纯文本说明`、`简单站点`、`空说明站点`，第三张无尾随空格。
@@ -1463,22 +1490,22 @@ public 门禁与上述内存门禁是两套独立断言，不能互相替代：
 
 1. **真实 source→artifact**：`.temp/line-marker-artifacts.js` 逐一映射当前受控 source 与输出，包括三篇含 AI 的真实文章、`source/projects/index.md` 的 Project/GitHub Alert，以及 `public/search.json`。这些 source 缺失、未迁移或输出不匹配时立即失败。
 2. **合成 build fixture**：当前真实 source 不含 Alerts marker、Editor marker 或 LinkCard marker，因此不得声称这些 public DOM 来自现有内容。若最终 artifact 门禁要覆盖这三类 public DOM，必须在 `npm run clean/build` 前由 `.temp/line-marker-artifacts.js --install-fixture` 创建 `source/__line-marker-artifact-fixture.md`，frontmatter 固定 `title: line-marker-artifact-fixture`、`layout: page`、`permalink: __line-marker-artifact-fixture/`、`comments: false`，正文复用第 18.2 节内存 fixture；对应输出固定为 `public/__line-marker-artifact-fixture/index.html`。该 page 不进入当前 `search.field=post` 的真实文章映射。
-3. install 模式以 exclusive-create/原子 rename 写临时 source，若目标 source 已存在必须失败，禁止覆盖作者文件；默认 post-build 模式必须同时验证临时 source 的精确 sentinel 与对应 public HTML，并在报告中标记为 `synthetic`，同时断言 `public/search.json` 不含 synthetic URL；`--remove-fixture` 只删除带匹配 sentinel 的临时 source 及存在时的上述生成目录。任一模式发现文件身份不符都 fail-closed。
-4. source/unit 在 install 前失败时不得创建 fixture；install 成功后，自动化门禁在 `finally` 中调用 remove 模式，build 或任一 post-build artifact 失败时也必须清理。清理后断言临时 source 与 synthetic public 目录均不存在，且 `git status --short` 不包含 fixture。合成 artifact 只证明构建链，不算“真实站点已有 Alerts/Editor/LinkCard 内容”。
+3. install 模式以 exclusive-create/原子 rename 写临时 source，若目标 source 已存在必须失败，禁止覆盖作者文件；默认 post-build 模式必须同时验证临时 source 的精确 sentinel 与对应 public HTML，并在报告中标记为 `synthetic`，同时断言 `public/search.json` 不含 synthetic URL；`--remove-fixture` 只删除带匹配 sentinel 的临时 source 及存在时的上述生成目录，目标不存在时为幂等 no-op，目标身份不符时仍 fail-closed。任一模式发现文件身份不符都 fail-closed。
+4. source/unit 在 install 前失败时不得创建 fixture；install 调用本身也必须位于 `try` 内，`finally` 无条件调用 remove 模式，因此 install 部分失败、clean/build 失败或任一 post-build artifact 失败都会执行 cleanup。清理后断言临时 source 与 synthetic public 目录均不存在，且 `git status --short` 不包含 fixture。合成 artifact 只证明构建链，不算“真实站点已有 Alerts/Editor/LinkCard 内容”。
 5. 若维护者选择不为 public 覆盖这三类 handler，final matrix 必须删除 synthetic install/remove 与对应 public DOM 断言，只保留内存 Hexo fixture 覆盖；不得一边只跑内存测试，一边仍要求不存在的 public 产物。
 
 ### 18.3 UI 自动化
 
 1. `.temp/theme-ui-alerts.test.js` 解析最终 `arknights.css`，分别计算普通 blockquote 与五种 GitHub Alert 在 light/dark、rest/hover/focus-within 下的合成 background、accent border 和 `--theme-text` 标题/正文；断言文字 `>=4.5:1`、边框 `>=3:1`、hover/focus 规则相同，并验证 IMPORTANT/其它类型不污染普通引用。
 2. `.temp/theme-ui-nav.test.js` 覆盖 1023/1024/1280px，断言桌面一级按钮 72×36、border-box、居中、active 前后位置不变；移动端整行左对齐。
-3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/status generation、native event 与旧 Promise 交错、外部相同文本写入、2500ms lease、toolbox 打开和 Pjax 三事件。
+3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()/pause()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/status generation、原生 `play`/`pause`/`ended`/`error`、Pjax 三事件与旧 Promise 交错；每条进入 `failed` 的路径都必须断言调用 `enterFailed()` 后 `mediaFailed === true`，并覆盖外部相同文本写入、2500ms lease 与 toolbox 打开。
 4. 必须运行现有真实脚本 `.temp/project-tooltip.test.js`、`.temp/theme-ui-screenshot.test.js`、`.temp/theme-ui-toolbox.test.js`；脚本从 source/DOM fixture 初始化 Project、截图 lease 和五项 toolbox，不以缺少 source 的 public HTML 作为通过证据。
 5. `.temp/search-projection-lifecycle.test.js` 继续跨真实 Warehouse 文档生命周期验证五类投影、失败原文、加密/ambiguous 空 sidecar 和内部串清零。
 6. `.temp/line-marker-artifacts.js` 默认模式必须同时读取真实 `source/` 输入和 `public/` 输出并逐项建立 source→artifact 对照；`--install-fixture` / `--remove-fixture` 只负责第 18.2 节 synthetic build fixture 的成对生命周期。真实 source 缺失、fixture 未迁移、只存在 public 输出、synthetic source/output 不成对或清理残留时立即失败。
 
 ### 18.4 最终命令
 
-A 至 D 完成后，在同一最终状态只执行一次以下门禁。顺序固定为“source/unit → 安装 synthetic fixture → 一次 clean/build → post-build artifact → finally 清理”；任何 native command 非零退出都立即 throw，后续命令不得执行。以下块必须作为同一个 PowerShell 7 script/session 整体执行，不能拆开逐行粘贴而丢失 `finally`；`node --check` 只是语法补充，每个 probe 随后或对应阶段都以 `node <probe>` 实际执行：
+A 至 D 完成后，在同一最终状态只执行一次以下门禁。顺序固定为“source/unit → 在 `try` 内安装 synthetic fixture → 一次 clean/build → post-build artifact → `finally` 清理”；任何 native command 非零退出都立即 throw，后续命令不得执行。install、clean、build 和 post-build artifact 任一阶段失败都必须进入同一个 `finally` 调用 `--remove-fixture`。以下块必须作为同一个 PowerShell 7 script/session 整体执行，不能拆开逐行粘贴而丢失 `finally`；`node --check` 只是语法补充，每个 probe 随后或对应阶段都以 `node <probe>` 实际执行：
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -1541,8 +1568,8 @@ Invoke-Checked node '.temp/theme-ui-toolbox.test.js'
 Invoke-Checked node '.temp/theme-ui-bgm.test.js'
 Invoke-Checked git 'diff' '--check'
 
-Invoke-Checked node '.temp/line-marker-artifacts.js' '--install-fixture'
 try {
+  Invoke-Checked node '.temp/line-marker-artifacts.js' '--install-fixture'
   Invoke-Checked npm 'run' 'clean'
   $env:TZ = 'Asia/Shanghai'
   Invoke-Checked npm 'run' 'build'
@@ -1564,7 +1591,7 @@ Invoke-Checked git 'diff' '--stat'
 Invoke-Checked git 'status' '--short'
 ```
 
-前九个旧 `marker-*.test.js` 门禁必须按本文 block-only 契约更新断言后继续保留，不能因协议切换而从最终矩阵删除。`line-marker-handlers.test.js`、`line-marker-hexo.test.js`、ProjectTooltip、截图和 toolbox 门禁必须使用第 18.2 节内存 fixture 或等价内存 source；不得读取预先生成的 `public/` 来证明 handler 成功。
+前九个旧 `marker-*.test.js` 门禁必须按本文 block-only 契约更新断言后继续保留，不能因协议切换而从最终矩阵删除。`line-marker-handlers.test.js` 与 `line-marker-hexo.test.js` 使用第 18.2 节三类 Alerts/Editor/LinkCard 内存终态 fixture；ProjectTooltip、截图、toolbox 及 pipeline 的其它分组场景可使用等价内存 source，但不得把三类 fixture 误称为五类成功终态，也不得读取预先生成的 `public/` 来证明 handler 成功。
 
 probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用正文列出的每个 `node <probe>`，此表不是用 `node --check` 代替执行：
 
@@ -1575,9 +1602,9 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | `line-marker-carrier.test.js` | bridge、descriptor、原子回滚 | 无；source/unit |
 | `line-marker-marked.test.js` | block token、placeholder、metadata、symbol 清理 | 无；source/unit |
 | `line-marker-registry.test.js` | 五 handler 注册与受控接口 | 无；source/unit |
-| `line-marker-handlers.test.js` | 五类 DOM/投影、LinkCard ABNF/descr 三态、失败恢复 | 内存 Hexo HTML；不读取 public |
+| `line-marker-handlers.test.js` | Alerts/Editor/LinkCard 三类 DOM/投影、LinkCard ABNF/descr 三态、失败恢复 | 内存 Hexo HTML；不读取 public |
 | `line-marker-pipeline.test.js` | occurrence、Project 分组、fallback、projection | 内存 Hexo；不读取 public |
-| `line-marker-hexo.test.js` | 真实 `Hexo#post.render` 的五类终态 | 内存 source→内存 HTML |
+| `line-marker-hexo.test.js` | 真实 `Hexo#post.render` 的 Alerts/Editor/LinkCard 三类终态 | 内存 source→内存 HTML |
 | 九个旧 `marker-*.test.js` | 既有 AI/Project/carrier/search 行为按 block-only 回归 | 无；source/unit |
 | `search-projection-lifecycle.test.js` | 五类 sidecar、加密/ambiguous、失败原文 | Warehouse `db.json` fixture；无 public |
 | `project-tooltip.test.js`、截图、toolbox 门禁 | 现有 Project/截图 lease/五项工具箱 | source/DOM fixture；无 public |
@@ -1610,7 +1637,7 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 4. LinkCard：链接、显示名称、背景图、说明和 scoped style 正确；style 不影响其它卡片。
 5. Project：连续卡片为单网格，hover CSS 变量正常，Pjax 后重绑。
 6. 导航：1023/1024/1280px 验证 active 前后无横向位移，移动端整行左对齐。
-7. BGM：播放、暂停、`failed -> retrying-load -> retrying-play -> playing|failed`、错误后再次失败、共享 status 被相同文本外部覆盖、打开工具箱与 Pjax 边界均符合状态机。
+7. BGM：播放、暂停、原生 `play`/`pause`/`ended`/`error`、`failed -> retrying-load -> retrying-play -> playing|failed`、重试失败、Pjax 边界、共享 status 被相同文本外部覆盖与打开工具箱均符合状态机；失败后可见状态与 `mediaFailed` 同步保持。
 8. 搜索：五类成功 marker 与失败 marker 均不泄漏内部串，搜索结果可正常定位。
 9. 响应式：320、768、1023、1024、1440px 无横向溢出、遮挡或焦点丢失。
 10. 主题：light/dark/auto 下复核 Alert、LinkCard、Editor 容器和现有卡片视觉。
