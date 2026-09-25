@@ -23,7 +23,7 @@
 5. 保留既有 AI 徽标、项目卡、GitHub Alert、Monaco Editor、`.link-card`、`.admonition` 与 `.expand-box` 的可用视觉和交互资产。
 6. 删除四个旧 tag 入口及其专属文档、死代码，不提供旧语法或旧 tag 兼容分支。
 7. 修复暗色 GitHub Alert 交互态、桌面导航宽度稳定性和 BGM 状态生命周期。
-8. 按职责拆分 `pipeline.js` 与 `Toolbox.ts`，使 marker pipeline 与主题控制器不继续膨胀为单文件大模块，且不改变任何对外契约。
+8. 按职责拆分 `pipeline.js` 与 `Toolbox.ts`，使 marker pipeline 与主题控制器不继续膨胀为单文件大模块；除第 16.3 节冻结的 `bgmControl.clearStatus()` additive API 外，不改变任何对外契约。
 
 ## 2. 范围边界
 
@@ -31,7 +31,7 @@
 
 - 生产 marker 名称：`AI`、`Project`、`Alerts`、`Editor`、`LinkCard`。
 - marker lexer、parser、token store、registry、pipeline、Marked 扩展和五类 handler。
-- 第 12.1.1 节的模块拆分：`pipeline.js` 的物化/失败恢复/Project 编排/投影四个子模块与 `ToolboxStatusLease.ts`，只搬运实现、不改外部契约。
+- 第 12.1.1 节的模块拆分：`pipeline.js` 的物化/失败恢复/Project 编排/投影四个子模块，以及 `Toolbox.ts` facade、标注/持久化、分享/收藏控制器与 `ToolboxStatusLease.ts`；除第 16.3 节明确的 `bgmControl.clearStatus()` additive API 外，只搬运实现、不改外部契约。
 - `content`、显式 `excerpt`、派生 excerpt、SEO description 和搜索 sidecar 的 marker 纯文本投影。
 - `source/_posts/` 与 `source/projects/index.md` 中现有四处 marker 的一次性迁移。
 - 主题 README、AGENTS 活文档和本地自动化门禁同步。
@@ -55,7 +55,7 @@
 - “位置字段”指 `[]` 行，按 handler 声明的位置顺序绑定。
 - “命名字段”指 `[name]` 行，按区分大小写的字段名绑定。
 - “捕获层”指 lexer 对原始 Markdown 字段的逐字切片结果，含 `raw`、`physicalLines[].raw|terminator` 与 `sourceRange`；捕获层永远保留原始终止符、Tab 与相对缩进。
-- “恢复层”指写入活动 `content`/`excerpt` 字段或进入投影的文本；恢复层一律先经第 4.1 节的 `normalizeLineEndings` 规范为 LF。
+- “恢复层”指写入活动或最终 `content`/`excerpt` 字段、handler 字段值、失败恢复文本及任何投影的文本；恢复层一律先经第 4.1 节的 `normalizeLineEndings` 规范为 LF。
 - “sourceRange”指 `{ start, end }` 在原始 Markdown 字段中的 UTF-16 半开区间，只用于捕获 occurrence 原文、Project 相邻分组和字段级 fallback 的来源审计；它不是最终 HTML 坐标。
 - “renderedPlaceholderRange”指 Marked renderer 生成的唯一 block placeholder 在 after 9 输入 HTML 中的 UTF-16 半开区间；after 9 只按该坐标替换。
 - “placeholder token”指 block-only occurrence 的 opaque token；它既是 store 身份，也是生成唯一 placeholder DOM 的输入，禁止拆解、拼接或自行构造。
@@ -69,7 +69,7 @@
 解析前只把 CRLF、CR 和 LF 识别为物理换行。行尾口径分捕获层与恢复层两层，本规格只实现并门禁「捕获逐字、恢复 LF」一种，不同时承诺两者：
 
 1. **捕获层（逐字）**：`raw`、`physicalLines[].raw|terminator` 与 `sourceRange` 是原始字段的逐字切片，保留 CRLF、CR、LF、Tab 与相对缩进。第 4.6 节全部 range/raw fixture 只对捕获层成立。
-2. **恢复层（LF）**：`normalizeLineEndings(text)` 把每个 CRLF 或 CR 折叠为单个 LF，不改变其它 code unit。字段值、失败恢复文本和投影一律先经 `normalizeLineEndings`。
+2. **恢复层（LF）**：`normalizeLineEndings(text)` 把每个 CRLF 或 CR 折叠为单个 LF，不改变其它 code unit。handler 字段值、活动/最终 `content`/`excerpt`、失败恢复文本和所有投影一律先经 `normalizeLineEndings`；最终门禁必须证明这些值不含 U+000D。
 
 不承诺恢复层保留 CR/CRLF 的原因：Marked 15 的 `Lexer.lex()` 在分词前把整个字段的 CR/CRLF 改写为 LF，因此最终 `data.content` 的行边界只可能是 LF，把 CRLF 原文插回该输出无法由已解析的源复现。显式 `excerpt` 不经 Marked，但为使 content 与 excerpt 的失败文本、投影、description 与搜索文本可逐字比较，同样使用 LF。Tab 与相对缩进在两层都不改写。因此「恢复层保留原始终止符」类 fixture 与本口径互斥，不得加入门禁；门禁只允许断言捕获层逐字、恢复层 LF。
 
@@ -941,11 +941,41 @@ themes/arknights/scripts/markers/
 
 `pipeline.js` 与同目录 `pipeline/` 依赖 Node 的「同名文件优先于同名目录」解析规则（`require('./pipeline')` 命中 `pipeline.js`），目录内拆分具体职责的风格与 `scripts/generator/search/{generator,snapshot,database}.js` 一致。
 
-主题 TypeScript 侧新增一个同级模块：
+主题 TypeScript 侧的实际目标树固定为：
 
 ```text
-themes/arknights/source/js/_src/include/ToolboxStatusLease.ts
+themes/arknights/source/js/_src/include/
+├── environment.d.ts
+├── Toolbox.ts
+├── ToolboxAnnotationController.ts
+├── ToolboxPersistence.ts
+├── ToolboxShareController.ts
+├── ToolboxFavoriteController.ts
+├── ToolboxStatusLease.ts
+├── BgmControl.ts
+├── ScreenshotControl.ts
+└── ProjectTooltip.ts
 ```
+
+`Toolbox.ts` 保留为 facade；新增文件位于同一 `include/` 目录，不创建第二套入口，也不改变 `arknights.js` 的全局 `toolbox`/`window.screenshotControl`/`window.bgmControl` 暴露方式。TypeScript 继续使用当前 `outFile` 脚本模型：六个 Toolbox 文件只声明内部 `namespace ToolboxModules`，依赖通过 `Toolbox.ts`/`BgmControl.ts` 的有序 `/// <reference path="...">` 与成员访问表达；各文件不得增加 top-level import/export，也不得改成会与现有产物冲突的 CommonJS/ES module。
+
+Toolbox 侧职责与事件所有权冻结如下：
+
+| 模块 | 职责与唯一事件所有权 | 禁止承担的职责 |
+| --- | --- | --- |
+| `Toolbox.ts` | facade；唯一拥有 `document.click` 的 toolbox `data-action` 委托、外点判断、Escape、`pjax:send/error/success` 重置，并公开 `toggle()/annotate()/share()/favorite()` | 标注 Range 算法、localStorage 序列化、分享/收藏业务、截图/BGM 内部状态 |
+| `ToolboxAnnotationController.ts` | 标注模式、选区工具栏、五色、`hl-mark` 增删/恢复及其 document `mousedown`/`selectionchange`/mark/toolbar/color click，以及 `main` scroll 收起工具栏 | localStorage key、直接注册 Pjax 或 toolbox 外点 click、分享/收藏 |
+| `ToolboxPersistence.ts` | 唯一封装 `arknights:highlights:*`、`arknights:favorites`、标注颜色的读取、校验、序列化与恢复数据 | DOM 查询、事件监听、UI timer |
+| `ToolboxShareController.ts` | `share()`、URL 复制、`.copied` 反馈及其自有一次性 timer | localStorage、全局事件监听、截图/BGM |
+| `ToolboxFavoriteController.ts` | `favorite()`、收藏集合增删、`.saved` 反馈及其自有一次性 timer | 标注、全局事件监听、截图/BGM |
+| `ToolboxStatusLease.ts` | 共享 `.toolbox-status` 的唯一 generation、token、timer 与 `MutationObserver`；只提供第 16.3 节 lease API | 导入 `BgmControl.ts`/`Toolbox.ts`、播放状态机、截图/分享/收藏业务 |
+| `BgmControl.ts` | 组合 `ToolboxStatusLease.ts`，拥有 BGM 状态机及其既有 Pjax/media/operation 事件 | 标注、分享、收藏、工具箱开合 |
+| `ScreenshotControl.ts` | 保持截图 lease/generation；只经 `window.screenshotControl` 接收 facade 委托 | 导入任一 Toolbox 模块或持有 toolbox 状态 |
+| `environment.d.ts` | 声明 SnapDOM、`window.screenshotControl`、`window.bgmControl` 与冻结 facade 方法类型；同步新增 `clearStatus(): void` | 运行时实现、全局可变状态或未公开 controller 类型 |
+
+依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`。同层控制器之间不得互相引用，Persistence/StatusLease 不得反向引用 facade 或业务控制器，`ScreenshotControl.ts` 与其它 Toolbox 模块之间不得新增 import；facade 只通过冻结的 `window` API 委托 screenshot/BGM。事件计数门禁必须证明初始载入和每次 `pjax:success` 后，facade 的 toolbox document click/keyup/Pjax listener、标注 controller 的 mousedown/selectionchange/mark/toolbar/color click 与 main scroll listener 均不增长且没有同回调重复绑定；Share/Favorite/Persistence 不新增 document/window listener。
+
+marker pipeline 模块职责如下：
 
 | 模块 | 职责 | 禁止承担的职责 |
 | --- | --- | --- |
@@ -967,7 +997,7 @@ themes/arknights/source/js/_src/include/ToolboxStatusLease.ts
 
 #### 12.1.1 拆分边界与验证
 
-拆分只搬运实现，不改变任何对外契约。`defaultPipeline` 仍是 `pipeline.js` 与 `meta-description.js` 通过普通 CommonJS 缓存共享的同一实例；对外可观察面逐项冻结如下，任一项变化都视为破坏契约：
+模块拆分本身只搬运实现，不改变既有对外行为；第 16.3 节明确列出的 `bgmControl.clearStatus(): void` 是唯一新增的公开方法，必须由 A 的 status adapter 与 C 的状态机按本文实现，除此之外不得顺手扩张 facade/API。`defaultPipeline` 仍是 `pipeline.js` 与 `meta-description.js` 通过普通 CommonJS 缓存共享的同一实例；对外可观察面逐项冻结如下，任一非规格化变化都视为破坏契约：
 
 | 冻结面 | 契约 |
 | --- | --- |
@@ -977,14 +1007,53 @@ themes/arknights/source/js/_src/include/ToolboxStatusLease.ts
 | 依赖方向 | `pipeline.js` → 子模块；子模块之间不得互相 `require`（`failure` 与 `project-grid` 需要的共享值由 `pipeline.js` 显式注入）；子模块不得反向 `require` `pipeline.js` |
 | 单向依赖 | 子模块只能依赖 `token.js`、`carrier.js`、`registry.js`、handler 与纯工具，不得 `require` Hexo context、文件系统或网络 |
 
-前端侧 `ToolboxStatusLease.ts` 承担共享 `.toolbox-status` 的 lease 协议：`statusGeneration`、唯一 `MutationObserver`、唯一 timer、token/node 归属判定与 `claimStatus`/`invalidateStatusLease`/`clearStatus`。`BgmControl.ts` 组合它并保留 `playbackState`、`mediaFailed`、operation/lifecycle generation 与状态机；`Toolbox.ts` 仍以 `Toolbox.applyState(true)` 调用公开的 `bgmControl.clearStatus()`。契约冻结：`.toolbox-status` 不新增公开 DOM attribute，`claimStatus(message, delay)`、`invalidateStatusLease()`、`clearStatus()` 的签名与第 16.3 节 lease 伪代码一致，截图/分享/收藏仍作为外部 owner 直接写该 node 而不持 lease。
+前端侧 `ToolboxStatusLease.ts` 承担共享 `.toolbox-status` 的 lease 协议：`statusGeneration`、唯一 `MutationObserver`、唯一 timer、token/node 归属判定与 `claimStatus`/`invalidateStatusLease`/`clearStatus`。`BgmControl.ts` 组合它并保留 `playbackState`、`mediaFailed`、operation/lifecycle generation 与状态机；`Toolbox.ts` facade 的 private `applyState(true)` 分支调用公开的 `window.bgmControl.clearStatus()`。契约冻结：`.toolbox-status` 不新增公开 DOM attribute，`claimStatus(message, delay)`、`invalidateStatusLease()`、`clearStatus()` 的签名与第 16.3 节 lease 伪代码一致；`window.toolbox` 仍只公开 `toggle()/annotate()/share()/favorite()`，`window.screenshotControl` 仍只公开 `capture()`，`window.bgmControl` 在既有 `toggle()` 外只新增 `clearStatus(): void`。截图/分享/收藏仍作为外部 owner 直接写该 node 而不持 lease，并由 observer 使旧 BGM lease 失效。
+
+`environment.d.ts` 的公开类型固定为：
+
+```typescript
+interface ToolboxApi {
+  toggle(): void
+  annotate(): void
+  share(): void
+  favorite(): void
+}
+
+interface ScreenshotControlApi {
+  capture(): Promise<void>
+}
+
+interface BgmControlApi {
+  toggle(): Promise<void>
+  clearStatus(): void
+}
+
+interface Window {
+  snapdom: SnapDomGlobal
+  screenshotControl: ScreenshotControlApi
+  bgmControl: BgmControlApi
+  toolbox: ToolboxApi
+}
+```
+
+删除 `cards/hide.styl` 时不得整段删除共享导入。`themes/arknights/source/css/_modules/modules.styl` 当前的 `@import 'cards/*'` 必须替换为以下两个显式 import，二者缺一即视为 Alerts 或 LinkCard 样式回归：
+
+```styl
+@import 'cards/admonition'
+@import 'cards/link-card'
+```
+
+显式 import 仍位于 `expand` 之前，保持现有模块顺序；删除后 `_modules/cards/` 只剩 `admonition.styl` 与 `link-card.styl`。
 
 拆分验证：
 
-1. 文件规模门禁：`.temp/line-marker-pipeline.test.js` 断言 `pipeline.js` 与每个 `pipeline/*.js` 均不超过 500 行，`ToolboxStatusLease.ts` 不超过 300 行，`BgmControl.ts` 与 `Toolbox.ts` 拆分后均不超过 500 行；超限即视为拆分未完成。
-2. 依赖门禁：同一探针静态扫描子模块的 `require`，断言无子模块互引、无子模块反向引用 `pipeline.js`、无 Hexo/文件系统/网络依赖。
-3. 行为回归：第 18.4 节全量矩阵在拆分后于同一最终状态只跑一次，任何 DOM、projection、sidecar、status lease 断言差异都判定为契约破坏。
-4. 幂等与身份：`line-marker-registry.test.js` 断言 `pipeline.js` 导出的 `defaultPipeline` 与 `meta-description.js` 共享同一引用，且重复 `register` 不新增 filter。
+1. 文件规模门禁：`.temp/line-marker-pipeline.test.js` 逐个断言 `pipeline.js`、每个 `pipeline/*.js`、`environment.d.ts`、`Toolbox.ts`、`ToolboxAnnotationController.ts`、`ToolboxPersistence.ts`、`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts`、`BgmControl.ts`、`ScreenshotControl.ts` 与 `ProjectTooltip.ts` 均不超过 500 行；不能用目录总行数或仅检查 facade 代替逐文件断言，任一超限即失败。
+2. pipeline 依赖门禁：静态扫描子模块的 `require`，断言无子模块互引、无子模块反向引用 `pipeline.js`、无 Hexo/文件系统/网络依赖。
+3. Toolbox 依赖与事件门禁：静态扫描 `/// <reference path>`、`namespace ToolboxModules` 成员访问与 top-level import/export，只允许第 12.1.1 节列出的依赖边；运行探针在初次载入、关闭/打开 toolbox、标注、分享、收藏和连续 `pjax:success` 后核对各 owner 的 listener/observer/timer 数量，证明每个事件只由表中的唯一 owner 注册、没有表外 document/window/Pjax/main listener、没有同回调重复绑定，main scroll 也只注册一次，且 share/favorite timer 各自只有一个待清理句柄。
+4. Toolbox 行为回归：`theme-ui-toolbox.test.js` 覆盖五项展开/关闭、标注增删/恢复/五色/复制/搜索、分享 copied、收藏 saved；`theme-ui-bgm.test.js`、`theme-ui-screenshot.test.js` 与 `project-tooltip.test.js` 分别回归 status lease、截图 generation 和项目悬停。拆分前后 DOM、storage key、公开 facade、全局 API 与可见行为必须一致。
+5. 样式导入回归：断言 `modules.styl` 不再含 `cards/*` 或 `cards/hide`，但精确含 `cards/admonition` 与 `cards/link-card`；编译后 `.admonition/.expand-box`、`.link-card`、`.link-background/.link-main/.link-title/.link-descr` 均命中，`.hide` 零命中。
+6. 全量行为回归：第 18.4 节矩阵在同一最终状态只跑一次，任何 marker DOM、projection、sidecar、Toolbox、status lease、截图或 BGM 断言差异都判定为契约破坏。
+7. 幂等与身份：`line-marker-registry.test.js` 断言 `pipeline.js` 导出的 `defaultPipeline` 与 `meta-description.js` 共享同一引用，且重复 `register` 不新增 filter。
 
 ### 12.2 Hexo 生命周期与阶段顺序
 
@@ -998,33 +1067,47 @@ themes/arknights/source/js/_src/include/ToolboxStatusLease.ts
 
 `register.js` 是 markers 子树唯一自动注册入口。`pipeline.js` 本身无 Hexo 注册副作用；同一 context 与同一 pipeline 重复调用注册必须幂等，不同 pipeline 绑定同一 context 返回 `DUPLICATE_MARKER_PIPELINE`。生产 registry 只能在五类 handler、迁移内容、控制器和协议测试同批就绪后原子激活，不允许先注册不完整 allowlist。
 
-一次 `post.render`（`node_modules/hexo/dist/hexo/post.js` 的 `Post#render`）内的固定顺序为：
+一次 `post.render`（`node_modules/hexo/dist/hexo/post.js` 的 `Post#render`）与其调用的 `Render#render` 内，固定顺序为：
 
 ```text
 before_post_render priority 4（markers before）
 → before_post_render priority > 4 的其它已注册阶段（当前 footnotes 为 10）
-→ Markdown renderer（ctx.render.render）+ onRenderEnd hook
+→ Markdown renderer（ctx.render.render）
+→ onRenderEnd hook
+→ 内容阶段 execFilter('after_render:html', renderedContent, { context, args: [renderData] })
 → restoreComments / restoreCodeBlocks
 → after_post_render priority < 9 的其它已注册阶段（当前 spoiler 为 5）
 → after 9（markers after，priority 9）
-→ Hexo excerpt（after_post_render priority 10）
-→ after_post_render 的 10 与 1100（alerts/terms/checkbox/lightgallery/pandoc/encrypt/meta-description、search 捕获）
+→ after_post_render priority > 9（Hexo excerpt 10，以及 1100 的 alerts/terms/checkbox/lightgallery/pandoc/encrypt/meta-description/search）
 ```
 
-同一文档 build 中位于 `Post#render` 之后的阶段为：
+这里必须区分两个同源但不同作用域的 dispatch。Hexo 8.1.2 的 filter alias 把注册名 `after_render:html` 存入 `_after_html_render` store，但调用点与 payload 不同：
 
-```text
-view.render(locals) → injector.exec → after_render:html（当前 external_link、meta_generator）
-```
+1. `Post#render -> Render#render` 在 `onRenderEnd` 之后执行 `execFilter('after_render:html', 内容 HTML, { args: [renderData] })`。这是 Post 内容阶段，位于 `after_post_render` 与 after 9 之前。
+2. 同一文档 build 在 Post 已物化后才进入 `createLoadThemeRoute`：`view.render(locals) -> injector.exec -> execFilter('_after_html_render', 完整页面 HTML, { args: [locals] }) -> route stream`。这是路由阶段，位于 after 9 之后。
 
-即 `after_render:html` 由 `node_modules/hexo/dist/hexo/index.js` 的路由阶段（`createLoadThemeRoute`）在布局渲染后执行，不在 `Post#render` 内。因此本规格按两个作用域分别承诺：
+同一 filter 函数因 store alias 可能在一次完整 build 中先后处理“内容”和“完整页面”两次；探针必须按调用 payload 与调用点分别计数，不得把二者合并为一次，也不得写成“Post#render 从不 dispatch after_render:html”。拒绝语义固定如下：
 
 | 作用域 | 阶段 | 拒绝后果 |
 | --- | --- | --- |
-| 字段生命周期 | before 4 与 after 9 之间的任一阶段，即后续 `before_post_render`、renderer、`onRenderEnd`、`after_post_render` priority < 9 | after 9 不执行；原异常继续向构建调用方传播；下一次同 data 的 before 4 先从 `carrier.originalField` 修复字段与 descriptor、清除旧 state，再执行新一轮 tokenization |
-| 路由阶段 | `after_render:html` | 位于 after 9 之后，不得回写已物化的 `content`/`excerpt`、不得改写 occurrence 终态、不得生成 token 或 placeholder；该路由失败即构建失败，由构建调用方处理，pipeline 不参与 |
+| Post 内容生命周期 | before 4 与 after 9 之间的任一阶段，即后续 `before_post_render`、renderer、`onRenderEnd`、内容 `after_render:html`、restore 或 `after_post_render` priority < 9 | `Post#render` 直接 reject，after 9 不执行；原异常向构建调用方传播；下一次同 data 的 before 4 先从 `carrier.originalField` 修复字段与 descriptor、清除旧 state，再执行新一轮 tokenization |
+| 路由生命周期 | `_after_html_render` | after 9 已完成，不得回写已物化的 `content`/`excerpt`、不得改写 occurrence 终态、不得生成 token/placeholder；filter 拒绝进入 route stream 错误路径，pipeline 不参与也不回滚字段 |
 
-before 4 先无正文读取地修复同 data 的旧 bridge/state，再调用第 12.6 节共享 encryption policy；只有 `public` 状态可以读取 content/excerpt 并建立 carrier。after 9 始终在 finally 恢复 bridge。持续拒绝使构建失败，不返回半成品。第 15 节批次 D 必须把本作用域修正同步进 AGENTS 活文档，不得继续沿用「`after_render:html` 位于 after 9 之前」的旧表述。
+before 4 先无正文读取地修复同 data 的旧 bridge/state，再调用第 12.6 节共享 encryption policy；只有 `public` 状态可以读取 content/excerpt 并建立 carrier。after 9 始终在 finally 恢复 bridge。内容生命周期持续拒绝会令 `Post#render` reject，不返回半成品。路由 stream 错误是否使 CLI 非零退出由第 12.2.1 节的 `--bail` 门禁判定，不能仅凭“发生了 filter throw”宣称默认构建已失败。
+
+#### 12.2.1 构建失败语义与门禁
+
+Hexo 8.1.2 的 `hexo generate` 默认不启用 `--bail`。`plugins/console/generate.js#wrapDataStream` 在未启用 bail 时给 route stream 追加 error logger，再 pipe 到 `PassThrough`；因此路由 `_after_html_render` 拒绝或其它 route stream 错误可能被记录后吞掉，命令继续并以 0 退出，同时留下缺失或不完整输出。根站点默认 `npm run build` 等价于未加 bail 的 `hexo generate`，不能作为“任一 route 错误必然导致构建失败”的证据。
+
+最终门禁必须区分三类信号：
+
+1. **Post/filter Promise 拒绝**：`before_post_render`、renderer、`onRenderEnd`、内容 `after_render:html` 或 `after_post_render` 的异常使 `Post#render` Promise reject；这不需要 `--bail` 才能传播，但 marker 内容 dispatch 拒绝仍必须证明 after 9 跳过与同 data 下一次修复。
+2. **route stream 错误**：完整页面 `_after_html_render` 拒绝发生在 route data stream；最终生成命令固定使用 `hexo generate --bail`（脚本中以 `npx hexo generate --bail` 或逐字等价的根站点 `npm run build -- --bail` 执行），只有该命令非零退出才作为 route 失败的可靠构建证据。不得退回未加 bail 的根站点 `npm run build`。
+3. **artifact 完整性**：`--bail` 只保证 stream 错误传播，不证明 marker DOM、搜索 sidecar、版本、receipt 与禁止串正确。`line-marker-artifacts.js`、`marker-artifacts.js`、Alerts/LinkCard/Toolbox 等 post-build 探针仍为独立强制门禁；缺失、错配或语义回归即使进程退出 0 也必须失败。
+
+`.temp/line-marker-build-failure.test.js` 必须在隔离的最小 Hexo site 中用子进程真实执行 CLI：让同一 filter 仅在 payload 为 Post 内容时拒绝，证明有/无 bail 均使 `Post#render`/生成失败且 after 9 不执行，而路由 payload 正常通过；再让同一 filter 仅在 payload 为完整页面时拒绝，证明默认模式只记录并可能退出 0，而 `generate --bail` 必须非零。最后故意破坏一项预期 artifact，证明 artifact 探针独立非零。测试不得修改真实 `source/`、`public/` 或 `db.json`，也不得把 stderr 中出现 `Render HTML failed` 当作退出码证据。
+
+第 15 节批次 D 必须把本作用域、alias 双 dispatch、`--bail` 命令和 artifact 分层同步进 AGENTS 活文档，不得继续沿用「路由 `after_render:html` 位于 after 9 之前」或「根站点默认 `npm run build` 吞错仍算构建失败」的旧表述。
 
 ### 12.3 block occurrence、坐标与 placeholder
 
@@ -1102,7 +1185,7 @@ bridge 安装顺序固定为：
 
 `data.markdown` bridge 不是全局 current carrier。Marked 15 singleton 可能在当前或下一次 parse 前短暂强引用 parse options；`processAllTokens` 一进入就在 `finally` 从当前 parse options 副本删除 `CARRIER_SYMBOL`，删除失败返回 `CARRIER_AUDIT_FAILED`。hook 退出后，Marked defaults hook options 与 renderer options 均不得再含本次 symbol；原始 `data.markdown` bridge 仍由 after 9 或下一次同 data before 恢复。
 
-后续 `before_post_render`、renderer、`onRenderEnd` 或任一 `after_post_render` priority < 9 的 filter 拒绝时，after 9 不执行，renderer 已产生的临时 HTML 不得交给页面或搜索。异常原样传播。若同一 post data 再次 render，下一次 before 4 必须先从 `carrier.originalField` 恢复所有原字段、按原 descriptor 恢复 bridge、清除 WeakMap state，再执行 encryption policy 和新一次 tokenization；不得沿用旧 occurrence、placeholder range 或 projection。持续拒绝使构建失败，不返回半成品。`after_render:html` 属第 12.2 节路由阶段，位于 after 9 之后，其拒绝不回滚已物化字段，pipeline 不感知。
+后续 `before_post_render`、renderer、`onRenderEnd`、内容阶段 `after_render:html` 或任一 `after_post_render` priority < 9 的 filter 拒绝时，after 9 不执行，renderer 已产生的临时 HTML 不得交给页面或搜索。`Post#render` 原样 reject。若同一 post data 再次 render，下一次 before 4 必须先从 `carrier.originalField` 恢复所有原字段、按原 descriptor 恢复 bridge、清除 WeakMap state，再执行 encryption policy 和新一次 tokenization；不得沿用旧 occurrence、placeholder range 或 projection。内容生命周期持续拒绝不返回半成品。路由阶段 `_after_html_render` 位于 after 9 之后，其拒绝进入 route stream 错误路径，不回滚已物化字段，pipeline 不感知；最终生成命令是否非零退出按第 12.2.1 节 `--bail` 门禁判定。
 
 当前 bridge 支持边界只有 `dompurify` 缺省或显式 `false`，以及测试中可证明逐字 identity 的 sanitizer。`true`、自定义 sanitizer、未知 adapter 或任何会重排/改写 placeholder DOM 的配置，在字段改写前返回 `MARKDOWN_SANITIZER_UNSUPPORTED`；不得以关闭检查或事后修补继续。受控 `renderMarkdown` 同样只继承该已验证配置和 `sanitizeUrl:true`。
 
@@ -1116,8 +1199,8 @@ bridge 安装顺序固定为：
 | before 4 的 public `content` 或显式 string `excerpt` 源字段含 NUL | 不创建 carrier/token/occurrence/failure DOM/projection；所有源字段与 descriptor 保持 before 前值 | 是，传播 `UNEXPECTED_NUL`，当前字段/构建 fail-closed |
 | handler `render` 输出或 `toPlainText` projection 新生成 NUL | 丢弃该 handler 的全部结果，仅该 occurrence 输出 escaped `<pre>`、投影保存无 NUL 的 `normalizeLineEndings(raw)`，状态 `failed` | 否；仅后续字段审计失败时按下一层抛出 |
 | token collision/exhaustion、加密状态 ambiguous、bridge/field write/unsupported sanitizer 失败 | 恢复所有原字段和 descriptor，不创建可见 carrier | 是，传播稳定错误码 |
-| 后续 `before_post_render`、renderer、`onRenderEnd`、`after_post_render` priority < 9 拒绝 | after 9 不执行；原 render 异常传播，页面无输出 | 是 |
-| 路由阶段 `after_render:html` 拒绝 | 位于 after 9 之后，不回滚已物化字段；该路由构建失败，pipeline 不参与 | 是（构建级） |
+| 后续 `before_post_render`、renderer、`onRenderEnd`、内容 `after_render:html`、`after_post_render` priority < 9 拒绝 | after 9 不执行；`Post#render` 异常传播，页面无输出；同 data 重试先修复 | 是 |
+| 路由阶段 `_after_html_render` 拒绝 | 位于 after 9 之后，不回滚已物化字段；转为 route stream 错误，pipeline 不参与 | 是（route stream）；CLI 失败须由 `generate --bail` 证明 |
 | placeholder 数量/范围/metadata/内部串/终态审计失败 | 当前字段使用安全字段 fallback，所有未终态 occurrence 标 `failed`，恢复 bridge | 是，传播 `PLACEHOLDER_AUDIT_FAILED` 或 `PIPELINE_AUDIT_FAILED` |
 | `renderMarkdown`/`markdownToPlainText` 单枚失败 | 整枚回退，不保留已成功 render 的部分 DOM | 否；若造成字段级审计失败则按上一行抛出 |
 
@@ -1148,7 +1231,7 @@ fieldFallbackProjection(originalField)
   = normalizeLineEndings(originalField)   // 未做 HTML escape
 ```
 
-`normalizeLineEndings` 即第 4.1 节恢复层的唯一实现：写入活动 `content`/`excerpt` 的任何文本以及任何投影都先折叠 CRLF/CR 为单个 LF。occurrence 快照中的 `raw` 仍是捕获层逐字原文，不被改写；因此同一次失败可以从 `raw` 逐字反查 `sourceRange`，而 DOM 与投影只呈现 LF 形态。Tab、相对缩进和 code unit 顺序在折叠后不变。
+`normalizeLineEndings` 即第 4.1 节恢复层的唯一实现：任何 handler 字段值、活动或最终 `content`/`excerpt`、失败恢复文本及任何投影都先折叠 CRLF/CR 为单个 LF。occurrence 快照中的 `raw` 仍是捕获层逐字原文，不被改写；因此同一次失败可以从 `raw` 逐字反查 `sourceRange`，而 DOM 与投影只呈现 LF 形态。Tab、相对缩进和 code unit 顺序在折叠后不变。
 
 - `data.content`/`data.excerpt` 在 after 9 阶段被视为活动 HTML 字段，绝不能直接写回 `originalField` Markdown 源字符串、`</style>`、`<script>` 或 handler 原始 HTML。
 - 字段 fallback 的 `<pre>` 转义所有 `&`、`<`、`>`，因此原始 active HTML 只作为文本显示；引号在 text context 无需编码，但不得进入 attribute。
@@ -1261,7 +1344,7 @@ content/excerpt/description 契约：
 | `themes/arknights/scripts/tags/code-editor.js` | 删除，由 Editor handler 取代 |
 | `themes/arknights/scripts/tags/link-card.js` | 删除，由 LinkCard handler 取代 |
 | `themes/arknights/scripts/tags/admonition.js` | 删除，由 Alerts handler 取代 |
-| `themes/arknights/source/css/_modules/cards/hide.styl` | 删除；`.hide` 只服务被删除 tag，最终 `arknights.css` 因此变化，B 批次必须递增 `cssVersion` |
+| `themes/arknights/source/css/_modules/cards/hide.styl` 与 `modules.styl` 的 `@import 'cards/*'` | 删除 hide 文件并把通配替换为显式 `cards/admonition`、`cards/link-card` imports；`.hide` 只服务被删除 tag，最终 `arknights.css` 因此变化，B 批次必须递增 `cssVersion` |
 | `themes/arknights/scripts/markers/handlers/projects.js` | 删除，由 `project.js` 取代 |
 | 旧 `[#]<NAME>{...}` grammar | 删除，不保留读取分支 |
 | `themes/arknights/scripts/markers/sentinel.js` | 删除；连续 Project 归入 pipeline block 分组 |
@@ -1314,17 +1397,29 @@ content/excerpt/description 契约：
 
 | 批次 | 原子范围 | 独立门禁 | 建议提交信息 |
 | --- | --- | --- | --- |
-| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`/`ToolboxStatusLease.ts`、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；模块规模与依赖门禁；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
-| B | 删除四个旧 tag、`hide.styl`、旧 Project handler/分组模块/死代码；README 与 AGENTS 本地定制地图/删除清单/缓存版本同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中；最终 CSS 不再含 `.hide` 产物且 `cssVersion` 已递增 | `refactor(tags): 删除旧标签并同步内容文档` |
-| C | GitHub Alert、导航、BGM 修复（含 `retireOperation` 与 `ToolboxStatusLease` 收口）；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/retire 终态/mediaFailed/MutationObserver lease、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
-| D | 最终门禁与 AGENTS 验证矩阵/当前版本/生命周期作用域收口，不再引入功能 | 第 18 节 source/unit → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
+| A | grammar、lexer/parser/token、carrier/Marked block、pipeline/registry/register、pipeline 子模块拆分（物化/失败恢复/Project 编排/投影）、五类 handler 与受控 service、`MonacoEditor.ts`/`Expands.ts`、Toolbox facade/标注/持久化/分享/收藏/StatusLease 拆分与 BGM status adapter、Alerts/Editor/LinkCard 契约、四处现有 source marker 迁移、ProjectTooltip 回归、相关 AGENTS/Source Tree/Architecture | source/unit：词法、类型、多行、bridge、placeholder、handler、真实 Hexo block DOM；逐模块 ≤500 行、依赖/事件所有权；Toolbox/BGM/截图回归；TS/Stylus build；迁移后无旧 marker | `feat(markers): 实现按行内容工具协议` |
+| B | 删除四个旧 tag、`hide.styl`、旧 Project handler/分组模块/死代码；把 `modules.styl` 的 `cards/*` 替换为显式 admonition/link-card imports；README 与 AGENTS 本地定制地图/删除清单/缓存版本同步 | tag 注册与源码路径扫描；三语 README；旧入口运行时零命中；最终 CSS 保留 `.admonition/.link-card`、不再含 `.hide` 且 `cssVersion` 已递增 | `refactor(tags): 删除旧标签并同步内容文档` |
+| C | GitHub Alert、导航、BGM 修复（含 `retireOperation`，复用 A 的 `ToolboxStatusLease` adapter）；相关 AGENTS/UI 架构/验证矩阵同步 | contrast 合成、断点、playback state machine/retire 终态/mediaFailed/MutationObserver lease、TypeScript/Stylus build | `fix(theme-ui): 修复告警导航与音乐状态` |
+| D | 最终门禁与 AGENTS 验证矩阵/当前版本/双 dispatch 生命周期/`--bail` 构建失败语义收口，不再引入功能 | 第 18 节 source/unit（含 ownership/build-failure）→ `hexo generate --bail` → post-build artifact 全量顺序 | `docs(markers): 同步按行协议最终门禁` |
+
+#### AGENTS 活文档待更新范围
+
+本次文档提交不改 `AGENTS.md`；实施各批次必须按以下范围同步，不能只在提交说明中口头修正：
+
+1. **Architecture / Hexo 生命周期**：把旧“renderer → onRenderEnd → `after_render:html` → after 9”一类混合表述拆为两个 dispatch；写明内容 `Post#render/Render#render` 的 `after_render:html` 位于 after 9 前、拒绝会跳过 after 9 并要求同 data 下一次 before 4 修复；完整页面路由 `_after_html_render` 位于 after 9 后、只形成 route stream 错误。补充二者因 Hexo filter alias 可执行同一函数但 payload/调用点不同。
+2. **Architecture / 构建失败语义**：记录默认 `hexo generate` 不启用 bail 可能记录并吞掉 route stream error；最终门禁固定 `hexo generate --bail` 或等价命令，post-build artifact 完整性仍是独立门禁，三类失败信号不得混写。
+3. **Source Tree / Toolbox 模块树**：登记 `environment.d.ts` 的 `clearStatus(): void` 契约、`Toolbox.ts` facade、`ToolboxAnnotationController.ts`、`ToolboxPersistence.ts`、`ToolboxShareController.ts`、`ToolboxFavoriteController.ts`、`ToolboxStatusLease.ts` 及 pipeline 四子模块；写明每个文件 ≤500 行、依赖方向、事件唯一 owner 与 Pjax 不重复绑定契约。
+4. **本地定制地图 / 样式导入**：删除旧 `.hide` 条目时，记录 `modules.styl` 从 `cards/*` 改为显式 `cards/admonition` 与 `cards/link-card`，并把 Alerts/LinkCard 编译产物回归列入门禁。
+5. **缓存版本**：按第 15 节递增链更新当前值，最终固定 `cssVersion=20260955`、`jsVersion=20260952`；artifact 探针必须核对 meta-data/js-data 与 public 查询串一致。
+6. **Verification / 测试命令**：保留九个既有 `marker-*.test.js`，加入本节全部 `line-marker-*`、Toolbox/BGM/截图/ProjectTooltip、ownership/build-failure、Alerts/Nav、artifact 与 smoke 探针；最终生成命令写为 `TZ=Asia/Shanghai hexo generate --bail`（Windows 脚本等价设置 `$env:TZ` 后执行 `npx hexo generate --bail`），不得继续记录未加 bail 的根站点 `npm run build` 为最终失败门禁。
+7. **Conventions / ownership fixture**：记录 synthetic/browser receipt 文件、外层生成并传入的 nonce、install `--nonce`/remove `--expected-nonce`、receipt 传播、跨进程 remove、nonce/receipt 不匹配保留作者文件，以及 Ctrl+C/硬中断后的恢复命令；`.temp/` 仍不提交。
 
 原子性与文档边界：
 
 1. A 在同一 commit 内完成五 handler、完整 allowlist、自动注册、控制器/样式和现有 source 迁移；A 之前不修改任何当前活动 lexer/parser/pipeline，也不预注册空 registry。不得把 A 拆成可构建但不完整的提交。
-2. A 同批更新 AGENTS 的 Source Tree、marker Architecture、handler/控制器职责和 cache version；B 同批更新删除项、本地定制地图与旧 tag 验证口径；C 同批更新 UI/BGM 架构和版本；D 收口最终验证矩阵、仍未同步的事实，并按第 12.2 节修正 AGENTS 的 Hexo 生命周期作用域表述。
-3. A 修改 `MonacoEditor.ts`、`Expands.ts`、`ToolboxStatusLease.ts`、Alerts/LinkCard/Editor 样式与产物，因此把 `jsVersion` 从 `20260950` 递增到 `20260951`，把 `cssVersion` 从 `20260952` 递增到 `20260953`。
-4. B 删除 `themes/arknights/source/css/_modules/cards/hide.styl` 及其 `@import`，最终 `arknights.css` 因此发生字节变化，必须把 `cssVersion` 从 `20260953` 递增到 `20260954`，即使本批不新增任何样式；B 不改 JS 产物，`jsVersion` 保持 `20260951`。
+2. A/B/C/D 必须分别在上表原子范围内完成上节 AGENTS 同步；任何批次都不得把旧 Hexo 生命周期、默认 build 失败语义、旧 Toolbox 单文件职责或 `cards/*` 导入继续留作“最终事实”。
+3. A 修改 `MonacoEditor.ts`、`Expands.ts`、`environment.d.ts`、`BgmControl.ts` 的 status adapter、六个 Toolbox 模块、Alerts/LinkCard/Editor 样式与产物，因此把 `jsVersion` 从 `20260950` 递增到 `20260951`，把 `cssVersion` 从 `20260952` 递增到 `20260953`。
+4. B 删除 `themes/arknights/source/css/_modules/cards/hide.styl`，并把 `themes/arknights/source/css/_modules/modules.styl` 的 `@import 'cards/*'` 替换为显式 admonition/link-card imports；最终 `arknights.css` 因此发生字节变化，必须把 `cssVersion` 从 `20260953` 递增到 `20260954`，即使本批不新增视觉规则；B 不改 JS 产物，`jsVersion` 保持 `20260951`。
 5. C 修改 `BgmControl.ts` 和主题 Stylus，因此把 `jsVersion` 从 `20260951` 递增到 `20260952`，把 `cssVersion` 从 `20260954` 递增到 `20260955`。
 6. D 不修改浏览器 CSS/JS 产物，不递增对应版本；最终值为 `cssVersion=20260955`、`jsVersion=20260952`。
 7. 缓存版本递增机制不变：CSS 产物改 `themes/arknights/layout/includes/meta-data.pug` 的 `cssVersion`，JS 产物改 `themes/arknights/layout/includes/js-data.pug` 的 `jsVersion`；`marker-artifacts.js` 必须断言最终 `arknights.css?v=` 与 `arknights.js?v=` 命中上述最终值，命中旧值即失败。
@@ -1505,7 +1600,7 @@ timer callback / clearStatus()
   3. 自有 mutation 不得反向生成新 lease
 ```
 
-因此截图、分享或收藏在 2500ms 内写入共享 status 后，即使文本与 BGM 原消息逐字相同，mutation record 也会使旧 lease 失效；BGM timer 不得清除其它控制器消息。`Toolbox.applyState(true)` 调用公开的 `bgmControl.clearStatus()`；每个 `pjax:send`、`pjax:error`、`pjax:success` dispatch 通过上述 `invalidateLifecycle()` 恰好清理一次 timer/observer。若当前确有未被外部修改的 BGM lease 才清空其 node；否则只丢弃 BGM lease。
+因此截图、分享或收藏在 2500ms 内写入共享 status 后，即使文本与 BGM 原消息逐字相同，mutation record 也会使旧 lease 失效；BGM timer 不得清除其它控制器消息。`Toolbox.ts` facade 的 private `applyState(true)` 分支调用公开的 `window.bgmControl.clearStatus()`；每个 `pjax:send`、`pjax:error`、`pjax:success` dispatch 通过上述 `invalidateLifecycle()` 恰好清理一次 timer/observer。若当前确有未被外部修改的 BGM lease 才清空其 node；否则只丢弃 BGM lease。
 
 所有当前 token 的退出路径都以 `retireOperation(O)`（终态写回之前）或 `enterFailed(reason, token)`（内部按 token 类型完成 retire / advance）结束自己的 busy 并断绑 operation-scoped listener；旧 token 不得覆盖新操作。状态文案只读取按钮现有 `data-label-playing-status`、`data-label-paused-status` 和 `data-label-failed-status`，不新增配置或硬编码中文。
 
@@ -1573,8 +1668,8 @@ timer callback / clearStatus()
 | Alerts open | 缺省为 true；显式 true/false 合法；显式 null 稳定 `INVALID_VALUE`，不得套用默认 |
 | 多行 opening | `[body]\|$[` 与 `[body] \|$[` 合法，pipe 后可跟 SP/HTAB 且 `$[` 必须相邻；`$[` 后尾随空白/注释及其它首个非水平空白 code unit 为 U+007C 的形式均为 `MULTILINE_INVALID_OPEN`；title 为 `MULTILINE_NOT_ALLOWED` |
 | 多行 closing/EndOfSource | 独立 `]$` 关闭；立即关闭产生空 body 并由 handler 报错；缩进/尾内容触发 `MULTILINE_UNEXPECTED_END` 且在该行停止；opening 外的 `]$` 为正文；`EndOfSource` 前无 closing 为 `MULTILINE_UNCLOSED`，有/无最后终止符均遵守统一 range 公式 |
-| 多行物理行 | CRLF/CR/LF 规范为 LF；header/opening/body 的内部终止符保留在 raw；最后物理行有终止符时排除、无终止符时到 `source.length`；最后一个内容换行不进入值但更早空行保留 |
-| 捕获层/恢复层 | 同一 marker 分别以 LF/CRLF/CR 三种物理终止符构造：捕获层断言 `raw`、`physicalLines[].terminator` 与 `sourceRange` 逐字等于原文切片；恢复层断言 `markerFailureHtml`、`markerFailureProjection` 与 `fieldFallbackHtml`、`fieldFallbackProjection` 的行尾全部为 LF，Tab 与相对缩进两层都不变；门禁不得出现「恢复层保留 CRLF/CR」断言 |
+| 多行物理行 | 捕获层断言 header/opening/body 的内部终止符逐字保留在 raw，最后物理行有终止符时排除、无终止符时到 `source.length`；恢复层字段值把 CRLF/CR 规范为 LF，最后一个内容换行不进入值但更早空行保留 |
+| 捕获层/恢复层 | 同一 marker 分别以 LF/CRLF/CR 三种物理终止符构造：捕获层断言 `raw`、`physicalLines[].terminator` 与 `sourceRange` 逐字等于原文切片；恢复层断言 `markerFailureHtml`/`markerFailureProjection` 精确基于 `normalizeLineEndings(raw)`，`fieldFallbackHtml`/`fieldFallbackProjection` 精确基于 `normalizeLineEndings(originalField)`，显式 excerpt 与所有 handler 字段/投影也先 LF 化，最终 `data.content`/`data.excerpt` 与所有投影均不含 U+000D；Tab 与相对缩进两层都不变。门禁必须把两层分开命名和断言，禁止拿含 CR/CRLF 的捕获 `raw` 直接比较恢复层/projection，禁止「恢复层保留 CRLF/CR」断言 |
 | dedent | 空格与 Tab 逐 code unit 比较、不展开；最长共同前缀、相对缩进、行内空格和全空输入 fixture 精确 |
 | 多行递归 | body 内 `[#]>AI\|`、`[#]<AI>{...}` 和 tag 文本零 occurrence |
 | 保护区 | fenced/indented/inline code、HTML comment/tag/attribute、完整 raw-text 内零 occurrence |
@@ -1588,8 +1683,8 @@ timer callback / clearStatus()
 | Marked block | `start(src.slice(1))` 不 `+1`、严格整行 tokenizer、custom block 非 paragraph、renderer 精确 placeholder、`processAllTokens`/`walkTokens`/symbol finally 清理 |
 | placeholder | 每 token 恰一精确 DOM/range、无未拥有 namespace、顺序/重叠/替换审计；`sourceRange` 切 HTML 必须失败 |
 | bridge | 无 own property、accessor 零调用、unsupported value、descriptor/spread/define Proxy、已有 descriptor flags/value 深比较、原子回滚 |
-| render 拒绝/重试 | 按第 12.2 节逐阶段注入拒绝：后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、`after_post_render`（priority < 9，当前 spoiler）各注入一次，断言 after 9 未执行、原异常传播、`data.content` 未被交出；同一 post data 再次 render 时断言下一次 before 4 先从 `carrier.originalField` 修复字段值与 descriptor、清除旧 state 后重新 tokenization，旧 carrier/occurrence/placeholder range/projection 均不复用。路由阶段 `after_render:html` 拒绝只断言构建失败且不回写已物化字段 |
-| 生命周期顺序 | 断言 `after_post_render` priority < 9（spoiler 5）确实先于 after 9 执行、core excerpt（10）确实后于 after 9 执行；断言 `after_render:html` 在 `Post#render` 之外（`Post#render` 全程不调用它） |
+| render 拒绝/重试 | 用真实 `Post#render`/`Render#render` 逐阶段注入拒绝：后续 `before_post_render`（priority > 4）、renderer、`onRenderEnd`、内容阶段 `after_render:html`、`after_post_render`（priority < 9，当前 spoiler）各注入一次；断言 `Post#render` reject、after 9 未执行、临时 `data.content` 未被交出。同一 post data 再次 render 时，下一次 before 4 先从 `carrier.originalField` 修复字段值与 descriptor、清除旧 state 后重新 tokenization，旧 carrier/occurrence/placeholder range/projection 均不复用。真实 route 的 `_after_html_render` 拒绝另由 after 9 已完成、字段不回滚、route stream error 三项断言，并由 build-failure probe 证明 `--bail` 非零 |
+| 生命周期顺序 | 同一 spy filter 注册名固定为 `after_render:html`，并断言 Hexo store alias 为 `_after_html_render`。事件轨迹必须精确为 `before4 -> before>4 -> renderer -> onRenderEnd -> content after_render:html -> restore -> after_post<9 -> after9 -> after_post>9`，随后真实 `createLoadThemeRoute`/route stream 再出现 `full-page _after_html_render`；两次调用分别断言 payload 是内容 HTML 与完整页面 HTML，不得断言 Post#render 不调用 `after_render:html`，也不得把两次调用合并为一次。另断言 priority < 9 的 spoiler 先于 after 9、core excerpt 10 后于 after 9 |
 | sanitizer | 缺省/false/逐字 identity 通过；true/自定义改写 placeholder 在字段改写前失败 |
 | AI | 四态、可选 text、content/excerpt ID namespace、path hash、键盘 focus、tooltip/投影、错误恢复 |
 | Project | 页面/URL 注入、只按 sourceRange 恰好一个 CRLF/CR/LF 分组、失败/文本/空行 flush、投影 LF、Pjax 绑定 |
@@ -1598,7 +1693,7 @@ timer callback / clearStatus()
 | LinkCard | 完整 DOM、descr schema `string`/`nullable:false` 与缺省有效值 null/显式空串/非空三态、`.link-main`/`.link-simple` 判定、Hex4/6/8 与 ValueChar/颜色/长度/声明 ABNF 正反 fixture、scope、资源/动画/HTML/JS 拒绝、单次 percent-decode 审计（含 `%2e%2e`/`%2E%2E` 混合大小写、encoded separator/control/二次 `%`）、无文件读取 |
 | service/handler | service 能力白名单、detached render、handler throw/非法返回、render 成功但 projection 失败仍整枚恢复 |
 | before 源字段 NUL | `content` 与显式 `excerpt` 分别注入 NUL；断言 `post.render` 抛 `UNEXPECTED_NUL`，字段值/引用与 descriptor 不变；被注入 NUL 的字段由 NUL 检查读取 1 次，field/descriptor 写入均为 0，carrier/token/occurrence/handler 调用均为 0，未生成 escaped failure DOM，projectText/sidecar 捕获与保存计数为 0 |
-| handler 生成 NUL | render 输出 NUL 与 projection 输出 NUL 分开断言：前者 `render=1/toPlainText=0`，后者 `render=1/toPlainText=1` 且先丢弃 render；两者都只调用一次 marker fallback，DOM 精确为 `markerFailureHtml(raw)`、projection 精确为 `raw`、occurrence=`failed`，最终 DOM/projection NUL 为 0 |
+| handler 生成 NUL | render 输出 NUL 与 projection 输出 NUL 分开断言：前者 `render=1/toPlainText=0`，后者 `render=1/toPlainText=1` 且先丢弃 render；两者都只调用一次 marker fallback，DOM 精确为 `markerFailureHtml(raw)`、projection 精确为 `markerFailureProjection(raw)` 即 `normalizeLineEndings(raw)`、occurrence=`failed`，最终 DOM/projection NUL 为 0 |
 | 通用失败 | 未知/重复/缺字段、单枚 escaped pre、字段安全 fallback、原文 projection、内部 placeholder/token/NUL 清零；LF/CRLF/CR 三种物理终止符下的失败恢复文本与投影均已 LF 化 |
 | content/excerpt | content、显式 excerpt tokenRange、派生 excerpt、无 more 分隔符逐字等值、description、renderer 拒绝边界 |
 | 加密 | 共享 policy 的 public/encrypted/ambiguous；before 读取正文前判定；encrypted/ambiguous 不扫描、不创建公开 projection |
@@ -1650,47 +1745,92 @@ const marker = "[#]>Project|";
 5. Alerts Markdown link 只允许 `https:`；把 fixture 改为 `javascript:` 的负例必须得到 escaped marker source 和 `HANDLER_SERVICE_ERROR`，最终无危险 href。
 6. LinkCard 负例分别证明 `[descr] null` 返回 `INVALID_VALUE`，而 `[descr]`/`[descr]   ` 走空串成功路径；不得把二者都归一为缺省。
 
+#### fixture ownership receipt 协议
+
+synthetic artifact 与 browser fixture 共用一套跨 Node 进程 ownership 协议；不得以“本进程记得刚创建过”、仅比较固定 sentinel/完整 source bytes 或无条件删除 staging 代替 ownership。固定路径为：
+
+```text
+SYNTHETIC_RECEIPT = ".temp/line-marker-artifact-fixture.ownership.json"
+BROWSER_RECEIPT  = ".temp/line-marker-browser-fixture.ownership.json"
+```
+
+每次 install 由外层 runner 生成新的 128-bit 随机 lowercase-hex `nonce`，通过 `--nonce <32 hex>` 传入并派生唯一 `receipt`；artifact receipt 形如 `arknights-line-marker-artifact-fixture-receipt:v1:<nonce>`，browser receipt 形如 `arknights-line-marker-browser-fixture-receipt:v1:<nonce>`。receipt 文件由 install 以 exclusive-create/no-replace 原子创建，完整 UTF-8 内容至少为：
+
+```json
+{
+  "schema": 1,
+  "kind": "artifact",
+  "nonce": "<32 lowercase hex>",
+  "receipt": "<kind-specific receipt>",
+  "staging": "<fixed staging path>",
+  "source": "<fixed source path>",
+  "public": "<fixed public directory>",
+  "sourceSha256": "<64 lowercase hex>"
+}
+```
+
+安装、构建与删除遵守以下不变量：
+
+1. install 首先校验命令行 nonce 为 32 位 lowercase hex，再断言 receipt、staging、final source 与 public 目录全部不存在；任一路径已存在即以 ownership conflict 非零退出，不读取后覆盖、不改 receipt，也不删除该路径。随后 exclusive-create receipt 文件、完整写入、复读并校验；receipt 创建失败时不得创建 staging/source/public 等其它 fixture 路径。
+2. receipt 校验必须同时检查 schema、kind、路径均为该 kind 的固定值、nonce/receipt 格式及二者派生关系、sourceSha256。自动 cleanup 的 remove 必须同时接收 `--expected-nonce <32 hex>` 并与 receipt.nonce 精确相等；不得从命令行覆盖 canonical path，也不得把 receipt 作为可由作者随意传入的任意删除授权。人工硬中断恢复须先读取并人工确认 receipt 中的 nonce，再把同一值传给 remove。
+3. staging 与 final source 的完整 UTF-8 bytes 都包含同一 receipt 恰好一次；两者 bytes 相同且 SHA-256 等于 receipt 的 `sourceSha256`。staging 用 exclusive-create 写入，final source 用 no-replace publish；发布后任一校验失败均视为不可信并进入完整 cleanup。
+4. 真实 build 生成的 public 目标，其目录内每个 regular file 都必须保留同一 receipt 恰好一次；`index.html` 还必须同时匹配固定 title/permalink。public 目录在 install 前必须不存在；若 build 后任一文件缺 receipt，或 `index.html` 的 receipt/title/permalink 任一不匹配，artifact 门禁失败，后续 remove 不得删除该目录。
+5. `--remove-* --expected-nonce <nonce>` 启动的新 Node 进程先检查固定 receipt 与三条 target：receipt 不存在且三条 target 全不存在时幂等成功；receipt 不存在但任一 target 存在时非零失败且不删除。receipt 存在时，expected nonce 必须与其 nonce 精确相等，再读取本次 receipt。目标不存在视为已清理；目标存在时，只有文件/目录携带完全相同的 receipt 才允许删除：source/staging 还须校验 sourceSha256，public 目录内每个 regular file 都须含 receipt，且 `index.html` 还须校验 title/permalink。receipt/nonce 不匹配一律保留目标与 receipt 供诊断，并必须非零退出；作者预先存在的同名文件永不删除。
+6. cleanup 先对 staging/source/public 做全量 preflight 并记录不匹配目标，再只删除 receipt/SHA/身份全部匹配的现存目标，同时聚合删除前后错误；不匹配目标及 receipt 必须保留。只有所有现存 owned target 均已删除且固定路径均不存在时，才最后删除 receipt 文件并断言四者全部不存在。receipt 写入中断导致的无目标无效文件不自动删除；它只会阻止后续安装，必须人工检查。
+7. 正常 install 成功保留 final source 与 receipt 供紧随其后的 `hexo generate --bail` 消费。install 内层 `finally` 只尝试删除**带匹配 receipt 的 staging**，正常路径不删除 final source；发布前/发布后失败调用同一 cleanup。跨进程 remove、失败后的再次 remove 与中断恢复都只依赖磁盘 receipt，不依赖退出进程的内存。
+
+`.temp/line-marker-fixture-ownership.test.js` 必须以隔离的 `.temp/line-marker-ownership-probe/<case>/` 为 root，由测试父进程预生成各 case nonce，并通过 `child_process` 把同一 nonce 传给 install/verify/remove 的 `--nonce`/`--expected-nonce`；它复用生产 cleanup 实现，下列 case 对 artifact 与 browser 两种 kind 各跑一遍，至少覆盖：
+
+1. 子进程 A install 成功后直接退出，子进程 B remove；证明 receipt/nonce 跨进程可用，install 不提前删除 final source，四条路径最终全为空。
+2. 分别注入 receipt create/write/verify、staging create/write/verify、no-replace publish、final source 发布后 verify 失败。receipt 尚未完整有效时必须证明未创建任何 target、无自动删除且后续 install fail-closed；receipt 已完整有效后再注入 staging/publish/verify 失败时，证明原始错误可诊断、同进程 finally 不删除无 receipt 目标，后续独立 remove 能按磁盘 receipt 清理且不吞错误。
+3. 子进程 A 在 receipt、final source 与模拟 public 已发布后以 `process.exit(非零)` 模拟来不及执行 finally 的中断，子进程 B 仍可仅凭磁盘 receipt 完整清理；另测 cleanup 删除中途失败后 receipt 保留、下一进程可重试。
+4. install 前分别预置作者 receipt/staging/source/public，install 后把每个 owned target 篡改为不含匹配 receipt 的内容，并让 remove 使用错误 `--expected-nonce`；每种情况下 install/remove 必须非零、receipt 与作者 bytes 逐字不变。其它仍匹配 receipt 的 owned target 可以被 cleanup 删除，但 receipt 必须因未匹配目标残留而保留，不能把“清掉可删项”误报为清理成功。
+5. 两个并发 install 进程对同一固定路径启动时至多一个创建成功；loser 不得清理 winner 的 receipt/source。随后由独立 remove 清理 winner，每个 case 最终都断言 receipt、staging、source、public 四条路径及隔离 git status 无残留。
+
 #### public artifact fixture 边界
 
 public 门禁与上述内存门禁是两套独立断言，不能互相替代：
 
 1. **真实 source→artifact**：`.temp/line-marker-artifacts.js` 逐一映射当前受控 source 与输出，包括三篇含 AI 的真实文章、`source/projects/index.md` 的 Project/GitHub Alert，以及 `public/search.json`。这些 source 缺失、未迁移或输出不匹配时立即失败。
-2. **合成 build fixture**：当前真实 source 不含 Alerts marker、Editor marker 或 LinkCard marker，因此不得声称这些 public DOM 来自现有内容。若最终 artifact 门禁要覆盖这三类 public DOM，路径与 sentinel 固定为：
+2. **合成 build fixture**：当前真实 source 不含 Alerts marker、Editor marker 或 LinkCard marker，因此不得声称这些 public DOM 来自现有内容。路径固定为：
 
    ```text
    SYNTHETIC_SENTINEL   = "arknights-line-marker-artifact-fixture:v1"
    SYNTHETIC_STAGING    = ".temp/line-marker-artifact-fixture.md.staging"
    SYNTHETIC_SOURCE     = "source/__line-marker-artifact-fixture.md"
    SYNTHETIC_PUBLIC     = "public/__line-marker-artifact-fixture"
+   SYNTHETIC_RECEIPT    = ".temp/line-marker-artifact-fixture.ownership.json"
    ```
 
-   `.temp/line-marker-artifacts.js --install-fixture` 创建 `SYNTHETIC_SOURCE`，frontmatter 固定 `title: line-marker-artifact-fixture`、`layout: page`、`permalink: __line-marker-artifact-fixture/`、`comments: false`、`sitemap: false`，正文复用第 18.2 节内存 fixture，并在正文首行放置恰好一次、独占一行的 `<!-- arknights-line-marker-artifact-fixture:v1 -->`。staging 与 final source 的完整 UTF-8 bytes 必须相同；post-build HTML 必须含同一 sentinel、title 与 permalink 身份。该 page 不进入当前 `search.field=post` 的真实文章映射，也不得进入任何 sitemap：`sitemap: false` 使 `hexo-generator-sitemap` 的同一份 `posts` 数组同时排除该 page，因此 `public/sitemap.xml` 与 `public/sitemap.txt` 都必须既不含 sentinel、也不含该 permalink 或站点 URL。
-3. install 的职责是「让 fixture 在 build 前就位并交给外层 remove 收尾」，因此其 `finally` 不得删除 final source。固定形态：
+   `.temp/line-marker-artifacts.js --install-fixture --nonce <32 hex>` 按上节协议创建 `SYNTHETIC_RECEIPT` 与 `SYNTHETIC_SOURCE`，frontmatter 固定 `title: line-marker-artifact-fixture`、`layout: page`、`permalink: __line-marker-artifact-fixture/`、`comments: false`、`sitemap: false`，正文复用第 18.2 节内存 fixture，并在正文首行放置恰好一次、独占一行的固定 sentinel，紧随其后放置恰好一次的本轮 receipt。staging 与 final source 完整 bytes 相同；post-build public 目录每个 regular file 都含同一 receipt，且 `public/__line-marker-artifact-fixture/index.html` 含同一 sentinel、receipt、title 与 permalink 身份。
+3. install 的固定形态为：
 
    ```text
-   installSyntheticFixture()
-     assert !exists(SYNTHETIC_STAGING) && !exists(SYNTHETIC_SOURCE)   // 禁止覆盖作者文件
+   installSyntheticFixture(expectedNonce)
+     assertAllAbsent(receipt, staging, source, public)
+     nonce = validateNonce(expectedNonce)
+     receipt = deriveReceipt(kind, nonce)
+     fixtureSourceBytes = buildFixtureBytes(receipt)
+     receiptRecord = buildReceiptRecord(nonce, receipt, sha256(fixtureSourceBytes))
+     exclusiveCreateAndVerify(SYNTHETIC_RECEIPT, receiptRecord)
      try
-       staging = exclusiveCreate(SYNTHETIC_STAGING)                  // 独占创建
-       writeAll(staging, fixtureSourceBytes)
-       assertEqual(readAllBytes(SYNTHETIC_STAGING), fixtureSourceBytes)
-       assertSentinelOnce(SYNTHETIC_STAGING)
-       publishNoReplace(staging, SYNTHETIC_SOURCE)                   // exclusive-create / no-replace
-       assertEqual(readAllBytes(SYNTHETIC_SOURCE), fixtureSourceBytes)
-       assertSentinelOnce(SYNTHETIC_SOURCE)                           // 发布后校验
+       staging = exclusiveCreate(SYNTHETIC_STAGING)
+       writeAllAndSync(staging, fixtureSourceBytes)
+       verifyOwnedSource(SYNTHETIC_STAGING, receiptRecord)
+       publishNoReplace(staging, SYNTHETIC_SOURCE)
+       verifyOwnedSource(SYNTHETIC_SOURCE, receiptRecord)
      catch (error)
-       cleanupSyntheticFixture()                                      // 发布前/发布后失败都完整清理
-       throw error                                                     // 原始错误优先，cleanup 错误同时可诊断
+       cleanupSyntheticFixtureFromDisk(SYNTHETIC_RECEIPT, nonce)   // 发布前/后失败均完整 cleanup
+       throw error
      finally
-       removeIfOwned(SYNTHETIC_STAGING)                               // 只清 staging，不触碰 final source
-     // 正常成功：final source 保留，删除只由外层 --remove-fixture 负责
-     return ownershipToken
+       removeIfOwned(SYNTHETIC_STAGING, receiptRecord)
+     // 成功：final source + receipt 保留给独立 remove 与 build
    ```
 
-   硬性约束：成功路径必须保留 final source，否则紧随其后的 `npm run build` 无源可渲染；`finally` 只负责 staging，final source 的最终删除只由外层 `--remove-fixture` 负责；发布后校验失败视为「已发布但不可信」，必须走完整 cleanup 而不是留下待 build 消费的半成品。install 返回后，外层门禁必须立即断言 `SYNTHETIC_SOURCE` 存在且 bytes 与 sentinel 精确等于本轮 fixture source，缺失或不匹配即失败。
-4. `--install-fixture` 与 `--remove-fixture` 必须调用同一个 `cleanupSyntheticFixture()`。cleanup 始终尝试删除由 runner 独占的固定 `SYNTHETIC_STAGING`；final source 只在当前 bytes 与 sentinel 精确等于本轮完整 fixture source 时删除（install 已要求它开始前不存在，因此本轮创建后匹配即归本轮所有）；synthetic public 只在 `index.html` 同时匹配固定 title、permalink 与 sentinel 时递归删除。预先存在且不匹配或发布后被外部篡改的 final source/public 永不删除，并作为身份错误报告；这种非本轮或未知目标不是可清理残留。install 在 staging 写入后、发布前或发布后失败，以及 remove 在删除任一 owned target 前后失败，都再次执行同一 cleanup；原始错误与 cleanup 错误必须同时可诊断，不得因第一个异常跳过 staging 或其它 owned target。cleanup 成功后的残留断言集合固定为四项：`SYNTHETIC_STAGING`、`SYNTHETIC_SOURCE`、`SYNTHETIC_PUBLIC` 三条路径不存在，且 `public/sitemap.xml` 与 `public/sitemap.txt` 均不含 sentinel 与该 permalink/站点 URL。
-5. source/unit 在 install 前失败时不得创建 fixture；外层门禁的 `try` 必须从 `--install-fixture` 调用之前开始，`finally` 必须调用 `--remove-fixture`，并在其后断言 `SYNTHETIC_STAGING`、`SYNTHETIC_SOURCE`、`SYNTHETIC_PUBLIC` 均不存在，且 `public/sitemap.xml` 与 `public/sitemap.txt` 不含 sentinel 与 `__line-marker-artifact-fixture`。install 部分失败、clean/build 失败或任一 post-build artifact 失败都执行该路径；`git status --short` 不得包含三个 fixture 路径。合成 artifact 只证明构建链，不算“真实站点已有 Alerts/Editor/LinkCard 内容”。
-6. 若维护者选择不为 public 覆盖这三类 handler，final matrix 必须删除 synthetic install/remove 与对应 public DOM 断言，只保留内存 Hexo fixture 覆盖；不得一边只跑内存测试，一边仍要求不存在的 public 产物。
+   外层门禁在 install 返回后必须以新的 Node 进程执行 `--verify-fixture-receipt --nonce <同一 32 hex>`，从磁盘重新读取 receipt，并断言 nonce、receipt、final source 的 receipt/SHA-256 均匹配，同时断言 staging 与 public 仍不存在；任何额外路径立即失败且不得 clean/build。不得相信 install 子进程 stdout 作为唯一 ownership 事实。
+4. `--remove-fixture --expected-nonce <同一 32 hex>` 是独立 Node 进程，只按第 18.2 节 receipt 协议删除。它成功时断言 receipt、staging、source、public 四条路径均不存在；expected nonce 或任何目标 receipt 不匹配时保留对应目标与 receipt，并必须非零退出。`public/sitemap.xml` 与 `public/sitemap.txt` 还不含 sentinel、receipt、该 permalink 或站点 URL。
+5. source/unit 在 install 前失败时不得创建 fixture；外层门禁的 `try` 必须从 `--install-fixture --nonce` 调用之前开始，`finally` 必须调用 `--remove-fixture --expected-nonce` 并传入同一 nonce。install 部分失败、`hexo generate --bail` 失败或任一 post-build artifact 失败都进入该路径；`git status --short` 不得包含四个 fixture 路径。合成 artifact 只证明构建链，不算“真实站点已有 Alerts/Editor/LinkCard 内容”。
+6. 该 page 不进入当前 `search.field=post` 的真实文章映射，也不得进入任何 sitemap：`sitemap: false` 使 `hexo-generator-sitemap` 的同一份 `posts` 数组同时排除该 page。若维护者选择不为 public 覆盖这三类 handler，final matrix 必须删除 synthetic install/remove 与对应 public DOM 断言，只保留内存 Hexo fixture 覆盖；不得一边只跑内存测试，一边仍要求不存在的 public 产物。
 
 ### 18.3 UI 自动化
 
@@ -1699,11 +1839,11 @@ public 门禁与上述内存门禁是两套独立断言，不能互相替代：
 3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()/pause()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/lifecycle/status generation、对应 token 拒绝、原生 `play`/`pause`/`ended`/`error`、Pjax 三事件与旧 Promise 交错；断言初始化 snapshot 不递增 generation、每个 Pjax dispatch 的 lifecycle 只递增 1、`invalidateStatusLease()` 只调用 1 次、persistent listener 只重绑 1 次，operation 在健康路径增量为 0、失败路径仅由一次 `enterFailed(..., L)` 递增 1，并证明旧 `O/M/L` 在任何写入前 no-op、`enterFailed()` 不会接收旧 lifecycle token。`retireOperation` 必须单列一组断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用 1 次；`retrying-load -> retrying-play` 中途不调用；调用后 operation-scoped listener 计数归零；终态后人为触发的旧 `O` 延迟 resolve、排队 one-shot media 回调与 timer 延迟回调全部 no-op；传入 `LifecycleToken`/旧 `O`/非 token 时返回 false 且 generation、listener、状态、status、timer 与 `aria-busy` 写入计数为 0。每条实际进入 `failed` 的路径都必须传入当前 token 并断言调用后 `mediaFailed === true`，同时覆盖外部相同文本写入、2500ms lease 与 toolbox 打开。
 4. 必须运行现有真实脚本 `.temp/project-tooltip.test.js`、`.temp/theme-ui-screenshot.test.js`、`.temp/theme-ui-toolbox.test.js`；脚本从 source/DOM fixture 初始化 Project、截图 lease 和五项 toolbox，不以缺少 source 的 public HTML 作为通过证据。
 5. `.temp/search-projection-lifecycle.test.js` 继续跨真实 Warehouse 文档生命周期验证五类投影、失败原文、加密/ambiguous 空 sidecar 和内部串清零。
-6. `.temp/line-marker-artifacts.js` 默认模式必须同时读取真实 `source/` 输入和 `public/` 输出并逐项建立 source→artifact 对照；`--install-fixture` / `--remove-fixture` 只负责第 18.2 节 synthetic build fixture 的成对生命周期。fixture 探针必须注入 staging create/write/verify 失败、no-replace publish 失败、发布后 final source 校验失败、final source remove 前后失败和 public remove 前后失败，证明 staging 失败与发布后校验失败都进入共享 cleanup 并在 `finally` 后不留 staging，且成功 install 之后 `SYNTHETIC_SOURCE` 仍存在、失败 install 之后三条固定路径全为空；同时断言 `public/search.json` 不含 synthetic URL，`public/sitemap.xml` 与 `public/sitemap.txt` 均不含 sentinel、`__line-marker-artifact-fixture` 与站点 URL。真实 source 缺失、fixture 未迁移、只存在 public 输出、synthetic source/output 不成对或清理残留时立即失败。
+6. `.temp/line-marker-artifacts.js` 默认模式必须同时读取真实 `source/` 输入和 `public/` 输出并逐项建立 source→artifact 对照；`--install-fixture --nonce` / `--remove-fixture --expected-nonce` 只负责第 18.2 节 synthetic build fixture 的成对磁盘 ownership 生命周期。默认模式还要验证 final source 与 public 目录每个 regular file 携带同一 receipt，且 `index.html` 身份匹配；remove 进程先比较 expected nonce 再读取固定 receipt。staging/source/public 任一 receipt 不匹配时必须保留目标并非零退出。`public/search.json` 不含 synthetic URL，`public/sitemap.xml` 与 `public/sitemap.txt` 均不含 sentinel、receipt、`__line-marker-artifact-fixture` 与站点 URL。真实 source 缺失、fixture 未迁移、只存在 public 输出、synthetic source/output 不成对或清理残留时立即失败。
 
 ### 18.4 最终命令
 
-A 至 D 完成后，在同一最终状态只执行一次以下门禁。顺序固定为“source/unit → 在外层 `try` 内调用 install（其内部 `try/finally` 只清 staging，成功保留 final source 供 build 消费，发布后校验失败执行完整 cleanup）→ 断言 final source 存在 → 一次 clean/build → post-build artifact → 外层 `finally` 调用共享 remove 收尾 → 三条固定路径 + 两个 sitemap 残留断言”；任何 native command 非零退出都立即 throw，后续命令不得执行。install、clean、build 和 post-build artifact 任一阶段失败都必须进入同一个外层 `finally`；remove 自身失败时，内层 `finally` 仍执行 staging/source/public、sitemap 与 git status 残留断言。以下块必须作为同一个 PowerShell 7 script/session 整体执行，不能拆开逐行粘贴而丢失 `finally`；`node --check` 只是语法补充，每个 probe 随后或对应阶段都以 `node <probe>` 实际执行：
+A 至 D 完成后，在同一最终状态只执行一次以下门禁。顺序固定为“source/unit（含跨进程 ownership 与 build-failure 探针）→ 在外层 `try` 内调用 install（独立进程写 receipt，install 内层 finally 只清带匹配 receipt 的 staging，成功保留 final source/receipt 供 build 消费）→ 独立进程复读 receipt/source → 一次 clean + `hexo generate --bail` → post-build artifact → 外层 `finally` 由新 Node 进程按 receipt remove → receipt/staging/source/public 四条固定路径 + 两个 sitemap 残留断言”；任何 native command 非零退出都立即 throw，后续命令不得执行。install、clean、`generate --bail` 和 post-build artifact 任一阶段失败都必须进入同一个外层 `finally`；remove 自身失败时，内层 `finally` 仍执行 ownership、sitemap 与 git status 残留断言，并保留不匹配 receipt 的作者目标。以下块必须作为同一个 PowerShell 7 script/session 整体执行，不能拆开逐行粘贴而丢失 `finally`；`node --check` 只是语法补充，每个 probe 随后或对应阶段都以 `node <probe>` 实际执行：
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -1731,6 +1871,8 @@ Invoke-Checked node '--check' '.temp/line-marker-registry.test.js'
 Invoke-Checked node '--check' '.temp/line-marker-handlers.test.js'
 Invoke-Checked node '--check' '.temp/line-marker-pipeline.test.js'
 Invoke-Checked node '--check' '.temp/line-marker-hexo.test.js'
+Invoke-Checked node '--check' '.temp/line-marker-fixture-ownership.test.js'
+Invoke-Checked node '--check' '.temp/line-marker-build-failure.test.js'
 Invoke-Checked node '--check' '.temp/line-marker-artifacts.js'
 Invoke-Checked node '--check' '.temp/marker-e2e.test.js'
 Invoke-Checked node '--check' '.temp/marker-artifacts.js'
@@ -1743,6 +1885,8 @@ Invoke-Checked node '.temp/line-marker-registry.test.js'
 Invoke-Checked node '.temp/line-marker-handlers.test.js'
 Invoke-Checked node '.temp/line-marker-pipeline.test.js'
 Invoke-Checked node '.temp/line-marker-hexo.test.js'
+Invoke-Checked node '.temp/line-marker-fixture-ownership.test.js'
+Invoke-Checked node '.temp/line-marker-build-failure.test.js'
 Invoke-Checked node '.temp/marker-core.test.js'
 Invoke-Checked node '.temp/marker-registry-ai.test.js'
 Invoke-Checked node '.temp/marker-projects.test.js'
@@ -1766,53 +1910,77 @@ Invoke-Checked node '.temp/theme-ui-toolbox.test.js'
 Invoke-Checked node '.temp/theme-ui-bgm.test.js'
 Invoke-Checked git 'diff' '--check'
 
+$fixtureNonceBytes = [byte[]]::new(16)
+[Security.Cryptography.RandomNumberGenerator]::Fill($fixtureNonceBytes)
+$fixtureNonce = [Convert]::ToHexString($fixtureNonceBytes).ToLowerInvariant()
 $fixturePaths = @(
+  '.temp/line-marker-artifact-fixture.ownership.json',
   '.temp/line-marker-artifact-fixture.md.staging',
   'source/__line-marker-artifact-fixture.md',
   'public/__line-marker-artifact-fixture'
 )
+$fixturePrimaryError = $null
+$cleanupErrors = [System.Collections.Generic.List[string]]::new()
 try {
-  Invoke-Checked node '.temp/line-marker-artifacts.js' '--install-fixture'
+  Invoke-Checked node '.temp/line-marker-artifacts.js' '--install-fixture' '--nonce' $fixtureNonce
+  Invoke-Checked node '.temp/line-marker-artifacts.js' '--verify-fixture-receipt' '--nonce' $fixtureNonce
+  if (-not (Test-Path -LiteralPath '.temp/line-marker-artifact-fixture.ownership.json')) {
+    throw 'Synthetic fixture install succeeded without leaving the ownership receipt'
+  }
   if (-not (Test-Path -LiteralPath 'source/__line-marker-artifact-fixture.md')) {
     throw 'Synthetic fixture install succeeded without leaving the final source in place'
   }
   Invoke-Checked npm 'run' 'clean'
   $env:TZ = 'Asia/Shanghai'
-  Invoke-Checked npm 'run' 'build'
+  Invoke-Checked npx 'hexo' 'generate' '--bail'
 
   Invoke-Checked node '.temp/line-marker-artifacts.js'
 }
+catch {
+  $fixturePrimaryError = $_.Exception.Message
+}
 finally {
   try {
-    Invoke-Checked node '.temp/line-marker-artifacts.js' '--remove-fixture'
+    Invoke-Checked node '.temp/line-marker-artifacts.js' '--remove-fixture' '--expected-nonce' $fixtureNonce
   }
-  finally {
-    foreach ($fixturePath in $fixturePaths) {
-      if (Test-Path -LiteralPath $fixturePath) {
-        throw "Synthetic fixture cleanup left residual path: $fixturePath"
-      }
-    }
+  catch {
+    $cleanupErrors.Add($_.Exception.Message)
+  }
 
-    foreach ($sitemapPath in @('public/sitemap.xml', 'public/sitemap.txt')) {
-      if (Test-Path -LiteralPath $sitemapPath) {
-        $sitemapHits = @(Select-String -LiteralPath $sitemapPath -SimpleMatch -Pattern @(
-          'arknights-line-marker-artifact-fixture',
-          '__line-marker-artifact-fixture'
-        ))
-        if ($sitemapHits.Count -ne 0) {
-          throw "Synthetic fixture leaked into $sitemapPath"
-        }
-      }
-    }
-
-    $fixtureStatus = @(& git status '--short')
-    if ($LASTEXITCODE -ne 0) {
-      throw "git status --short exited with code $LASTEXITCODE"
-    }
-    if (@($fixtureStatus | Where-Object { $_ -match 'line-marker-artifact-fixture' }).Count -ne 0) {
-      throw 'git status --short still contains a synthetic fixture path'
+  foreach ($fixturePath in $fixturePaths) {
+    if (Test-Path -LiteralPath $fixturePath) {
+      $cleanupErrors.Add("Synthetic fixture cleanup left residual path: $fixturePath")
     }
   }
+
+  foreach ($sitemapPath in @('public/sitemap.xml', 'public/sitemap.txt')) {
+    if (Test-Path -LiteralPath $sitemapPath) {
+      $sitemapHits = @(Select-String -LiteralPath $sitemapPath -SimpleMatch -Pattern @(
+        'arknights-line-marker-artifact-fixture',
+        'arknights-line-marker-artifact-fixture-receipt',
+        '__line-marker-artifact-fixture'
+      ))
+      if ($sitemapHits.Count -ne 0) {
+        $cleanupErrors.Add("Synthetic fixture leaked into $sitemapPath")
+      }
+    }
+  }
+
+  $fixtureStatus = @(& git status '--short')
+  if ($LASTEXITCODE -ne 0) {
+    $cleanupErrors.Add("git status --short exited with code $LASTEXITCODE")
+  }
+  elseif (@($fixtureStatus | Where-Object { $_ -match 'line-marker-artifact-fixture' }).Count -ne 0) {
+    $cleanupErrors.Add('git status --short still contains a synthetic fixture path')
+  }
+}
+
+$fixtureErrors = @($cleanupErrors)
+if ($null -ne $fixturePrimaryError) {
+  $fixtureErrors = @($fixturePrimaryError) + $fixtureErrors
+}
+if ($fixtureErrors.Count -ne 0) {
+  throw ("Synthetic fixture gate failed:`n- " + ($fixtureErrors -join "`n- "))
 }
 
 Invoke-Checked node '.temp/marker-artifacts.js'
@@ -1839,24 +2007,26 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | `line-marker-registry.test.js` | 五 handler 注册与受控接口 | 无；source/unit |
 | `line-marker-handlers.test.js` | Alerts/Editor/LinkCard 三类 DOM/投影、LinkCard ABNF/descr 三态、失败恢复 | 内存 Hexo HTML；不读取 public |
 | `line-marker-pipeline.test.js` | occurrence、Project 分组、fallback、projection；第 12.1.1 节模块规模与依赖门禁 | 内存 Hexo；不读取 public |
-| `line-marker-hexo.test.js` | 真实 `Hexo#post.render` 的 Alerts/Editor/LinkCard 三类终态 | 内存 source→内存 HTML |
+| `line-marker-hexo.test.js` | 真实 `Post#render`/内容 `after_render:html` 拒绝与修复、真实 route `_after_html_render` 顺序；Alerts/Editor/LinkCard 三类终态 | 内存 source→内容 HTML→route stream |
+| `line-marker-fixture-ownership.test.js` | receipt/nonce 跨进程；install 成功/失败/中断；目标篡改与作者文件保护 | 隔离 `.temp` 子进程沙箱；不读真实 public |
+| `line-marker-build-failure.test.js` | Post/filter reject、route stream 默认吞错与 `--bail` 非零、artifact 独立失败 | 隔离最小 Hexo site 子进程 |
 | 九个旧 `marker-*.test.js` | 既有 AI/Project/carrier/search 行为按 block-only 回归 | 无；source/unit |
 | `search-projection-lifecycle.test.js` | 五类 sidecar、加密/ambiguous、失败原文 | Warehouse `db.json` fixture；无 public |
 | `project-tooltip.test.js`、截图、toolbox 门禁 | 现有 Project/截图 lease/五项工具箱 | source/DOM fixture；无 public |
 | `theme-ui-a1/a2`、AI tooltip、SnapDOM、BGM | 主题既有行为与新 BGM 状态机 | TS/CSS/DOM fixture；无 public |
-| `line-marker-artifacts.js` | 真实 source→public 映射；synthetic source/output 成对；清理 | 三篇 AI、Project、GitHub Alert、search；synthetic Alerts/Editor/LinkCard page |
+| `line-marker-artifacts.js` | 真实 source→public 映射；synthetic receipt/source/output 成对；跨进程 remove 与篡改保护 | 三篇 AI、Project、GitHub Alert、search；synthetic Alerts/Editor/LinkCard page |
 | `marker-artifacts.js` | 当前站点既有 public 产物、版本、search、audio 等 | build 后真实 `public/` |
 | `theme-ui-alerts.test.js` / `theme-ui-nav.test.js` | 最终 CSS 对比与 1023/1024 断点 | build 后 `arknights.css` |
 | `http-smoke.js` / `nav-smoke.js` / `r10-toolbox-geometry.js` | HTTP、导航/Pjax、最终五项几何 | build 后 `public/` |
 
-所有命令必须退出码 0。构建产物检查至少包括：
+所有命令必须退出码 0；其中站点生成命令必须明确携带 `--bail`，不得以根站点默认 `npm run build` 或 stderr 日志替代。构建产物检查至少包括：
 
 - 三篇现有文章只含新 AI block 输出，tooltip ID 含 `content` source-field namespace。
 - 项目页只含按 `sourceRange` 分组的 Project 卡和原有 GitHub Important Alert；投影 name 以 LF 分隔。
-- 第 18.2 节内存 fixture 经真实 `Hexo#post.render` 后具有 Alerts/Editor/LinkCard 具体 DOM，且不读取 `public/`；synthetic page 的 `public/__line-marker-artifact-fixture/index.html` 只由本次 build 新建，artifact 检查后固定 staging、final source 与该 public 目录均被删除并通过残留断言，`public/sitemap.xml` 与 `public/sitemap.txt` 不含 synthetic 身份。
+- 第 18.2 节内存 fixture 经真实 `Post#render` 后具有 Alerts/Editor/LinkCard 具体 DOM，且不读取 `public/`；synthetic page 的 `public/__line-marker-artifact-fixture/index.html` 只由本次 `hexo generate --bail` 新建，并含与磁盘 receipt/source 相同的 nonce receipt。artifact 检查后由独立 Node 进程删除 receipt、staging、final source 与该 public 目录并通过残留断言；`public/sitemap.xml` 与 `public/sitemap.txt` 不含 synthetic 身份。
 - 旧 marker、旧 tag、carrier token、placeholder attribute、Project 临时分组边界和 NUL 在最终 HTML 中零命中。
 - `public/search.json` 只含已验证 sidecar 搜索文本且不含 synthetic fixture URL；失败 marker 是未转义原源纯文本（行尾已 LF 化），不含 HTML entity、placeholder 或部分 handler 字段。
-- `public/sitemap.xml` 与 `public/sitemap.txt` 均不含 synthetic sentinel、`__line-marker-artifact-fixture` 或其站点 URL。
+- `public/sitemap.xml` 与 `public/sitemap.txt` 均不含 synthetic sentinel、nonce receipt、`__line-marker-artifact-fixture` 或其站点 URL。
 - `public/projects/index.html` 保留 grid/card、lazy image、project-name 和 Pjax 属性。
 - Monaco 容器不含 `data-readonly`、`data-height`、`data-options`，并保留 hidden direct-child source pre 契约。
 - source-level LinkCard 正反 fixture 只输出 scoped allowlist style，不含 `@import`、外部 URL、脚本、transition/animation 属性或非白名单 property。
@@ -1872,17 +2042,19 @@ BROWSER_SENTINEL  = "arknights-line-marker-browser-fixture:v1"
 BROWSER_STAGING   = ".temp/line-marker-browser-fixture.md.staging"
 BROWSER_SOURCE    = "source/_posts/__line-marker-browser-fixture.md"
 BROWSER_PUBLIC    = "public/__line-marker-browser-fixture"
+BROWSER_RECEIPT   = ".temp/line-marker-browser-fixture.ownership.json"
 ```
 
 安装与清理规则：
 
-1. `--install-browser-fixture` 先断言 `BROWSER_STAGING` 与 `BROWSER_SOURCE` 都不存在；已存在即以身份错误退出，**禁止覆盖作者同名文件**。
-2. staging 由 runner 独占，以 exclusive-create 写入完整 fixture source（frontmatter 固定 `title: line-marker-browser-fixture`、`layout: post`、`date: 2026-01-01`、`permalink: __line-marker-browser-fixture/`、`comments: false`、`sitemap: false`，正文复用第 18.2 节 Alerts/Editor/三种 LinkCard，并追加一个 GitHub Alert 与一个 `TEST` 失败 marker，正文首行放置恰好一次、独占一行的 `<!-- arknights-line-marker-browser-fixture:v1 -->`）；复读校验后以 exclusive-create / no-replace 发布为 `BROWSER_SOURCE`。Project、导航、BGM、搜索、响应式与主题条目在真实页面验收，不依赖该 fixture。
-3. 内层 `finally` 只删除 staging；发布后校验失败才执行完整 cleanup；正常成功保留 final source 交由外层收尾。
-4. 外层 `finally` 必须调用 `--remove-browser-fixture`，其 `cleanupBrowserFixture()` 与 install 共用：staging 无条件删除；`BROWSER_SOURCE` 只在当前 bytes 与 sentinel 精确等于本轮 fixture source 时删除；`BROWSER_PUBLIC` 只在同时匹配固定 title、permalink 与 sentinel 时删除；不匹配或被外部篡改的目标永不删除并报身份错误。
-5. 中断（Ctrl+C、构建失败、人工提前退出）同样走该 `finally`；因此人工验收脚本必须整体作为同一个 PowerShell 7 session 执行，验收动作放在 `try` 内，删除与 clean/rebuild 放在 `finally` 内。删除后以同一 `Invoke-Checked` helper 顺序执行 `npm run clean`、`npm run build` 移除对应 public 输出，再断言 `BROWSER_STAGING`/`BROWSER_SOURCE`/`BROWSER_PUBLIC` 均不存在且 `git status --short` 不含该路径。fixture 不提交、不新增友链数据。
+1. 人工验收的外层 PowerShell session 先生成 128-bit lowercase-hex nonce；`--install-browser-fixture --nonce <32 hex>` 复用第 18.2 节 fixture ownership receipt 协议，先断言 `BROWSER_RECEIPT`、staging、source、public 四条路径都不存在。任一路径已存在即以 ownership conflict 非零退出，作者同名文件的 bytes 与 mtime 均不得改变。
+2. install 校验外层 nonce，以 exclusive-create 创建 `BROWSER_RECEIPT` 并持久化同一 nonce/receipt。staging 与 final source 使用同一完整 bytes（frontmatter 固定 `title: line-marker-browser-fixture`、`layout: post`、`date: 2026-01-01`、`permalink: __line-marker-browser-fixture/`、`comments: false`、`sitemap: false`，正文复用第 18.2 节 Alerts/Editor/三种 LinkCard，并追加一个 GitHub Alert 与一个 `TEST` 失败 marker）；正文首行放置恰好一次、独占一行的固定 sentinel，第二行放置恰好一次的本轮 receipt。staging 用 exclusive-create，source 用 no-replace publish，发布后复读 receipt 与 sourceSha256。
+3. `BROWSER_PUBLIC` 必须由随后真实 build 生成，目录内每个 regular file 都含同一 receipt，且 `index.html` 还含同一 sentinel、title 与 permalink；任一文件身份不匹配时人工验收失败且 remove 保留整个目录。Project、导航、BGM、搜索、响应式与主题条目在真实页面验收，不依赖该 fixture。
+4. install 内层 `finally` 只调用 `removeIfOwned(BROWSER_STAGING, receiptRecord)`，不无条件删除；发布前/后验证失败执行完整 cleanup。正常成功保留 final source、public 与 receipt 交由外层收尾。
+5. 外层 `finally` 必须以新的 Node 进程调用 `--remove-browser-fixture --expected-nonce <同一 32 hex>`。该进程先比较 expected nonce，再只从 `BROWSER_RECEIPT` 读取 ownership：staging/source/public 任一存在目标都必须携带匹配 receipt（source/staging 还须匹配 sourceSha256，public 还须匹配 title/permalink）才可删除；缺失视为已清理，不匹配永不删除并报身份错误。所有 owned target 删除成功后才删除 receipt。
+6. Ctrl+C、构建失败和人工提前退出必须尽量走外层 `finally`；若是无法执行 finally 的进程中断，必须先人工读取并确认 `BROWSER_RECEIPT` 中的 nonce，再由下一 Node 进程以同一值调用 `--remove-browser-fixture --expected-nonce`。remove 返回后先断言 receipt/staging/source/public 四条路径均不存在；只有全部不存在时才以同一 `Invoke-Checked` helper 顺序执行 `npm run clean`、`npx hexo generate --bail` 移除可能的旧 public 输出，再复核 git status。若任何作者目标因 receipt/nonce 不匹配被保留，立即失败并原样保留，且**禁止执行 clean/rebuild**，不得为“清干净”而间接删除作者文件。fixture 不提交、不新增友链数据。
 
-在上述 `try/finally` 内，先设 `$env:TZ = 'Asia/Shanghai'`，再执行 `Invoke-Checked npm 'run' 'build'`，随后用有头浏览器打开生成页，按下列条目人工验收：
+在上述 `try/finally` 内，先设 `$env:TZ = 'Asia/Shanghai'`，再执行 `Invoke-Checked npx 'hexo' 'generate' '--bail'`；只有退出码 0 才打开生成页，随后按下列条目人工验收：
 
 1. Alerts：默认展开，点击、Enter、Space 可收起/展开，class 与 `aria-expanded` 同步。
 2. GitHub Alert：在 light/dark 下 hover 与 focus-within 背景一致变化，普通 blockquote 不被 `.alert-*` 污染。
@@ -1909,17 +2081,20 @@ BROWSER_PUBLIC    = "public/__line-marker-browser-fixture"
 6. 桌面导航 active 不引发布局位移，移动端布局不回归。
 7. BGM 的 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed`、operation/lifecycle token、`retireOperation` 终态 retire 与 listener 归零、共享 status lease、toolbox 与 Pjax 状态机全部通过。
 8. document-private search sidecar、加密空投影、缓存自愈和 fail-closed 行为保持有效。
-9. 第 12.1.1 节拆分完成：`pipeline.js` 与四个子模块、`ToolboxStatusLease.ts` 均在规模门禁内，依赖方向单向，导出 API、注册 identity 与全部产物逐字不变。
-10. 捕获层 `raw`/`sourceRange` 逐字保留原始终止符，恢复层 DOM 与投影一律 LF 化；两种口径不同时承诺。
-11. A 至 D 均有独立测试、审查和 commit；A 的 handler、注册、控制器和内容迁移保持原子，均未 push。
-12. 自动化、构建、artifact 与真实有头浏览器验收均有可复核证据。
+9. 第 12.1.1 节拆分完成：`pipeline.js` 与四个子模块，以及 `environment.d.ts`、`Toolbox.ts`、标注/持久化、分享/收藏控制器、`ToolboxStatusLease.ts` 均逐文件 ≤500 行；依赖方向、事件唯一 owner、Pjax 重绑与全部既有行为回归通过，导出 API、注册 identity 与产物契约不变。
+10. 捕获层 `raw`/`sourceRange` 逐字保留 CR/CRLF；恢复层 handler 字段、最终 `content`/`excerpt`、失败 DOM 与所有 projection 一律 LF 化且不含 U+000D，两层测试分别断言。
+11. 内容 `after_render:html` 拒绝确实跳过 after 9 并由同 data 下一次 before 4 修复；路由 `_after_html_render` 发生在 after 9 后并形成 route stream 错误。最终构建使用 `--bail`，未把默认 generate 的可能吞错或日志文本当作失败证据。
+12. synthetic/browser fixture 的 receipt、外层 nonce、final/staging/public 身份与跨进程 cleanup 全部通过；expected nonce 或 receipt 不匹配的作者文件逐字保留，安装成功、失败、中断与并发冲突路径均可诊断且无本轮残留。
+13. A 至 D 均有独立测试、审查和 commit；A 的 handler、注册、控制器和内容迁移保持原子，均未 push。
+14. AGENTS 的 Source Tree、Architecture、本地定制地图、当前版本和 Verification 命令已按第 15 节范围同步，不再保留旧生命周期、默认 build 失败语义或旧 Toolbox 单模块表述。
+15. 自动化、`hexo generate --bail`、artifact 与真实有头浏览器验收均有可复核证据。
 
 ### 20.2 已识别风险与控制
 
 | 风险 | 控制 |
 | --- | --- |
 | 内容作者把旧 inline marker 当作新协议 | header 必须物理行首；运行路径、source 与当前 README 的迁移扫描要求旧语法零命中；README 只保留新示例 |
-| 多行 body 吞入后续内容 | 精确 opening/独立 closing、CRLF/CR/LF 保留、Tab 不展开、错误行/EOF range 和原子失败 |
+| 多行 body 吞入后续内容 | 精确 opening/独立 closing；捕获层逐字保留 CR/CRLF，恢复层 LF；Tab 不展开、错误行/EOF range 和原子失败 |
 | sourceRange 误切最终 HTML | sourceRange 只管原文/Project 分组；content 用精确 renderedPlaceholderRange，excerpt 用 tokenRange |
 | 字段 fallback 激活源 HTML | 活动字段统一 escaped `<pre>`，projection 保存未转义原文；before/after 各失败点明确恢复与抛错 |
 | Alerts 与 GitHub Alert 类/对比度冲突 | 新 handler 只输出 `.admonition`；GitHub filter 只输出 `.alert`；标题/正文用主题正文色并对 alpha 合成值门禁 |
@@ -1929,4 +2104,8 @@ BROWSER_PUBLIC    = "public/__line-marker-browser-fixture"
 | marker 内容泄漏到搜索 | handler 纯文本投影、sidecar hash、内部串拒绝、无效 sidecar 不回退 |
 | 加密文档意外读取正文 | 加密空 sidecar、字段 getter 计数、render count 与搜索输出回归 |
 | vendored 主题同步覆盖本地实现 | 修改点集中在 handler、控制器、局部 Stylus 和 README；同步上游时按本规格逐项复核 |
-| `pipeline.js` / `Toolbox.ts` 继续膨胀成单文件大模块 | 第 12.1.1 节冻结拆分边界：物化/失败恢复/Project 编排/投影各自独立模块 + 独立 status lease 模块；文件规模、依赖方向与行为回归三道门禁，超限即视为拆分未完成 |
+| `pipeline.js` / `Toolbox.ts` 继续膨胀或事件归属漂移 | 第 12.1.1 节冻结模块树：pipeline 四子模块；Toolbox facade、标注/持久化、分享/收藏与 StatusLease；逐文件 ≤500 行、依赖方向、事件唯一 owner、Pjax 计数和全量行为回归均为门禁 |
+| 内容 `after_render:html` 与路由 `_after_html_render` 被混为一个阶段 | 分别记录 Post 内容 dispatch 与完整页面 route dispatch；前者拒绝触发 after 9 跳过/重试修复，后者只形成 route stream 错误并由 `--bail` 门禁判定 |
+| 默认 generate 吞掉 route stream 错误却被误报为失败或成功 | 最终命令固定 `hexo generate --bail`，另跑独立 artifact 完整性门禁；不以日志替代退出码，也不以退出码替代 artifact |
+| fixture cleanup 覆盖作者文件或跨进程中断后无法回收 | 外层 nonce + exclusive-create receipt 传播到 staging/source/public；新进程 remove 同时校验 expected nonce 与 receipt；成功/失败/硬中断/并发/篡改子进程探针与人工恢复流程 |
+| 删除 hide 时误删共享 cards 样式 | `modules.styl` 的 `cards/*` 精确替换为 `cards/admonition` 与 `cards/link-card`；编译产物对两类 selector 与 `.hide` 零命中分别门禁 |
