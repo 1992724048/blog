@@ -66,7 +66,7 @@
 | `themes/arknights/source/js/_src/include/BgmControl.ts` | 修改 | A1 | 组合 status lease adapter，状态机在 C（当前 118 行） |
 | `themes/arknights/source/js/_src/include/environment.d.ts` | 修改 | A1 | 新增 `clearStatus(): void` 与 `ToolboxApi` 冻结类型（当前 25 行） |
 | `themes/arknights/source/js/_src/include/MonacoEditor.ts` | 修改 | A1 | source 收口为直系子元素 `pre.monaco-editor-source[hidden][aria-hidden="true"]`（当前 115 行） |
-| `themes/arknights/source/js/_src/include/Expands.ts` | 修改 | A1 | 模块私有 `WeakSet` 幂等守卫，不新增任何 Pjax/decrypt listener（当前 37 行） |
+| `themes/arknights/source/js/_src/include/Expands.ts` | 修改 | A1 | 键盘契约（`keypress` 的 Enter + Space 分支、Space 阻止默认滚动、`reverse()` 同步 `aria-expanded`）+ 模块私有 `WeakSet` 幂等守卫，不新增任何 Pjax/decrypt listener（当前 37 行） |
 | `themes/arknights/source/js/_src/include/ProjectTooltip.ts` | 修改 | A1 | 按新 Project 卡契约回归（当前 27 行） |
 | `themes/arknights/source/js/_src/include/ScreenshotControl.ts` | 修改 | A1 | 只经 `window.screenshotControl` 接受 facade 委托，不新增 import/状态（当前 482 行） |
 | `themes/arknights/source/js/arknights.js` | 重新生成 | A1/A3 | `npm --prefix themes/arknights run build` 产物 |
@@ -107,7 +107,7 @@
 | `.temp/line-marker-carrier.test.js` | 新增 | A2 | bridge / descriptor / 原子回滚 |
 | `.temp/line-marker-marked.test.js` | 新增 | A2 | block token / placeholder / metadata / symbol 清理 |
 | `.temp/line-marker-registry.test.js` | 新增 | A2 | 五 handler 注册与受控接口 + `defaultPipeline` 同一引用 |
-| `.temp/line-marker-handlers.test.js` | 新增 | A2 | Alerts/Editor/LinkCard 三类终态 + Expands 重绑幂等 |
+| `.temp/line-marker-handlers.test.js` | 新增 | A2 | Alerts/Editor/LinkCard 三类终态 + Expands 重绑幂等与 Enter/Space 键盘契约 |
 | `.temp/line-marker-pipeline.test.js` | 新增 | A1/A2/B2 | occurrence / Project 分组 / fallback / projection + 规模依赖门禁 + 样式导入回归 |
 | `.temp/line-marker-hexo.test.js` | 新增 | A2 | 真实 filter alias/store、拒绝重试、加密同源、priority 5 透传 |
 | `.temp/line-marker-memory-fixture.js` | 新增 | A2 | 规格 18.2 内存 Alerts/Editor/LinkCard 终态 fixture 的单一来源模块（`line-marker-handlers.test.js` 与 `line-marker-hexo.test.js` 共用，只存在于测试进程） |
@@ -622,7 +622,7 @@ test_annotation_controller_surface()
 console.log('ok line-marker-pipeline structure')
 ```
 
-A1-1 的 `test_module_size()` 调用与 `ok line-marker-pipeline structure` 留在 A1-1 代码块内以便独立运行；本段只追加依赖、Expands 与 owner 归属断言并复用同一条 ok 行，**不再重复调用** `test_module_size()`（A1-16 的门禁说明中的执行序列同样以 A2-19 追加后的最终顺序为准）。计数类断言先经 `stripComments` 剥离 `//` 与 `/* */` 注释再统计，避免注释或文档字符串里的同名字符串造成假命中；`stripComments` 保留 `https://` 这类含 `//` 但前面不是行首的协议串（`(^|[^:])\/\/` 的 `[^:]` 分支只在前一个字符不是 `:` 时才截断）。运行 → 期望 `ENOENT ... ToolboxAnnotationController.ts`（仍 RED）。
+A1-1 的 `test_module_size()` 调用与 `ok line-marker-pipeline structure` 留在 A1-1 代码块内以便独立运行；本段只追加依赖、Expands 与 owner 归属断言并复用同一条 ok 行，**不再重复调用** `test_module_size()`（A1-16 的门禁说明中的执行序列同样以 A2-19 追加后的最终顺序为准）。`test_expands_contract()` 是**纯静态**门禁（模块私有 `WeakSet`、`reverse()` 内的 `aria-expanded` 写入、零 Pjax/decrypt 字样），不覆盖 Enter / Space 的运行时切换——后者只在 A2-22 `test_expands_rebind_idempotence()` 断言，两处不得互相顶替。计数类断言先经 `stripComments` 剥离 `//` 与 `/* */` 注释再统计，避免注释或文档字符串里的同名字符串造成假命中；`stripComments` 保留 `https://` 这类含 `//` 但前面不是行首的协议串（`(^|[^:])\/\/` 的 `[^:]` 分支只在前一个字符不是 `:` 时才截断）。运行 → 期望 `ENOENT ... ToolboxAnnotationController.ts`（仍 RED）。
 
 - **reference 白名单只列 5 项**：facade 直接触及的是三个同层 controller（Annotation / Share / Favorite）与两个 `window.*` 控制器适配（`ScreenshotControl.ts` / `BgmControl.ts`）；`ToolboxPersistence.ts` 由同层 controller 引用、`ToolboxStatusLease.ts` 由 `BgmControl.ts` **与** Share / Favorite 两个 controller 引用（Global Constraints 第 14 条的依赖方向与 §2.6 裁决记录的新增出边），facade 不得直接引用。`MonacoEditor.ts` / `Expands.ts` 与 facade 无依赖关系，既不在白名单里，也额外断言 facade 不含这两条 reference。
 - **已死的 `common/base.ts` reference 必须删除**：基线 `Toolbox.ts` 与拆出的 facade 只用 `document.querySelector` 与 `window.*`，不调用 `common/base.ts` 的 `getElement` / `isParent` / `getParent` / `format` 任何一个；`outFile` 拼接下 reference 只影响类型检查阶段，删除无运行时影响。
@@ -944,7 +944,7 @@ private createEditor = (container: HTMLElement, lang: string, theme: string) => 
 
 同时删除 `data-readonly` / `data-height` / `data-options` 的全部读取、`DOMParser` options 解析分支与 `container.style.height` 赋值；`findEditor` 只读 `data-lang`（默认 `plaintext`）与 `data-theme`（默认 `vs-dark`）。
 
-- [ ] **A1-14 修改 `Expands.ts`** 加入模块私有 `WeakSet` 幂等守卫：
+- [ ] **A1-14 修改 `Expands.ts`** 补齐键盘契约（`keypress` 的 Enter + Space 双分支、Space 阻止默认页面滚动、`reverse()` 同步 `aria-expanded`）并加入模块私有 `WeakSet` 幂等守卫：
 
 ```typescript
 /// <reference path="common/base.ts" />
@@ -976,9 +976,13 @@ class expands {
         this.reverse(header, 'open', 'fold')
       }
     })
-    header.addEventListener('keypress', (key) => {
-      if (key.key === 'Enter' || key.key === ' ') {
-        if (key.key === ' ') key.preventDefault()
+    header.addEventListener('keypress', (event) => {
+      const isEnter = event.key === 'Enter'
+      // 'Spacebar' 是旧浏览器的 key 别名，必须与 ' ' 等价处理
+      const isSpace = event.key === ' ' || event.key === 'Spacebar'
+      if (isEnter || isSpace) {
+        // Space 必须阻止默认页面滚动；Enter 无滚动语义，同路径阻止不改变其行为
+        event.preventDefault()
         this.reverse(header, 'open', 'fold')
       }
     })
@@ -995,7 +999,16 @@ class expands {
 let expand = new expands();
 ```
 
-`reverse()` 在切换 `.open`/`.fold` 的同一次调用里同步写 `item`（即 `.ex-header`）的 `aria-expanded`，满足规格第 9.2 节第 10 条「点击、Enter 或 Space 后同步 `.open/.fold` 与 `aria-expanded`」；Enter 与 Space 走同一个 `reverse`，因此两条路径的 attribute 与 class 不会漂移。`Space` 必须 `preventDefault()` 阻止默认页面滚动（规格第 9.2 节第 10 条、§20.1 第 5 条）。除 `aria-expanded` 与 `WeakSet` 幂等守卫、`keypress` 增加 Space 分支这三处契约项外，`Expands.ts` 的其余行为逐字不变。
+本片段与规格第 9.2 节第 10–12 条逐条对应，**四类契约项以外的部分逐字不变**：
+
+| 规格条目 | 契约项 | 本片段落点 |
+| --- | --- | --- |
+| §9.2 第 10 条 | 点击、**Enter 或 Space** 后同步 `.open/.fold` 与 `aria-expanded`；Space 的默认页面滚动必须被阻止 | `keypress` 的 `isEnter` / `isSpace` 双分支 + `reverse()` 内同一次调用写 `item.setAttribute('aria-expanded', …)` |
+| §9.2 第 10 条 | 绑定目标仍是 `.expand-box` 的首个子元素，不改为其它选择器 | `setHTML()` 仍取 `item.children[0]`，未改选择器 |
+| §9.2 第 11 条 | 重绑只由既有链路 `Code.findCode → expand.setHTML()` 驱动，`Code.ts` 本轮不动 | `Expands.ts` 不新增任何 `pjax:*` / `hexo-blog-decrypt` listener，`Code.ts` 不在本任务改动范围 |
+| §9.2 第 12 条 | 幂等守卫用模块私有 `WeakSet`，已绑定元素跳过绑定，不暴露为 `window` 属性 | `private bound = new WeakSet<Element>()` + `addEvent()` 首两行守卫 |
+
+基线 `Expands.ts` 第 22-26 行的 `keypress` **只判 `Enter`**，因此 A2-22 `test_expands_rebind_idempotence()` 用 `key: ' '` 触发的断言对本片段是有效 RED→GREEN 门禁，不得为了迁就基线把探针降级为只按 Enter 触发。`isSpace` 同时接受 `' '` 与旧浏览器别名 `'Spacebar'`；命中 Enter 或 Space 任一即 `preventDefault()`，其中 Space 的 `preventDefault()` 是规格第 9.2 节第 10 条与 §20.1 第 5 条的硬要求（阻止默认页面滚动），Enter 本无滚动语义，同路径阻止不改变其行为。Enter 与 Space 走同一个 `reverse`，因此两条路径的 `aria-expanded` 与 class 不会漂移。click 分支的 `BUTTON` / `A` 目标豁免（第 10 条只约束「点击」的 header 本体，语义不变）逐字保留。
 
 - [ ] **A1-15 迁移 `filters/alerts.js`** 为 §2.5 的逐字实现（priority 5 不变，注释保留「与 spoiler 同级」语义）。**只改这一个文件**：`filters/spoiler.js`、`filters/meta-description.js`、`filters/terms.js` 按 §2.5 裁决记录保持原样不动，A2-22 的零命中断言因此只覆盖 `alerts.js` 单文件，不得写成 `filters/` 目录级零命中。
 - [ ] **A1-16 编译并运行 A1 门禁**：
@@ -1012,7 +1025,7 @@ node .temp/project-tooltip.test.js
 node .temp/theme-ui-bgm.test.js
 ```
 
-`.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_size()` 在 A2 完成前不调用（A2-19 追加时再启用），A1 阶段只运行 `test_module_size()` / `test_toolbox_dependency_edges()` / `test_expands_contract()` / `test_annotation_controller_surface()`。`.temp/theme-ui-toolbox.test.js` 的 share / favorite status 断言（`writeStatus` → `claimStatus` 之后仍写同一个 `.toolbox-status` 节点、同一份 `data-label-*` 文案、`hidden === false`）以及 title / favorite `aria-pressed` 断言**在 A 批即须通过**：A 阶段 lease 已是最小实现且已是这两个 controller 的唯一 status 写入者，此处若失败说明 A1-4 / A1-5 / A1-7 有搬运偏差，不得推到 C3-2 再验。两条 `node --check` 是**后续批次要改动这两个探针的语法门禁**：`.temp/line-marker-pipeline.test.js` 在 A2-19 追加 pipeline 段、并在 C3-2 追加 lease timer 断言，`.temp/theme-ui-bgm.test.js` 在 C3-1 追加 `loadBgmProbe()` 并把第 51、164 行两处 `loadTypeScript(window, path)` 改为 `transpile` + `join('\n')` 后单次 `window.eval`（两处调用点：`loadTypeScript(window, '…/BgmControl.ts')` 与 `loadTypeScript(disabledDom.window, '…/BgmControl.ts')`），因此这两个文件在本序列里同时带 `node --check` 与实际执行两行。`npm --prefix themes/arknights run build` 会同时重生成 `source/js/arknights.js` 与 `source/js/search.js`（§1 已把后者登记为副产物；本轮无 `_src/search/search.ts` 改动，其 diff 应为空）。
+`.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_size()` 在 A2 完成前不调用（A2-19 追加时再启用），A1 阶段只运行 `test_module_size()` / `test_toolbox_dependency_edges()` / `test_expands_contract()` / `test_annotation_controller_surface()`。`test_expands_contract()` 是 **A1-14 的静态门禁**：只断言模块私有 `WeakSet`、`reverse()` 内的 `aria-expanded` 写入与 `pjax:success` / `pjax:error` / `pjax:send` / `hexo-blog-decrypt` 零命中；**Enter / Space 的运行时切换断言不在 A 批门禁内**，落在 A2-22 `test_expands_rebind_idempotence()`（单次 Enter 与单次 Space 各只把 `.open/.fold` 与 `aria-expanded` 切换恰好一次），A1 阶段不得据此声称键盘契约已验证。`.temp/theme-ui-toolbox.test.js` 的 share / favorite status 断言（`writeStatus` → `claimStatus` 之后仍写同一个 `.toolbox-status` 节点、同一份 `data-label-*` 文案、`hidden === false`）以及 title / favorite `aria-pressed` 断言**在 A 批即须通过**：A 阶段 lease 已是最小实现且已是这两个 controller 的唯一 status 写入者，此处若失败说明 A1-4 / A1-5 / A1-7 有搬运偏差，不得推到 C3-2 再验。两条 `node --check` 是**后续批次要改动这两个探针的语法门禁**：`.temp/line-marker-pipeline.test.js` 在 A2-19 追加 pipeline 段、并在 C3-2 追加 lease timer 断言，`.temp/theme-ui-bgm.test.js` 在 C3-1 追加 `loadBgmProbe()` 并把第 51、164 行两处 `loadTypeScript(window, path)` 改为 `transpile` + `join('\n')` 后单次 `window.eval`（两处调用点：`loadTypeScript(window, '…/BgmControl.ts')` 与 `loadTypeScript(disabledDom.window, '…/BgmControl.ts')`），因此这两个文件在本序列里同时带 `node --check` 与实际执行两行。`npm --prefix themes/arknights run build` 会同时重生成 `source/js/arknights.js` 与 `source/js/search.js`（§1 已把后者登记为副产物；本轮无 `_src/search/search.ts` 改动，其 diff 应为空）。
 
 ---
 
@@ -1904,7 +1917,7 @@ module.exports = {
 
 U+0000 在本模块中一律由 `String.fromCharCode(0)` 构造并注入，不以可见字符代替；探针从同一导出取 `NUL`，保证「注入」与「断言」用的是同一个字符。
 
-- [ ] **A2-22 写 `.temp/line-marker-handlers.test.js`**：`require('./line-marker-memory-fixture')` 引入共享 fixture，经真实 `Hexo#post.render` 断言规格第 18.2 节的 6 条硬断言（五个 occurrence 全 `consumed`、无 placeholder/token/NUL；Alerts 为 `.admonition.adm-note.open` 且投影 `NOTE 协议提示\n正文包含 Markdown 与 链接。`；Editor 的 `pre.monaco-editor-source[hidden][aria-hidden="true"]` 的 `textContent` 与 body 逐字相同；三张 LinkCard 的 DOM/`.link-simple`/空 `.link-descr` 与三条投影；`javascript:` 负例得到 escaped marker source 与 `HANDLER_SERVICE_ERROR`；`[descr] null` 为 `INVALID_VALUE` 而 `[descr]` 走空串成功路径）。随后追加三段：Expands 重绑幂等、handler 生成 NUL、规格第 17.1 安全转义矩阵。
+- [ ] **A2-22 写 `.temp/line-marker-handlers.test.js`**：`require('./line-marker-memory-fixture')` 引入共享 fixture，经真实 `Hexo#post.render` 断言规格第 18.2 节的 6 条硬断言（五个 occurrence 全 `consumed`、无 placeholder/token/NUL；Alerts 为 `.admonition.adm-note.open` 且投影 `NOTE 协议提示\n正文包含 Markdown 与 链接。`；Editor 的 `pre.monaco-editor-source[hidden][aria-hidden="true"]` 的 `textContent` 与 body 逐字相同；三张 LinkCard 的 DOM/`.link-simple`/空 `.link-descr` 与三条投影；`javascript:` 负例得到 escaped marker source 与 `HANDLER_SERVICE_ERROR`；`[descr] null` 为 `INVALID_VALUE` 而 `[descr]` 走空串成功路径）。随后追加三段：Expands 重绑幂等与 Enter / Space 键盘契约（N=3 轮 `pjax:success` / `hexo-blog-decrypt` 后每个 `.ex-header` 恰 1 组 click + keypress，且单次 Enter 与单次 Space 各只把 `.open/.fold` 与 `aria-expanded` 切换恰好一次）、handler 生成 NUL、规格第 17.1 安全转义矩阵。
 
 ```js
 const assert = require('node:assert/strict')
@@ -2130,6 +2143,10 @@ function test_expands_rebind_idempotence() {
   spaceHeader.dispatchEvent(new window.KeyboardEvent('keypress', { key: ' ', bubbles: true, cancelable: true }))
   assert.equal(expandBox.classList.contains('fold'), true, 'Space must toggle exactly once')
   assert.equal(spaceHeader.getAttribute('aria-expanded'), String(initial !== 'true'))
+  spaceHeader.dispatchEvent(new window.KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }))
+  assert.equal(expandBox.classList.contains('open'), true, 'Enter must toggle exactly once')
+  assert.equal(spaceHeader.getAttribute('aria-expanded'), initial,
+    'Enter must restore the declared initial aria-expanded in the same reverse() call')
   assert.deepEqual(environmentGaps, [], 'the fixture must not produce non-environment jsdom errors')
 }
 ```
@@ -2210,6 +2227,8 @@ async function test_security_escaping_matrix() {
 `renderMemoryFixture(source)` 是本文件的共用 helper（骨架见本节首个代码块）：创建隔离 Hexo 实例、`register.js` 自动注册 `defaultPipeline` 与五 handler、执行真实 `Post#render`，并返回 `{ data, store }`。`data.content` 是渲染结果，`data.projection` 是 `defaultPipeline.projectText(data, 'content')`；`data.occurrences` 是**终态**快照：`after_post_render` priority 8 的 filter 只把 `data.markdown[CARRIER_SYMBOL]` 的 carrier 引用 push 进闭包数组 `retainedCarriers`（不做 map、不做断言），`Post#render` resolve 之后才对留存引用 map 出 `{ name, state }`——因为终态迁移只发生在 after 9，priority 8 读到的仍是 `pending-markdown`，而 after 9 已移除 carrier descriptor（priority ≥ 10 读取会抛 `TypeError: ... 'Symbol(arknights.markerCarrier)'`）。`store.countState` 的定义见上一段。本文件不再重复实现该 helper。
 
 `test_expands_rebind_idempotence()` 另有两处与本骨架绑定的约束：其一，`createExpandsDom()` 必须提供 `.temp/nav-smoke.js` 已验证的最小可用环境配方（`pretendToBeVisual` + `beforeParse` 补 `matchMedia` / `offsetParent` / `fetch` + VirtualConsole 过滤），否则 bundle 会在更早的位置因缺 `matchMedia` / `requestAnimationFrame` 失败，测不到 Expands；其二，对 `window.eval` 的定向捕获**只用于容忍 `new Header()`（bundle 第 1517 行）对真实页面结构的依赖**，不掩盖 Expands / Code 失败——抛错必须逐字是 `Unknown HTML`，且捕获后必须单独证明 `.ex-header` 的 click / keypress 绑定已存在，否则测试直接失败。`expandBox` 在本函数内只声明一次（`const` 重复声明会报 TS2451，与模块级 `root` 的 TDZ 约束一并登记）。
+
+**`expands keypress` 段落的门禁口径（规格第 9.2 节第 10、13 条）**：连续 dispatch **N=3** 轮 `document` `pjax:success` 与 `window` `hexo-blog-decrypt` 之后，每个 `.ex-header` 恰有 1 组 click 与 1 组 keypress listener，且**单次 Enter 与单次 Space 各只把 `.open/.fold` 与 `aria-expanded` 切换恰好一次**（两段断言互不吞掉：Space 后必须落在 `fold` + 反向 `aria-expanded`，Enter 后必须回到 `open` + 初值 `aria-expanded`）。基线 `Expands.ts` 第 22-26 行只判 `Enter`，因此这两条断言对本片段构成 A1-14 的 RED→GREEN 门禁；任一元素出现 0 组 / 2 组以上 listener，或单次触发出现双切换 / 半次切换即失败。`aria-expanded` 一律相对 DOM 声明的初值断言，不硬编码目标字面量。
 
 本探针**逐条实现 §13.2 表指派给 `.temp/line-marker-handlers.test.js` 的全部错误码**（共 20 条，缺一条即门禁不完整）：
 
@@ -2399,7 +2418,7 @@ node -e "const{execSync}=require('node:child_process');const out=execSync('git g
 ```
 
 - [ ] **A3-4 递增缓存版本**：`meta-data.pug` 的 `- var cssVersion = "20260952"` → `"20260953"`；`js-data.pug` 的 `- var jsVersion = "20260950"` → `"20260951"`。
-- [ ] **A3-5 同步 `AGENTS.md`**（规格第 15 节条目 1/2/3/5/6/10/11/12）：Architecture 写入 `after_render:html` → `_after_html_render` alias 事实与实测优先级表（含 `footnotes.js` 恒等 no-op 说明）；priority 5 placeholder 可见性；Source Tree 登记 `handlers/{project,alerts,editor,link-card}.js` 与 `pipeline/{materialize,failure,project-grid,projection}.js`，删除 `sentinel.js`/`projects.js` 条目与旧 inline/autolink 描述；Toolbox 模块树与 ≤500 行门禁（含 `ScreenshotControl.ts` 排除理由只限「A 仅 facade 委托」）；`Expands.ts` 定点口径；本地定制地图的样式导入变更；加密策略单一来源四条链路与 §2.5 裁决记录列出的三处显式残留自判（必须写成「marker/search/加密生成三条链路 + GitHub Alert filter 已同源，`spoiler.js`/`meta-description.js`/`terms.js` 为显式残留」，不得写成全站零残留）；`.temp/` 探针清单（九个既有 + 10 个新增 `line-marker-*.test.js` + 1 个新增 `line-marker-artifacts.js` 产物脚本 + `line-marker-memory-fixture.js` 共享 fixture 模块）；删除旧 filters 条目。
+- [ ] **A3-5 同步 `AGENTS.md`**（规格第 15 节条目 1/2/3/5/6/10/11/12）：Architecture 写入 `after_render:html` → `_after_html_render` alias 事实与实测优先级表（含 `footnotes.js` 恒等 no-op 说明）；priority 5 placeholder 可见性；Source Tree 登记 `handlers/{project,alerts,editor,link-card}.js` 与 `pipeline/{materialize,failure,project-grid,projection}.js`，删除 `sentinel.js`/`projects.js` 条目与旧 inline/autolink 描述；Toolbox 模块树与 ≤500 行门禁（含 `ScreenshotControl.ts` 排除理由只限「A 仅 facade 委托」）；`Expands.ts` 定点口径（重绑只由既有 `Code.findCode → expand.setHTML()` 驱动、`Code.ts` 不动、模块私有 `WeakSet` 幂等守卫且不新增任何 Pjax/decrypt listener，并须写明 `keypress` 的 Enter + Space 双分支与 Space 阻止默认滚动、`reverse()` 同步 `aria-expanded`）；本地定制地图的样式导入变更；加密策略单一来源四条链路与 §2.5 裁决记录列出的三处显式残留自判（必须写成「marker/search/加密生成三条链路 + GitHub Alert filter 已同源，`spoiler.js`/`meta-description.js`/`terms.js` 为显式残留」，不得写成全站零残留）；`.temp/` 探针清单（九个既有 + 10 个新增 `line-marker-*.test.js` + 1 个新增 `line-marker-artifacts.js` 产物脚本 + `line-marker-memory-fixture.js` 共享 fixture 模块）；删除旧 filters 条目。
 - [ ] **A3-6 运行批次 A 完整门禁**（`node .temp/theme-ui-toolbox.test.js` 的 share / favorite status 与 title / `aria-pressed` 断言必须在 A 批通过：A 阶段 lease 已是这两个 controller 的唯一 `.toolbox-status` 写入者，此处失败即 A1-4 / A1-5 / A1-7 搬运有偏差，不得顺延到 C）：
 
 ```bash
@@ -3411,7 +3430,8 @@ finally {
 | §6 handler 字段契约 | A2-10、A2-11、A2-12、A2-13、A2-14 |
 | §7 AI handler | A2-14、A2-22、A3-1 |
 | §8 Project handler | A2-13、A2-19 `test_project_grid_adjacency`、A3-2 |
-| §9 Alerts handler | A2-12、A2-22、A2-24 |
+| §9.1 Alerts handler 字段与 DOM | A2-12、A2-22、A2-24 |
+| §9.2 展开重绑与键盘契约（第 10–13 条） | A1-14（`keypress` 的 Enter + Space 双分支、Space 阻止默认滚动、`reverse()` 同步 `aria-expanded`、模块私有 `WeakSet` 幂等守卫、零 Pjax listener）、A1-2 `test_expands_contract`（静态）、A2-22 `test_expands_rebind_idempotence`（N=3 轮后 Enter 与 Space 各只切换一次） |
 | §10 Editor handler | A2-10、A1-13、A2-24 |
 | §11 LinkCard handler | A2-11 |
 | §12.1 模块树与职责 + §12.1.1 拆分边界 | A1-1/A1-2/A1-7/A1-8/A1-16、A2-18、A2-19、B2-1、B3-1 |
@@ -3567,7 +3587,7 @@ finally {
 - §2.3 的 `Handler` / `context` / `services` 与规格 5.2 逐字一致；`services` 为 `Object.freeze` 的每次 dispatch 独立实例。
 - §2.6 的 `OperationToken` / `LifecycleToken` / `MediaToken` 与 `retireOperation` / `invalidateLifecycle` / `enterFailed` / `reconcile` 与规格 16.3 逐字一致；`window.bgmControl` 只在既有 `toggle()` 外新增 `clearStatus(): void`。
 - `clearStatus()` 的调用点在 A1-8 / §1.3 表 / C3-4 三处均为 `applyState(true)`，与规格第 12.1.1 节第 1015 行、第 16.3 节第 1651 行一致。
-- `expands.reverse()` 的 `aria-expanded` 写入（A1-14）与 A2-22 探针的相对翻转断言一致，探针不硬编码目标字面量。
+- `expands` 的键盘契约全文一致：A1-14 片段的 `isEnter`（`'Enter'`）与 `isSpace`（`' '` 或旧别名 `'Spacebar'`）双分支、`reverse()` 内的 `aria-expanded` 写入，与 A2-22 探针的 Enter / Space 两条切换断言（各只切换一次、相对 DOM 初值断言）一致；探针不硬编码目标字面量，静态门禁 `test_expands_contract()` 只覆盖 `WeakSet` / `aria-expanded` / 零 Pjax listener，键盘运行时断言归 A2-22，A1 批不得据此声称已验证。
 - 导出名一致性：§2.3 的 `aiHandler` / `projectHandler` / `alertsHandler` / `editorHandler` / `linkCardHandler` 在 §2.3、A2-7 探针、A2-10..A2-14 步骤中完全一致；`metaDescription.projectText` 与 `defaultPipeline.projectText` 同一引用在 A2-7 断言。
 - `claimStatus` 调用形态全文一致：A1-2 的 `assert.match` 正则、A1-4 的单行片段、A1-5 的三元换行片段与 §2.6 裁决记录同形——`{ owner: '…' }` 字面量必须与 `claimStatus(` 处于同一调用内且 message 实参表达式内不含 `)`；实施时若把 message 改成含 `)` 的辅助函数调用，须同步放宽该正则（或改写调用形态），二者不得各行其是。
 - occurrence 终态快照的取法全文一致：A2-22 的 `renderMemoryFixture`、A2-23 的 `renderThroughRealPostRender` 与第 13.4 节派生名登记三处都写明「priority 8 只把 carrier 引用 push 进 `retainedCarriers`、`Post#render` resolve 之后才 map 终态」，与规格 §12.5「终态迁移只发生在 after 9」一致；禁止在任何 priority ≥ 10 处读 `data.markdown[CARRIER_SYMBOL]`。
