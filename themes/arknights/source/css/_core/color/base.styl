@@ -8,6 +8,12 @@
   --theme-adm-failure #C0392B
   --theme-adm-important #8B5CF6
 
+  // 链接卡片的次级文本色（描述 / 统计标签 / 统计图标 / 语言标记），两主题的映射在
+  // light.styl / dark.styl。本值是 theme-mode 属性就位前的兜底，取明色值；
+  // 与 --alert-title-color 同一口径：--theme-unimportant 明暗两套都不达 WCAG AA 正文级，
+  // 故按统一公式向黑 / 向白各混 15%。实算见 embed.styl 注释与 .temp/embed-contrast-check.js。
+  --embed-muted #646464
+
   // 顶栏毛玻璃底色的两套原值（常驻 token，单一事实来源）：不新造色值，只是把
   // header.styl 里 :root[theme-mode=light|dark] header 的两条 rgba 字面量提名为 token，
   // 供那两条消费。

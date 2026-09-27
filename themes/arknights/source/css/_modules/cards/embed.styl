@@ -1,0 +1,95 @@
+// <URL> 独占一行 → GitHub / Bilibili 元数据区块卡片（scripts/embed/ 产出，十三个类名的 DOM 见 scripts/embed/render.js）。
+//
+// 几何契约：卡片是整段替换，margin 1em 0 即该段的 margin，横向归零使盒左缘与
+// table / figure.highlight / blockquote / .expand-box 的横向偏移同为 0px
+// （theme-ui-alerts.test.js 的 assertCalloutGeometry 卡这条）。全站无 * { box-sizing: border-box }
+// 重置且 a 带 padding 0 3px，故 box-sizing 与 padding 都必须在本层显式声明。
+//
+// 次级色 --embed-muted（描述 / 统计标签 / 统计图标 / 语言标记共用）：--theme-unimportant
+// 两套都不达 WCAG AA 正文级，故按 --alert-title-color 同一公式修正 15%（明色向黑、暗色向白、
+// 8-bit 四舍五入），t = 0.15 即达标、不必逐级增大。底色为 --theme-bg-soft 叠在
+// #post-bg(--theme-bg-trans1) 叠在 --theme-background 上的逐层 alpha 合成结果：
+//   明 #767676 -> #646464  静止底 #f7f8f9 5.57:1 / 悬停底 #fbfbfb 5.72:1（原色 4.27:1 / 4.39:1）
+//   暗 #898989 -> #9b9b9b  静止底 #202122 5.80:1 / 悬停底 #2c2c2d 5.02:1（原色 4.61:1 / 3.99:1）
+// 标题 / 统计数值用 --theme-text：明 14.96:1 / 悬停 15.37:1，暗 9.25:1 / 悬停 8.00:1。
+// 数值由 .temp/embed-contrast-check.js 从产物 CSS 读回实算，非估计。
+.embed-card
+  box-sizing border-box
+  display grid
+  grid-template-columns auto minmax(0, 1fr)
+  grid-template-rows auto auto
+  align-items center
+  column-gap 12px
+  margin 1em 0
+  padding 10px 12px
+  border 1px solid var(--theme-border)
+  border-radius 0
+  background var(--theme-bg-soft)
+  color var(--theme-text)
+  text-decoration none
+  transition background-color .2s, border-color .2s
+  &:hover
+    background var(--theme-bg-soft-hover)
+    border-color var(--theme-highlight)
+  .embed-card__icon
+    grid-row 1 / span 2
+    grid-column 1
+    font-size 20px
+    line-height 1
+    text-align center
+    color var(--theme-highlight)
+  .embed-card__body
+    grid-row 1
+    grid-column 2
+    display flex
+    flex-wrap wrap
+    align-items baseline
+    column-gap 8px
+    min-width 0
+  .embed-card__title
+    font-weight bold
+    color var(--theme-text)
+  .embed-card__desc
+    color var(--embed-muted)
+    font-size 14px
+    min-width 0
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+  .embed-card__stats
+    grid-row 2
+    grid-column 2
+    display flex
+    flex-wrap wrap
+    column-gap 14px
+    row-gap 4px
+    color var(--embed-muted)
+    font-size 14px
+  .embed-stat
+    display inline-flex
+    align-items baseline
+    column-gap 4px
+  .embed-stat--plain
+    font-style italic
+  .embed-stat-label
+    // 只对读屏可见：图标已承担视觉语义，重复显示会造成冗余
+    position absolute
+    width 1px
+    height 1px
+    margin -1px
+    padding 0
+    overflow hidden
+    clip-path inset(50%)
+    white-space nowrap
+  .embed-stat-value
+    color var(--theme-text)
+
+// 降级形态的 __stats 是空盒：基础层不假设其非空，故本块只改 __body 的堆叠方向
+.embed-card--plain
+  .embed-card__body
+    flex-direction column
+    row-gap 2px
+
+@media ( prefers-reduced-motion: reduce )
+  .embed-card
+    transition none
