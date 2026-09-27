@@ -60,13 +60,10 @@ function firstPhysicalLine(src) {
   return lineEnd === -1 ? src : src.slice(0, lineEnd)
 }
 
-// Marked hands `start` the already sliced `src.slice(1)`, so both offset 0 and the code unit
-// right after it may sit on a line boundary the lexer has consumed; any later offset is only a
-// line start when the preceding code unit is CR or LF.
-const LEADING_SLICE_TOLERANCE = 1
-
+// Marked hands `start` the already sliced `src.slice(1)`, so offset 0 is the start of that slice
+// and every later candidate must be preceded by CR or LF to own a physical line start.
 function ownsLineStart(src, index) {
-  return index <= LEADING_SLICE_TOLERANCE || src[index - 1] === '\n' || src[index - 1] === '\r'
+  return index === 0 || src[index - 1] === '\n' || src[index - 1] === '\r'
 }
 
 function ownsPhysicalLine(src, index, token) {
@@ -74,7 +71,7 @@ function ownsPhysicalLine(src, index, token) {
     return false
   }
   const after = src.slice(index + token.length)
-  return after === '' || after === '\n' || after.startsWith('\n')
+  return after === '' || after.startsWith('\n')
 }
 
 function readOwnerToken(carrier, line) {

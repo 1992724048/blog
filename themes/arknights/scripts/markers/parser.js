@@ -384,7 +384,7 @@ function checkRequired(fields, context) {
       typeof context.fields[name] === 'object' &&
       context.fields[name].required === true
   )
-  if (required.length > 0 && required.every((name) => !Object.hasOwn(fields, name))) {
+  if (required.some((name) => !Object.hasOwn(fields, name))) {
     return failure('MISSING_REQUIRED_FIELD')
   }
   return null

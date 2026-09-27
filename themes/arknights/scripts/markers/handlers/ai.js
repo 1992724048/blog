@@ -1,19 +1,15 @@
 'use strict'
 
 const { createHash } = require('node:crypto')
+const { failure } = require('./shared/result')
+const { escapeHtmlText } = require('./shared/html')
+const { readFields } = require('./shared/fields')
 
 const AI_STATES = Object.freeze({
   PASS: Object.freeze({ key: 'pass', label: 'PASS', description: '已人工审核通过' }),
   EDIT: Object.freeze({ key: 'edit', label: 'EDIT', description: '经人工审核并被人工修改' }),
   UNKN: Object.freeze({ key: 'unkn', label: 'UNKN', description: '未知，无法判断' }),
   NONE: Object.freeze({ key: 'none', label: 'NONE', description: '未经人工审核' })
-})
-const HTML_TEXT_ENTITIES = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
 })
 const SOURCE_FIELDS = new Set(['content', 'excerpt'])
 const TEXT_MAX_LENGTH = 40
@@ -23,14 +19,6 @@ const ROBOT_ICON =
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>' +
   '<path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>'
-
-function failure(code, reason) {
-  return Object.freeze({ ok: false, code, reason })
-}
-
-function escapeHtmlText(value) {
-  return value.replace(/[&<>"']/g, character => HTML_TEXT_ENTITIES[character])
-}
 
 function pathNamespace(sourcePath) {
   if (sourcePath === null || sourcePath === undefined) {
@@ -62,16 +50,8 @@ const TIP_ROWS = Object.values(AI_STATES)
   )
   .join('')
 
-function readFields(input) {
-  if (input === null || typeof input !== 'object' || input.fields === null ||
-      typeof input.fields !== 'object') {
-    throw new TypeError('AI input fields must be an object')
-  }
-  return input.fields
-}
-
 function parse(input, _context) {
-  const fields = readFields(input)
+  const fields = readFields(input, 'AI')
   const state = fields.state
   if (typeof state !== 'string' || !Object.hasOwn(AI_STATES, state)) {
     return failure('AI_INVALID_STATE', 'AI state must be PASS, EDIT, UNKN, or NONE')

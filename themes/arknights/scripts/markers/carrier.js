@@ -79,8 +79,8 @@ function createRenderCarrier(options) {
   if (data === null || typeof data !== 'object' || store === null || typeof store !== 'object') {
     throw new TypeError('carrier data and store must be objects')
   }
-  if (!Array.isArray(fields)) {
-    throw new TypeError('carrier fields must be an array')
+  if (!Array.isArray(fields) || fields.length === 0) {
+    throw new TypeError('carrier fields must be a non-empty array')
   }
   if (Object.hasOwn(options, 'id') || Object.hasOwn(options, 'occurrences')) {
     throw new TypeError('carrier identity is store-owned')

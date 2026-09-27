@@ -27,10 +27,6 @@ function isLineStart(source, index) {
   return index === 0 || source[index - 1] === '\n' || source[index - 1] === '\r'
 }
 
-function isSafeMarkerPosition(source, index) {
-  return isLineStart(source, index) || !/\s/.test(source[index - 1])
-}
-
 function findLineEnd(source, index) {
   const newlineIndex = source.indexOf('\n', index)
   const carriageReturnIndex = source.indexOf('\r', index)
@@ -555,7 +551,7 @@ function scanMarkers(source) {
       }
     }
 
-    if (source.startsWith(HEADER_PREFIX, cursor) && isSafeMarkerPosition(source, cursor)) {
+    if (isLineStart(source, cursor) && source.startsWith(HEADER_PREFIX, cursor)) {
       const marker = linkSpans.contains(cursor) ? null : readMarker(source, cursor)
       if (marker !== null) {
         builder.addMarker(marker)

@@ -215,16 +215,17 @@ function wrapProjectGrids(html, groups, contents, injected) {
   if (groups.length === 0) {
     return html
   }
-  const ranged = injected.applyProjectGroups(
+  return injected.applyProjectGroups(
     html,
     groups,
     contents,
     createRangeFinder(html, contents),
     injected.projectGridHelpers
   )
-  return ranged
 }
 
+// `data` 是冻结签名内的未用形位：物化只经 injected.services 触达受控 Markdown 服务，
+// handler 的隔离边界由 buildOutcome 传入的 context 保证，无需回读 post data。
 function materializeField(value, state, data, field, registry, injected) {
   const source = injected.normalizeLineEndings(value)
   const occurrences = collectPendingOccurrences(state.store, field)

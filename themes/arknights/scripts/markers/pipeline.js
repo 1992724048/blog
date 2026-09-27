@@ -32,14 +32,9 @@ const ALLOWED_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
 const ALLOWED_IMAGE_SCHEMES = new Set(['http:', 'https:'])
 const SCHEME_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*):/
 const URL_NOISE_PATTERN = /[\u0000-\u0020]/g
-const HTML_TEXT_ENTITIES = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })
 const PENDING_STATES = new Set(['pending-render', 'excerpt-pending'])
 const environmentSlots = new WeakMap()
 const contextRegistrations = new WeakMap()
-
-function escapeHtmlText(value) {
-  return value.replace(/[&<>]/g, character => HTML_TEXT_ENTITIES[character])
-}
 
 function isAdjacent(source, leftEnd, rightStart) {
   const gap = source.slice(leftEnd, rightStart)
@@ -262,7 +257,7 @@ function createMarkerPipeline(options = {}) {
   const renderStates = new WeakMap()
   const projectionStates = new WeakMap()
   const failureHelpers = createSharedFailureHelpers()
-  const projectGridHelpers = Object.freeze({ isAdjacent, escapeHtmlText })
+  const projectGridHelpers = Object.freeze({ isAdjacent })
   const environment = { encryptConfig: {}, services: createMarkdownServices() }
 
   const beforePostRender = data => {

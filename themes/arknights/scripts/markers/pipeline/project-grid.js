@@ -49,13 +49,13 @@ function buildProjectGroups(source, field, projectOccurrences, injected) {
   return Object.freeze(groups)
 }
 
-// The fifth parameter carries the shared values pipeline.js injects; grid wrapping emits no new
-// user text, so only isAdjacent is read from it here.
+// The fifth parameter carries the shared values pipeline.js injects; grid wrapping only emits the
+// already materialized card HTML plus fixed wrapper tags, so it produces no new user text and
+// reads nothing from the injected helpers.
 function applyProjectGroups(value, groups, contents, rangeOf, injected) {
   if (groups.length === 0) {
     return value
   }
-  void injected
   let result = ''
   let cursor = 0
   for (const group of groups) {

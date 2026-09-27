@@ -1,36 +1,17 @@
 'use strict'
 
-const HTML_TEXT_ENTITIES = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
-})
+const { failure } = require('./shared/result')
+const { escapeHtmlText } = require('./shared/html')
+const { readFields } = require('./shared/fields')
+
 const LANGUAGE_PATTERN = /^[\S ]{1,64}$/u
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u
 const THEME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 const NUMBER_MIN = 1
 const NUMBER_MAX = 2147483647
 
-function failure(code, reason) {
-  return Object.freeze({ ok: false, code, reason })
-}
-
-function escapeHtmlText(value) {
-  return value.replace(/[&<>"']/g, character => HTML_TEXT_ENTITIES[character])
-}
-
-function readFields(input) {
-  if (input === null || typeof input !== 'object' || input.fields === null ||
-      typeof input.fields !== 'object') {
-    throw new TypeError('Editor input fields must be an object')
-  }
-  return input.fields
-}
-
 function parse(input, _context) {
-  const fields = readFields(input)
+  const fields = readFields(input, 'Editor')
 
   const language = Object.hasOwn(fields, 'language') ? fields.language : 'plaintext'
   if (typeof language !== 'string' || !LANGUAGE_PATTERN.test(language) ||

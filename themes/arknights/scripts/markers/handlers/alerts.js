@@ -1,5 +1,9 @@
 'use strict'
 
+const { failure } = require('./shared/result')
+const { escapeHtmlText } = require('./shared/html')
+const { readFields } = require('./shared/fields')
+
 const ALERT_TYPES = Object.freeze({
   NOTE: Object.freeze({ root: 'adm-note', icon: 'i-adm i-note', color: '#22BBFF' }),
   TIP: Object.freeze({ root: 'adm-tip', icon: 'i-adm i-success', color: '#00C853' }),
@@ -7,31 +11,15 @@ const ALERT_TYPES = Object.freeze({
   WARNING: Object.freeze({ root: 'adm-warning', icon: 'i-adm i-warning', color: '#FFEE22' }),
   CAUTION: Object.freeze({ root: 'adm-caution', icon: 'i-adm i-failure', color: '#C0392B' })
 })
-const HTML_TEXT_ENTITIES = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
-})
 const COLOR_PATTERN = /^(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 const DANGEROUS_URL_PATTERN = /\b(?:href|src)\s*=\s*["']?\s*(?:javascript|vbscript|data):/i
 const INTERNAL_STRING_PATTERN = /arknights-line-marker-v1:|data-arknights-line-marker|\u0000/u
 
-function failure(code, reason) {
-  return Object.freeze({ ok: false, code, reason })
-}
-
-function escapeHtmlText(value) {
-  return value.replace(/[&<>"']/g, character => HTML_TEXT_ENTITIES[character])
-}
-
-function readFields(input) {
-  if (input === null || typeof input !== 'object' || input.fields === null ||
-      typeof input.fields !== 'object') {
-    throw new TypeError('Alerts input fields must be an object')
-  }
-  return input.fields
+// render/toPlainText 只抛带 code 的错误，由 materialize.buildOutcome 的既有 catch 统一收敛为
+// 整枚 marker 失败；这样 render 保持 §5.2 的 `-> { html: string }` 单一返回形状，且
+// §13.2 的 HANDLER_SERVICE_ERROR / ALERTS_MARKDOWN_ERROR 在探针中可断言。
+function createAlertsError(code, reason) {
+  return Object.assign(new Error(code), { code, reason })
 }
 
 function isNonEmptyText(value) {
@@ -39,7 +27,7 @@ function isNonEmptyText(value) {
 }
 
 function parse(input, _context) {
-  const fields = readFields(input)
+  const fields = readFields(input, 'Alerts')
   const type = fields.type
   if (typeof type !== 'string' || !Object.hasOwn(ALERT_TYPES, type)) {
     return failure('ALERTS_INVALID_TYPE', 'Alerts type must be NOTE, TIP, IMPORTANT, WARNING, or CAUTION')
@@ -74,8 +62,9 @@ function parse(input, _context) {
 }
 
 function callMarkdownService(services, method, source, context) {
+  const serviceCode = 'HANDLER_SERVICE_ERROR'
   if (services === null || typeof services !== 'object' || typeof services[method] !== 'function') {
-    throw new Error('Alerts markdown service is unavailable')
+    throw createAlertsError(serviceCode, 'Alerts markdown service is unavailable')
   }
   let result
   try {
@@ -84,26 +73,21 @@ function callMarkdownService(services, method, source, context) {
       occurrenceId: context.occurrenceId
     })
   } catch (error) {
-    if (error !== null && typeof error === 'object' && error.code === 'HANDLER_SERVICE_ERROR') {
+    if (error !== null && typeof error === 'object' && error.code === serviceCode) {
       throw error
     }
-    throw new Error('Alerts markdown service failed')
+    throw createAlertsError(serviceCode, 'Alerts markdown service failed')
   }
   if (typeof result !== 'string') {
-    throw new Error('Alerts markdown service returned a non-string value')
+    throw createAlertsError(serviceCode, 'Alerts markdown service returned a non-string value')
   }
   return result
 }
 
 function render(node, context, services) {
-  let bodyHtml
-  try {
-    bodyHtml = callMarkdownService(services, 'renderMarkdown', node.body, context)
-  } catch {
-    return failure('HANDLER_SERVICE_ERROR', 'Alerts markdown render is unavailable')
-  }
+  const bodyHtml = callMarkdownService(services, 'renderMarkdown', node.body, context)
   if (INTERNAL_STRING_PATTERN.test(bodyHtml) || DANGEROUS_URL_PATTERN.test(bodyHtml)) {
-    return failure('ALERTS_MARKDOWN_ERROR', 'Alerts markdown output is not safe to inline')
+    throw createAlertsError('ALERTS_MARKDOWN_ERROR', 'Alerts markdown output is not safe to inline')
   }
 
   const type = ALERT_TYPES[node.type]
@@ -124,12 +108,7 @@ function render(node, context, services) {
 }
 
 function toPlainText(node, context, services) {
-  let body
-  try {
-    body = callMarkdownService(services, 'markdownToPlainText', node.body, context)
-  } catch {
-    throw new Error('Alerts markdown projection is unavailable')
-  }
+  const body = callMarkdownService(services, 'markdownToPlainText', node.body, context)
   return `${node.type} ${node.title}\n${body}`
 }
 

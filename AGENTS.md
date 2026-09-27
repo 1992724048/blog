@@ -39,8 +39,8 @@
 | 站点自定义样式 | `themes/arknights/source/css/_custom/custom.styl` | 字体栈 / 头像留白 / logo 悬停角标（图片外左下 / 右上） / 文本选中色 / `??内容??` 遮盖等站点级样式；`arknights.styl` 以 `@import '_custom/*'` 通配导入 |
 | 底部按钮组 | `themes/arknights/layout/includes/bottom-btn.pug` + `source/css/_page/post/bottom_btn.styl` | 右列单列 flex 栈（列内 6px 间隙）；返回上一页 / 工具箱（与右列共用 --btn-inset 底部基线、与切换主题底缘齐平；扇形展开 `.toolbox-open`、五项固定角度无层叠、悬停抽出、展开项轻度投影）；标注模式（`body.annotating` + `.toolbox-annotate.active`）与选中文字工具栏 `#annotate-toolbar`（at-* 按钮 / `.at-colors` 五色板 / `.copied` 反馈）；`hl-mark` 五色（`data-color`）/ 分享 `.copied` / 收藏 `.saved` 视觉态；`Toolbox.ts` 保留开合、标注/分享/收藏与 `data-action` 分发，截图/BGM 委托 `ScreenshotControl.ts` / `BgmControl.ts` 独立控制器；标注 / 收藏持久化 `arknights:*`，载入 + pjax 恢复 |
 | 定制脚本 | `themes/arknights/scripts/`（filters / tags / generator） | 术语自动链接、文章加密、搜索数据、build_time、minify、Alert、`??内容??` 遮盖（`filters/spoiler.js`，悬停显示）及 `meta-description.js`；Alert/Spoiler/Terms 保持独立实现，旧 `filters/ai-badge*.js` / `filters/projects*.js` 已删除 |
-| 标记解释器 | `themes/arknights/scripts/markers/` | `lexer.js` / `parser.js` / `token.js` 提供严格语法、保护区与 store-owned occurrence；`carrier.js` 持有单次 render 生命周期及安全 bridge；`marked-extension.js` 只安装无全局副作用的本地 Marked provenance 扩展；`sentinel.js` 负责连续 PJ 临时哨兵；`pipeline.js` 负责 before 4 / after 9、审计、恢复、投影与 fail-closed；`register.js` 是唯一自动注册入口；`handlers/ai.js` / `handlers/projects.js` 负责业务校验、DOM 与纯文本投影 |
-| 项目卡片交互 | `source/projects/index.md` + `markers/handlers/projects.js` + `_src/include/ProjectTooltip.ts` | `handlers/projects.js` 保留 `.projects-grid > .project-card`、`--card-img`、懒加载图片、`.project-name` 与安全 URL/CSS；`ProjectTooltip.ts` 仅用模块私有 `WeakSet` 绑定卡片 `mousemove -> --mx/--my` 并在 Pjax 后重绑，不改变卡片 DOM 或 CSS |
+| 标记解释器 | `themes/arknights/scripts/markers/` | `lexer.js` / `parser.js` / `token.js` 提供严格语法、保护区与 store-owned occurrence；`carrier.js` 持有单次 render 生命周期及安全 bridge；`marked-extension.js` 只安装无全局副作用的本地 Marked provenance 扩展；`pipeline.js` 负责 before 4 / after 9、审计、恢复、投影与 fail-closed，连续 Project 分组在 `pipeline/project-grid.js`；`register.js` 是唯一自动注册入口；`handlers/{ai,project,alerts,editor,link-card}.js` 负责业务校验、DOM 与纯文本投影，`handlers/shared/` 是 `failure`/`escapeHtmlText`/`readFields`/`isSafeUrl` 的单一事实来源 |
+| 项目卡片交互 | `source/projects/index.md` + `markers/handlers/project.js` + `_src/include/ProjectTooltip.ts` | `handlers/project.js` 保留 `.projects-grid > .project-card`、`--card-img`、懒加载图片、`.project-name` 与安全 URL/CSS；`ProjectTooltip.ts` 仅用模块私有 `WeakSet` 绑定卡片 `mousemove -> --mx/--my` 并在 Pjax 后重绑，不改变卡片 DOM 或 CSS |
 | JS 源码（TS） | `themes/arknights/source/js/_src/` | 主入口 `tsconfig.json` → `arknights.js`；`search/search.ts`（独立 tsconfig）→ `search.js` |
 | 中文字体 | `themes/arknights/layout/includes/meta-data.pug` | HarmonyOS Sans SC，jsDelivr 分包 CDN（`@1.1.0` 版本锁死） |
 | 缓存版本号 | 生效机制：`meta-data.pug` `cssVersion` / `js-data.pug` `jsVersion`；备用机制：`_config.arknights.yml` `stylesheets` 版本参数（当前未使用） | 对应产物变更后同步递增，避免 Cloudflare / 浏览器缓存旧版 |
@@ -68,18 +68,32 @@ themes/arknights/scripts/
     ├── database.js                # 仅消费当前文档身份与全部 hash 有效 sidecar 的搜索条目组装
     └── generator.js               # priority 1100 捕获 / priority 20 自愈 / json 生成器接线
 themes/arknights/scripts/markers/
-├── lexer.js                  # 原始 Markdown candidate、保护区、等长 masked projection
-├── parser.js                 # 严格 [#]<NAME>{...} 参数语法
+├── lexer.js                  # 原始 Markdown candidate、保护区、block-only header 判定与逐字 range
+├── parser.js                 # 严格 [#]NAME| 字段语法与绑定前校验
 ├── token.js                  # opaque token、store-owned occurrence/context/state
 ├── carrier.js                # 单次 render carrier 与 data.markdown descriptor bridge
 ├── marked-extension.js       # 本地 Marked token provenance、ownership 与 renderer 委托
-├── registry.js               # AI/PJ handler 注册与分发
-├── sentinel.js               # 连续 PJ 的 collision-safe 临时哨兵
+├── registry.js               # 五类 handler 注册与分发
 ├── pipeline.js               # before 4 / after 9、审计、恢复、投影、fail-closed
+├── pipeline/                 # 子模块零互引，共享值由 pipeline.js 显式注入
+│   ├── materialize.js        # 字段物化、handler 派发与 Project 网格包裹
+│   ├── failure.js            # 恢复层 LF 化与失败序列化的唯一实现
+│   ├── project-grid.js       # 连续 Project 的 sourceRange 邻接分组
+│   └── projection.js         # 投影合并与 <!-- more --> 派生
 ├── register.js               # markers 子树唯一 Hexo 自动注册入口
 └── handlers/
     ├── ai.js                 # AI 四态 DOM、校验与纯文本投影
-    └── projects.js           # PJ 字段/URL/CSS/DOM 校验与投影
+    ├── project.js            # Project 字段/URL/DOM 校验与投影
+    ├── alerts.js             # Alerts 五类型提示盒与受控 Markdown service
+    ├── editor.js             # Editor 固定 DOM 与原样 body
+    ├── link-card.js          # LinkCard handler 契约、渲染与纯文本投影
+    ├── link-card-style.js    # LinkCard 受限 CSS declaration/value grammar 与规范序列化
+    ├── link-card-style-root-url.js # RootUrl 单次 percent-decode 路径授权策略（LINK_CARD_STYLE_RESOURCE）
+    └── shared/               # 五个 handler 共用的单一事实来源
+        ├── result.js         # failure(code, reason) 冻结失败形状
+        ├── html.js           # escapeHtmlText
+        ├── fields.js         # readFields(input, handlerName)
+        └── url.js            # isSafeUrl（Project 与 LinkCard 同一安全策略）
 .github/workflows/deploy.yml  # CI：构建并部署 GitHub Pages
 .temp/                        # 本地探针（gitignore，不提交）
 ├── marker-core.test.js

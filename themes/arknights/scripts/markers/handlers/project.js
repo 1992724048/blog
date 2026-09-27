@@ -1,52 +1,15 @@
 'use strict'
 
-const ABSOLUTE_HTTP_URL_PATTERN = /^https?:\/\//i
-const UNSAFE_URL_CHARACTER_PATTERN = /[\u0000-\u0020\u007f-\u009f\s\\"'`{};]/u
-const HTML_ENTITIES = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
-})
+const { failure } = require('./shared/result')
+const { escapeHtmlText } = require('./shared/html')
+const { readFields } = require('./shared/fields')
+const { isSafeUrl } = require('./shared/url')
+
 const CSS_STRING_ESCAPES = Object.freeze({ '"': '\\"', '\\': '\\\\' })
 const PROJECTS_PAGE_TYPE = 'projects'
 
-function failure(code, reason) {
-  return Object.freeze({ ok: false, code, reason })
-}
-
-function isSafeUrl(value) {
-  if (typeof value !== 'string' || value === '' || UNSAFE_URL_CHARACTER_PATTERN.test(value)) {
-    return false
-  }
-  if (value.startsWith('/')) {
-    return !value.startsWith('//')
-  }
-  if (!ABSOLUTE_HTTP_URL_PATTERN.test(value)) {
-    return false
-  }
-  try {
-    return new URL(value).hostname !== ''
-  } catch {
-    return false
-  }
-}
-
-function escapeHtmlText(value) {
-  return value.replace(/[&<>"']/g, character => HTML_ENTITIES[character])
-}
-
 function cssUrl(value) {
   return `url("${value.replace(/["\\]/g, character => CSS_STRING_ESCAPES[character])}")`
-}
-
-function readFields(input) {
-  if (input === null || typeof input !== 'object' || input.fields === null ||
-      typeof input.fields !== 'object') {
-    throw new TypeError('Project input fields must be an object')
-  }
-  return input.fields
 }
 
 function parse(input, context) {
@@ -54,7 +17,7 @@ function parse(input, context) {
     return failure('PROJECT_INVALID_PAGE', 'Project markers require a projects page')
   }
 
-  const fields = readFields(input)
+  const fields = readFields(input, 'Project')
   const name = fields.name
   if (typeof name !== 'string' || name.trim() === '') {
     return failure('PROJECT_INVALID_FIELD', 'Project name must be a non-empty string')
