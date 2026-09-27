@@ -40,8 +40,8 @@ header
   border-bottom var(--topbar-border-w) solid var(--theme-unimportant)
 
 // 毛玻璃底色：仅覆盖顶栏（取 --theme-bg-trans0 原色值降 alpha 至 .7），弹层 / 下拉仍用 --theme-bg-trans0
-// 取值来自 _core/color/base.styl 的常驻 token（--topbar-bg-light / --topbar-bg-dark）：
-// 导航选中项栏外竖排标签的反色底经 --nav-invert-bg 指向对面那一条，两处不再各持一份字面量
+// 取值来自 _core/color/base.styl 的常驻 token（--topbar-bg-light / --topbar-bg-dark），
+// 常驻而非主题块内，故两套主题在任一时刻都各自持有对方色板的原值
 :root[theme-mode=light] header
   background-color var(--topbar-bg-light)
 :root[theme-mode=dark] header
@@ -198,7 +198,7 @@ ol.navContent
   outline-offset -2px
 
 // 减动效横切块：覆盖元素集合与拆分前逐条一致（header / ol.navContent / 搜索相关 / 名称两态 /
-// 图标两态 / 桌面凸出段 / 桌面选中项栏外竖排标签），只是按逻辑分组拆成短规则——原先挤在一行的
+// 图标两态 / 桌面凸出段），只是按逻辑分组拆成短规则——原先挤在一行的
 // 超长逗号列表一旦被误写成嵌套规则就会编译出重复片段（ol.navContent .navContent > ...），
 // 拆分后每个选择器独立成行，风险面收敛且新增条目不必再挤进一行
 @media (prefers-reduced-motion: reduce)
@@ -209,15 +209,6 @@ ol.navContent
   .navBlockIcon > .navItemTitle > i, .navItem.active > .navBlockIcon > .navItemTitle > i
     transition none
   .navContent > .navItem > :is(.navBlock, .navSecond)::after
-    transition none
-  // 竖排标签的显 / 隐时序（flex_layout.styl 桌面块）：显形规则与基础（默认隐藏）规则各一条，
-  // 另有换页抑制规则一条（header[data-nav-hover-stale]:hover，data 状态位由 Header.ts 写），
-  // 三条一并降为瞬时——transition none 后 opacity 与 visibility 同帧生效；
-  // 声明点与该规则同文件外，用完整选择器保持唯一
-  .navContent > .navItem > .navBlockIcon::before,
-  header:hover .navContent > .navItem.active > .navBlockIcon::before,
-  header:focus-within .navContent > .navItem.active > .navBlockIcon::before,
-  header[data-nav-hover-stale]:hover .navContent > .navItem.active > .navBlockIcon::before
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl
