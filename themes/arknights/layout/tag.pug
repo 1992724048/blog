@@ -22,22 +22,5 @@ block content
     include includes/archive-aside.pug
     #Archives
       h1 #{__('menu.tag.name')}: #{page.tag}
-      #Archives-bg
-        - let year
-        - page.posts.each((article) => {
-          - let yearMonth = date(article.date, 'YYYY-MM')
-          //- 摘要复用 frontmatter 的 description（纯文本）；缺失 / 空白则整块不渲染
-          - let summary = (typeof article.description === 'string' ? article.description : '').trim()
-          if yearMonth !== year
-            - year = yearMonth
-            h2= year
-          .article-item
-            .control-archive
-              time= date(article.date, 'MM-DD')
-            a(href=url_for(article.path) target="_blank")
-              = article.title || __('post.noTitle')
-            if summary
-              .list-excerpt= summary
-        - })
-        if config.per_page != 0
-          #paginator!= paginator()
+      - const excerptAsPopup = false
+      include includes/archive-items.pug

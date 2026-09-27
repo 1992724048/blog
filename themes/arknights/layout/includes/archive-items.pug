@@ -1,0 +1,25 @@
+//- 归档 / 分类 / 标签三页共用的条目列表片段：三模板逐行同构，差异只由调用点的
+//- excerptAsPopup 变量控制（归档页 true = 悬停弹窗，分类 / 标签页 false = 行内摘要）。
+//- 摘要数据源是 frontmatter 的 description（纯文本，非 marked 产物），故用 Pug 的
+//- `=` 转义输出；缺失 / 空白经 .trim() 归一后整块不渲染，不产生空壳元素。
+#Archives-bg
+  - let year
+  - page.posts.each((article) => {
+    - let yearMonth = date(article.date, 'YYYY-MM')
+    - let summary = (typeof article.description === 'string' ? article.description : '').trim()
+    if yearMonth !== year
+      - year = yearMonth
+      h2= year
+    .article-item
+      .control-archive
+        time= date(article.date, 'MM-DD')
+      a(href=url_for(article.path) target="_blank")
+        = article.title || __('post.noTitle')
+      if summary
+        if excerptAsPopup
+          .excerpt-popup= summary
+        else
+          .list-excerpt= summary
+  - })
+  if config.per_page != 0
+    #paginator!= paginator()

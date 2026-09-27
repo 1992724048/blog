@@ -69,12 +69,24 @@
   box-sizing border-box
   padding 10px
   padding-bottom 60px
+  // 列表条目几何的两个共用尺度在此立为 token：条目水平内边距与日期列宽。
+  // 二者共同决定标题链接的左缘（内边距 + 日期列宽）与左右边界，弹窗的等宽定位
+  // 也复用同一组值，故「弹窗与链接等宽」是结构性的而非靠算式维护的。
+  // 本文件中 .control-archive / .article-item .list-excerpt / .excerpt-popup 三个选择器
+  // 均只在 #Archives-bg 内使用，故不设 var() 回退值。
+  --list-item-pad-x 20px
+  --list-date-w 55px
 
 .article-item
-  padding-inline 20px
+  padding-inline var(--list-item-pad-x)
   display flex
   // 摘要（.list-excerpt）宽度 100% 故自动换行到标题下方；无 wrap 时它会被压在同一行右侧
   flex-wrap wrap
+  // 日期（time 用 Bender）与标题（正文字体栈）字体不同，line-height: normal 下两者的
+  // 行盒高度与基线偏移都按各自字体度量算出，stretch 会让两段文字基线错开；
+  // baseline 对齐按各自首条基线就位，与具体字体度量无关，故在任何平台都恰好齐平。
+  // 摘要占位的那条 flex 线上只有一个元素，基线对齐退化为不拉伸，位置与原先 stretch 一致。
+  align-items baseline
   position relative
   margin-bottom 15px
   &::after
@@ -85,13 +97,12 @@
     bottom -5px
     left 15px
     border-bottom: 1px var(--theme-unimportant-trans) solid
-  // 摘要左缘与标题对齐（复用日期列宽 55px = .control-archive 的宽度），
-  // 使其视觉上从属于标题而非日期
+  // 摘要左缘与标题对齐（复用日期列宽），使其视觉上从属于标题而非日期
   .list-excerpt
     box-sizing border-box
     width 100%
     margin-top 6px
-    padding-left 55px
+    padding-left var(--list-date-w)
 
 #Categories
   height fit-content
@@ -111,7 +122,61 @@
     text-align center
 
 .control-archive
-  width 55px
+  width var(--list-date-w)
   display inline-block
   & + a
-    width calc(100% - 55px)
+    width calc(100% - var(--list-date-w))
+
+// 归档页条目摘要的悬停弹窗。基础块即「行内摘要」形态（静态定位、随条目占位），
+// 供无 hover 能力的设备（触屏等）直接读到摘要；具备 hover 能力时由下面的
+// @media ( hover: hover ) 块改造成浮层。
+// 同一份 DOM 在两种形态间切换，故不渲染两份摘要，可访问性树里也只出现一次。
+.excerpt-popup
+  box-sizing border-box
+  width 100%
+  margin-top 6px
+  padding-left var(--list-date-w)
+  text-align left
+  white-space normal
+
+@media ( hover: hover )
+  .excerpt-popup
+    position absolute
+    // 包含块是 .article-item 的 padding box（该元素 position: relative 且只 padding-inline，
+    // 故其宽即条目外宽 W）。left 取「条目内边距 + 日期列宽」= 标题链接左缘，
+    // right 取「条目内边距」= 标题链接右缘；width 不声明、由两端解出，
+    // 于是弹窗盒与标题链接盒逐字等宽等位，无需维护任何算式。
+    left calc(var(--list-item-pad-x) + var(--list-date-w))
+    right var(--list-item-pad-x)
+    // +6px 恰落在本条目分隔线（bottom -5px + 1px 边）的下沿，不压线
+    top calc(100% + 6px)
+    width auto
+    margin-top 0
+    padding 8px 10px
+    z-index 30
+    // 显隐走 visibility + opacity：visibility hidden 同时把摘要移出可访问性树，
+    // 故仅在弹窗真正可见（即标题链接获焦或被悬停）时才被读出，无需 aria-describedby
+    visibility hidden
+    opacity 0
+    transform translateY(4px)
+    transform-origin top left
+    transition opacity 160ms, transform 160ms, visibility 0s linear 160ms
+    // 视觉沿用 AI 徽标提示浮层（.ai-badge__tip）：跟随主题的半透明底 + 轻度毛玻璃
+    // + 轻投影，不设边框 / 圆角 / 箭头，保持同一套浮层语言
+    background-color var(--theme-bg-trans1)
+    -webkit-backdrop-filter blur(1px)
+    backdrop-filter blur(1px)
+    box-shadow 0 4px 12px rgba(0, 0, 0, .05)
+  // 触发点是日期列之后那个标题链接（.control-archive + a 与既有链接规则同一写法），
+  // 不把整个条目设为触发区，避免指针扫过日期列时误弹
+  .control-archive + a:hover + .excerpt-popup,
+  .control-archive + a:focus-within + .excerpt-popup
+    visibility visible
+    opacity 1
+    transform translateY(0)
+    transition-delay 0s
+
+@media ( hover: hover ) and ( prefers-reduced-motion: reduce )
+  .excerpt-popup
+    transition none
+    transform none

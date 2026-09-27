@@ -108,18 +108,22 @@ article
     position relative
     bottom -6px
 
-// 列表页摘要的共享视觉契约：首页卡片与归档 / 分类 / 标签条目共用同一套文本排版
+// 列表页摘要的共享视觉契约：行内摘要（首页 / 分类 / 标签）与归档页悬停弹窗共用同一套文本排版
 // 数据源是 frontmatter 的 description（纯文本，非 marked 产物），故只需文本级样式；
 // 与标题的间距 / 缩进等几何由各容器上下文另行给出。
+// 字号取 16px，与 aside footer 的「使用主题」一行同为 body 继承值（即 medium 绝对字号关键字），
+// 但摘要显式声明 font-weight normal，故不随该行的 Bender + bold 一同加粗。
 // 颜色取 --theme-text（明 #222 / 暗 #c4c4c4，对两套底色均 >10:1，满足 WCAG AA 正文门槛），
 // 不取容器继承的 --theme-unimportant（#767676 对浅色底仅 4.16:1，未达 4.5:1）。
-.list-excerpt
+.list-excerpt, .excerpt-popup
   color var(--theme-text)
-  font-size small
+  font-size 16px
+  font-weight normal
   line-height 150%
-  // 首页卡片：摘要夹在标题与「阅读文章 +」之间，下边距让开负外边距的按钮
-  .recent-post &
-    margin 12px 0 28px 0
+
+// 首页卡片：摘要夹在标题与「阅读文章 +」之间，下边距让开负外边距的按钮
+.recent-post .list-excerpt
+  margin 12px 0 28px 0
 
 .post-sticky
   background-color var(--theme-highlight)
