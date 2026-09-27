@@ -277,8 +277,10 @@ module.exports = { placeholderHtml, countExact, materializeField }
 
 // pipeline/project-grid.js
 module.exports = { buildProjectGroups, applyProjectGroups }
-// buildProjectGroups(source, field, projectOccurrences) -> Group[]    // Group = { occurrenceIds, start, end }
+// buildProjectGroups(source, field, projectOccurrences, injected) -> Group[]    // Group = { occurrenceIds, start, end }
 // applyProjectGroups(value, groups, contents, rangeOf, injected) -> string | null
+// 两个函数各多出第 4 / 第 5 个形参 injected 承载 projectGridHelpers（见下方「buildProjectGroups 第 4 形参裁决记录」）；
+// applyProjectGroups 的 injected 当前不被消费（网格包裹不产生需要转义的新文本），以显式形参保留而不删
 
 // pipeline/projection.js
 module.exports = { deriveExcerptProjection, readProjectedText }
@@ -296,7 +298,18 @@ registerMarkerFilters(hexoContext, pipeline = defaultPipeline)
   -> Object.freeze({ pipeline, before, after, markedUse, priorities: Object.freeze({ before: 4, after: 9, markedUse: 0 }) })
 ```
 
-`projectGridHelpers` 是 `pipeline.js` 显式注入 `project-grid.js` 的共享值，形状固定为 `Object.freeze({ isAdjacent, escapeHtmlText })`：
+`projectGridHelpers` 是 `pipeline.js` 显式注入 `project-grid.js` 的共享值，形状在实现中收窄为 `Object.freeze({ isAdjacent })`（A2-18 落地：网格包裹不产生需要转义的新文本，`escapeHtmlText` 由 `pipeline/failure.js` 的共享 failure helpers 提供，无第二处注入需求，故不注入，避免同一能力出现两个注入来源）。
+
+**`buildProjectGroups` 第 4 形参裁决记录（A3 补记）**
+
+| 事实 | 内容 |
+| --- | --- |
+| 偏离点 | 冻结签名只有 3 个形参；实现追加第 4 形参 `injected`（`applyProjectGroups` 同理追加第 5 个），用于接收 `projectGridHelpers` |
+| 为什么必须追加 | GC14 要求「pipeline 子模块之间不得互相 `require`、共享值由 `pipeline.js` 显式注入」；`isAdjacent` 定义在 `pipeline.js`，若不在子模块内 `require` 父模块（GC14 同时禁止子模块反向 `require('pipeline.js')`），就只剩追加注入形参或改工厂式导出两条路 |
+| 采纳方案与理由 | 保留追加形参（不改为 `createProjectGridHelpers(injected)` 工厂式导出） |
+| 冻结条款核对 | GC14 与 §2.4 冻结的是**导出名、参数顺序、返回结构、第二入口**四项：导出名仍为 `{ buildProjectGroups, applyProjectGroups }`，前 3 / 前 4 个形参顺序与语义不变，返回结构 `Group[] = { occurrenceIds, start, end }` 不变，`module.exports` 仍只有这一处入口；追加形参只新增一个**可选**的收尾注入位 |
+| 审查结论 | @oracle 裁定合规（显式注入正是 GC14 的要求形态），并在 A2 修复轮落为实现事实；A3 只需把偏离登记进文档，不改代码 |
+| 门禁 | `.temp/line-marker-pipeline.test.js` 的 `test_pipeline_submodule_dependencies` 断言子模块零互引、零反向 `require('pipeline.js')`、零 `fs`/`net`/hexo 依赖（绿） |
 
 **环境获取点（`createMarkerPipeline` / `registerMarkerFilters` 的职责分界）**
 
@@ -2624,6 +2637,8 @@ git commit -m "refactor(tags): 删除旧标签并同步内容文档" -m "删除 
 
 ## 7. 任务 C — GitHub Alert、导航与 BGM 修复
 
+> **A 批遗留归属（A3 登记）**：⑨L6「A2-22 的 Expands 重绑幂等段」**不属于 C 批，也不属于 A 批**，改由 D 批的 `.temp/line-marker-handlers.test.js` 重建时补齐（jsdom + `themes/arknights/source/js/arknights.js`：N=3 轮 `pjax:success` / `hexo-blog-decrypt`、每 `.ex-header` 恰 1 组 click/keypress、单次 Enter 与 Space 各切换一次）。C 批只做 §7.1–§7.3 三项 UI 行为修复，不承接该段。另一条「逐阶段拒绝注入段」（原 ⑨L7）已由 A3 落进现存的 `.temp/line-marker-hexo.test.js`，不属遗留。
+
 ### 7.1 C1 — GitHub Alert 明暗交互态
 
 **Files**：`source/css/_custom/custom.styl`、`source/css/_core/base.styl`、`source/css/_page/article.styl`、`.temp/theme-ui-alerts.test.js`（新增）
@@ -3098,6 +3113,17 @@ git commit -m "fix(theme-ui): 修复告警导航与音乐状态" -m "GitHub Aler
 
 ## 8. 任务 D — 最终门禁与活文档收口
 
+> **A 批遗留与门禁缺口归属（A3 登记，D 批必须承接）**
+>
+> | 编号 | 事项 | D 批承接方式 |
+> | --- | --- | --- |
+> | ⑨L6 | Expands 重绑幂等段（jsdom + `source/js/arknights.js`：N=3 轮 `pjax:success` / `hexo-blog-decrypt`、每 `.ex-header` 恰 1 组 click/keypress、单次 Enter 与 Space 各切换一次） | 随 `.temp/line-marker-handlers.test.js` 重建时补齐 |
+> | N-1 | `.temp/link-card-equivalence.test.js` 原用 `git show HEAD:` 取 pristine 基线，提交后必然 `MODULE_NOT_FOUND` | **已在 A3 一行修好**（基线固定为 `69af105`）；D 批重建该探针时沿用固定 ref，不再跟随 HEAD |
+> | N-4 | 规模门禁清单只覆盖 `pipeline.js` 与 9 个 TS 文件，未含 `handlers/link-card-style.js`（437 行）与 `handlers/lexer.js`（587 行） | 两文件按**评估线**登记（AGENTS.md 已登记不拆理由）；D 批把二者加入 `.temp/line-marker-pipeline.test.js` 的评估线断言，使其增长可见 |
+> | 丢失探针 | 21 个旧门禁探针源码永久丢失、按用户裁决不重建 | **D 批重建是恢复旧协议回归网的唯一时机**；在重建完成前，任何批次都不得声称旧协议已被回归覆盖 |
+> | 存活探针待补段 | 除 L6 外，`line-marker-hexo.test.js` 的逐阶段拒绝注入段已由 A3 落成 | D 批只需复核，不需重建 |
+> | 站点交互 | 截真实 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与 Pjax 重绑、Alerts 展开/折叠 | 真实有头浏览器人工验收（GC10），D3 前必须完成或如实标注未完成 |
+
 ### 8.1 D1 — synthetic artifact 与跨进程 ownership 探针
 
 **Files**：`.temp/line-marker-artifacts.js`（新增）、`.temp/line-marker-fixture-ownership.test.js`（新增）
@@ -3450,10 +3476,25 @@ finally {
 
 | 批次 | 唯一 commit | 建议提交信息 |
 | --- | --- | --- |
-| A（A1/A2/A3） | A3 提交 | `feat(markers): 实现按行内容工具协议` |
+| 批次 | 提交 | 建议提交信息 |
+| --- | --- | --- |
+| A（A1/A2/A3） | A1 控制器拆分 / A2 运行时与 handler 三个里程碑 / A2 审查修复 / A3 激活与同步，共 6 个 | 见下方 A 批实际序列 |
 | B（B1..B4） | B4 提交 | `refactor(tags): 删除旧标签并同步内容文档` |
 | C（C1..C3） | C3 提交 | `fix(theme-ui): 修复告警导航与音乐状态` |
 | D（D1..D3） | D3 提交 | `docs(markers): 同步按行协议最终门禁` |
+
+**A 批实际提交序列（用户裁决 GC12 改为「每任务多 commit」后的结果）**
+
+| 序号 | 任务 | commit | 提交信息 |
+| --- | --- | --- | --- |
+| 1 | A1 | `6cc23d4` | `refactor(theme-ui): 拆分工具箱控制器为独立模块` |
+| 2 | A2 里程碑 1 | `67543a7` | `feat(markers): 改写按行 marker 运行时为 block-only` |
+| 3 | A2 里程碑 2 | `b0d1f79` | `feat(markers): 实现五类按行 marker handler` |
+| 4 | A2 里程碑 3 | `69af105` | `refactor(markers): 拆分 pipeline 子模块并接线五类 marker` |
+| 5 | A2 审查修复 | `75a86af` | `fix(markers): 修正行中 marker 捕获并收敛 handler 重复实现` |
+| 6 | A3 | 见 §12 A 行 | `feat(markers): 激活按行协议并迁移内容与活文档` |
+
+GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体量过大（Toolbox 六模块拆分 + markers 全子树 + 四处内容迁移 + 活文档）不可 review，已由用户显式裁决改为**每任务多 commit**，B/C/D 仍各一批一提交。本表即该裁决的登记处；A3 的 commit hash 在 §12 A 行回填。
 
 每批只暂存该批列出的文件；不执行 `git push`；审查发现的问题由原执行 Agent 追加独立 commit 并重跑该批门禁。
 
@@ -3461,11 +3502,11 @@ finally {
 
 ## 12. 实施状态
 
-> 本节在批次 D（D3-2）时填写，实施前保持空白占位由 D 任务的执行 Agent 按实际 commit 与门禁输出回填。
+> B/C/D 三行在对应批次完成时由该批执行 Agent 按实际 commit 与门禁输出回填；A 行已按 A3 实际结果回填。
 
 | 批次 | commit | 门禁结果 | 真实有头浏览器验收 |
 | --- | --- | --- | --- |
-| A | 待填 | 待填 | 待填 |
+| A | `6cc23d4` / `67543a7` / `b0d1f79` / `69af105` / `75a86af` / A3（激活与同步，hash 见 `git log --oneline -6`） | 全绿：12 个现存探针退出码全 0；全部改动 JS `node --check` 通过；`npm --prefix themes/arknights run build` 产物与仓库内 `arknights.js` 逐字节一致；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 U+0000 零命中；`public/search.json` 形态合规。**但 21 个旧门禁探针源码永久丢失、不重建，因此本批没有旧协议回归网** | 未完成（GC10）：AI tooltip、项目悬停、告警盒展开/折叠、真实截图 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与站内 Pjax 重绑仍须真实有头浏览器人工验收 |
 | B | 待填 | 待填 | 待填 |
 | C | 待填 | 待填 | 待填 |
 | D | 待填 | 待填 | 待填 |
