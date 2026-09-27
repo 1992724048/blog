@@ -23,7 +23,7 @@
   --theme-text-light #000
   --theme-text-rev #fff
 
-  --theme-background #f4f5f6
+  --theme-background var(--light-topbar-bg)
   --theme-bg-trans0 rgba(#f4f5f6, 0.95)
   --theme-bg-trans1 rgba(#f4f5f6, 0.8)
   --theme-bg-trans2 rgba(#f4f5f6, .9)
@@ -59,3 +59,7 @@
   --theme-search-bg #000
   --theme-search-text #fff
   --theme-search-placeholder #b0b0b0
+
+  // 顶栏当前项竖排反色标签的底色：相反主题（暗色）的顶栏底色。
+  // 文字色直接取 --theme-text-rev —— 它在本色板内本就定义为「反色主题的文字色」，无需再造 token
+  --nav-invert-bg var(--dark-topbar-bg)

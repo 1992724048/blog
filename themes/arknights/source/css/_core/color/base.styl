@@ -2,6 +2,14 @@
   --dark-cursor url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAGBAMAAAAS4vJ7AAAAElBMVEX///////////////////////+65XQCAAAABXRSTlPUzXppDN7WmLAAAAAZSURBVAjXY3ASVGEwDQ1mYA0NAGEQGyQGAC9SA/00lbgwAAAAAElFTkSuQmCC')
   --light-cursor url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAGCAYAAADgzO9IAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAACxMAAAsTAQCanBgAAABESURBVBhXYwACHiCuAuKzUAxig8QYMoH4PxoGiTFcQRKA4StMQAIrYAZikApvMA8BGkASN4D4KxALAvFzIJ7CwMAwGwDaihLfRIaxUAAAAABJRU5ErkJggg')
 
+  // 两套色板（color/light.styl 与 color/dark.styl）是互斥的 :root[theme-mode=…] 块，彼此的取值
+  // 无法用 var() 直接取到；而「相反主题的顶栏底色」（当前项竖排反色标签的底色）必须在两套色板下
+  // 都可得。故把顶栏底色的两个原值提为常驻 token 作单一事实来源：各色板的 --theme-background 取其一，
+  // 需要对面取值的地方（--nav-invert-bg）取另一个。半透明变体（--theme-bg-trans*）无法由不透明 token
+  // 合成，仍各自在色板内直接给出 rgba 字面量。
+  --light-topbar-bg #f4f5f6
+  --dark-topbar-bg #141516
+
   --theme-adm-warning #ffee22
   --theme-adm-note #22bbff
   --theme-adm-success #00c853

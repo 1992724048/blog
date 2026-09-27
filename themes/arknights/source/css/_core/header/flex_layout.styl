@@ -47,7 +47,7 @@
     flex 1
     font-size 15px
 
-  // 移动端 active 名称继续与图标成组（6px 间距）；桌面统一宽度下由 header.styl 归零居中
+  // 移动端 active 名称与图标成组（6px 间距）；≥1024px 名称已改挂为栏外竖排标签，本声明仅服务本断点
   // 选择器带 ol.navContent 前缀：特异性高于 header.styl 的同名规则（该文件编译序在后）
   ol.navContent .navItem.active > .navBlock .navItemLabel
     margin-left 6px
@@ -69,13 +69,11 @@
     height 100%
 
   // 一级导航按内容自适应（border-box，高度 36px 与顶栏 36px 外高一致）：
-  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 12px×2 + 内容宽。
-  // 两态内容宽不同且这是明确取舍：非 active = 图标槽 --nav-icon-w（1.25em），
-  // active = 收起后的图标（0）+ 展开的名称（2em），故 active 项比非 active 项宽 0.75em。
-  // 配合 header.styl 的顺序化过渡（图标先收拢 / 名称后展开，两向皆然），
-  // 过渡期内容宽度恒 ≤ max(图标槽, 名称) = 2em，不引入二者相加的占位峰值；
-  // 代价是切换当前页时其后按钮与右侧簇位移 0.75em，且顺序化过渡令中途内容宽经过 0
-  // （用户实机反馈「按钮还是没改成自适应 / 图标不该和文字一样大」后裁决的取舍，不再以 min-width 掩盖）
+  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 10px×2 + 内容宽。
+  // 按钮内容恒为图标槽 --nav-icon-w（名称已改挂为栏外竖排标签，完全脱离文档流），
+  // 故六个按钮在两态下宽度完全相同，切换当前页时其后按钮与右侧簇零位移。
+  // 水平内边距由 12px 收到 10px：纯图标态下 12px 使 36px 高的按钮宽达 44px（偏扁长），
+  // 10px 得 40px ≈ 方形，更贴合图标按钮观感；等宽由内容恒定保证，与内边距取值无关。
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
     width auto
@@ -84,12 +82,56 @@
     display flex
     align-items center
     justify-content center
-    padding 0 12px
+    padding 0 10px
 
-  // 标题占满按钮可用宽度并水平居中：名称的展开 / 收起不改变图标与名称的相对位置
+  // 标题占满按钮可用宽度并水平居中；同时解除自身定位上下文（position static）——
+  // 名称标签在 DOM 里是 .navItemTitle 的子节点，只有让它不定位，标签的包含块才落到
+  // .navBlock（position relative，高 36px）本身，从而与凸出指示段共用同一锚点，
+  // 无需依赖「标题盒高度 = 图标高度」这类脆弱换算。
   .navContent > .navItem > :is(.navBlock, .navSecond) > .navItemTitle
+    position static
     flex 1
     justify-content center
+
+  // 当前项竖排反色标签（≥1024px 专用；≤1023px 由上方 .navItemLabel 折叠 / 展开规则接管）：
+  // 绝对定位挂在凸出指示段下沿之下，不参与布局，故不改动按钮几何、不改动 nav 对齐，
+  // 也不把内容往下推。纵向偏移复用 --nav-tab-drop：100%（按钮高 36px）+ 凸出量 = 指示段下沿，
+  // 故标签与指示条严丝合缝。水平居中用 left/right 0 + width fit-content + margin auto
+  // （绝对定位下 width auto 会拉满按钮宽，故须显式 fit-content 收成「文字框」）。
+  // 包含块链路：.navItemTitle 已被置为 position static → .navBlock（position relative）→
+  // .navItem（position relative）→ ol.navContent / nav / header。header 的 backdrop-filter 会为
+  // 绝对定位后代建立包含块，但本标签的最近定位祖先是 .navBlock，故定位基准不受其影响；
+  // header 无 overflow 声明（visible），标签溢出顶栏盒外不会被裁切。
+  // z-index 2：高于凸出段的 1，低于 .search-popup 的 20（搜索结果浮层始终盖住标签），
+  // 也低于移动端下拉层——后者与本规则同处互斥断点，不可能同时存在。
+  ol.navContent .navItem > :is(.navBlock, .navSecond) > .navItemLabel
+    position absolute
+    top calc(100% + var(--nav-tab-drop))
+    left 0
+    right 0
+    z-index 2
+    width fit-content
+    height auto
+    margin 0 auto
+    padding 3px 4px
+    box-sizing border-box
+    max-width none
+    overflow visible
+    writing-mode vertical-rl
+    text-orientation upright
+    color var(--theme-text-rev)
+    background-color var(--nav-invert-bg)
+    opacity 0
+    visibility hidden
+    pointer-events none
+    transform translateY(-4px)
+    transition opacity .2s, transform .2s, visibility 0s .2s
+
+  ol.navContent .navItem.active > :is(.navBlock, .navSecond) > .navItemLabel
+    opacity 1
+    visibility visible
+    transform none
+    transition opacity .2s, transform .2s
 
   // 底部凸出指示（仅桌面平铺态）：伪元素绝对定位、不参与布局，因此不改动按钮几何、
   // 不改动 nav 的对齐，也不加剧既有 1px 下沿溢出。锚点是 .navBlock 的 padding box 下沿
@@ -110,7 +152,7 @@
 
   // active 与 hover / focus-visible 共用同一凸出几何与同一上色（同特异性 (0,4,1)），
   // 故合成一条规则以杜绝双源；状态区分改由按钮本体承担，不靠凸出尺寸：
-  // active = 中度对比底色 + 名称展开；hover = 主题蓝块 + 白字；焦点另由焦点环承担
+  // active = 中度对比底色 + 栏外竖排反色标签；hover = 主题蓝块 + 白字；焦点另由焦点环承担
   .navContent > .navItem > :is(.navBlock, .navSecond):is(:hover, :focus-visible)::after,
   .navContent > .navItem.active > :is(.navBlock, .navSecond)::after
     background-color var(--nav-tab-color)
