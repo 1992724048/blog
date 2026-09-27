@@ -88,6 +88,3 @@ footer:
   theme: Theme
   by: by
   build_time: Build Time
-
-valine:
-  placeHolder: This comment is sent by Penguin Logistics.

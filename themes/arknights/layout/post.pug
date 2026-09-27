@@ -71,41 +71,9 @@ block content
             span #{pay}
             br
             img(src=url_for(imgSrc))
-    -
-      let count = (theme.valine.enable === true) +
-                  (theme.gitalk.enable === true) +
-                  (theme.waline.enable === true) +
-                  (theme.artalk.enable === true) +
-                  (theme.utterances.enable === true) +
-                  (theme.giscus.enable === true)
-    if page.comments && count
+    if page.comments && theme.giscus.enable === true
       #comments
-        if count > 1
-          .selector
-            if theme.valine.enable === true
-              button.valine-sel='Valine'
-            if theme.gitalk.enable === true
-              button.gitalk-sel='Gitalk'
-            if theme.waline.enable === true
-              button.waline-sel='Waline'
-            if theme.artalk.enable === true
-              button.artalk-sel='Artalk'
-            if theme.utterances.enable === true
-              button.utterances-sel='Utterances'
-            if theme.giscus.enable === true
-              button.giscus-sel='Giscus'
-        if theme.valine.enable === true
-          #valine
-        if theme.gitalk.enable === true
-          #gitalk
-        if theme.waline.enable === true
-          #waline
-        if theme.artalk.enable === true
-          #artalk
-        if theme.utterances.enable === true
-          #utterances
-        if theme.giscus.enable === true
-          #giscus
+        #giscus
 
 block aside-block
   - 

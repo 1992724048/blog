@@ -17,9 +17,6 @@ class Cursor {
     .navBtnIcon,
     #post-content img,
     .ex-header,
-    .gt-user-inner,
-    .wl-sort>li,
-    #valine .vicon,#valine .vat,
     .lg-container img,.clickable`
 
   private set = (X: number = this.nowX, Y: number = this.nowY) => {

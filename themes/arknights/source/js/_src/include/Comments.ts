@@ -1,13 +1,9 @@
 /// <reference path="common/base.ts" />
-/// <reference path="common/selectors.ts" />
 /// <reference path="GiscusManager.ts" />
 
 'use strict'
 
 class Comments {
-  private search: string[] = ["valine", "gitalk", "waline", "artalk", "utterances", "giscus"]
-  private elements: Pair[] = []
-
   private async validateGiscusOrigin(): Promise<boolean> {
     return typeof giscusManager !== 'undefined' ? await giscusManager.validateOrigin() : true
   }
@@ -25,20 +21,8 @@ class Comments {
   }
 
   private setHTML = async () => {
-    const commentsContainer = document.querySelector('#comments')
-    if (!commentsContainer) return
-    
-    const selectorContainer = commentsContainer.querySelector('.selector')
-    if (selectorContainer) {
-      this.elements = []
-      this.search.forEach((item) => {
-        try {
-          this.elements.push(new Pair(getElement(`#${item}`), getElement(`.${item}-sel`)))
-        } catch (e) {}
-      })
-      new Selectors(this.elements, 0)
-    }
-    
+    if (!document.querySelector('#comments')) return
+
     await this.loadGiscus()
   }
 

@@ -40,7 +40,7 @@ link(rel='dns-prefetch', href='//static.cloudflareinsights.com')
 link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css')
 link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css')
 //- 缓存版本号：修改主题 Stylus（arknights.css 产物）后同步递增，避免 Cloudflare / 浏览器缓存旧版
-- var cssVersion = "20260972"
+- var cssVersion = "20260973"
 link(rel="stylesheet", href=url_for("css/arknights.css") + "?v=" + cssVersion)
 //- font-display 取值依据（均为 swap，相对原「未声明 ≈ block、最长 3s 不可见」是双向改善）：
 //- Bender / BenderLight 是展示字体（站点字标 + 文章与分区标题），缺失即品牌与排版失真，
@@ -85,12 +85,7 @@ script(class="pjax-js").
   }
   document.addEventListener('pjax:complete', function() { updatePageConfig(); });
   updatePageConfig();
-if theme.waline && theme.waline.enable === true
-  link(rel="stylesheet", href= url_for('//unpkg.com/@waline/client@v2/dist/waline.css'))
 link(type="text/css" rel="stylesheet" href=url_for("/lib/encrypt/hbe.style.css"))
-if theme.artalk && theme.artalk.enable === true
-  link(type="text/css" rel="stylesheet" href="//unpkg.com/artalk@2.8.4/dist/Artalk.css")
-  script(async src="//unpkg.com/artalk@2.8.4/dist/Artalk.js")
 if theme.mermaid && theme.mermaid.enable === true && theme.mermaid.version
   script(src= "//unpkg.com/mermaid@" + theme.mermaid.version + "/dist/mermaid.min.js")
 link(type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lightgallery.css")
