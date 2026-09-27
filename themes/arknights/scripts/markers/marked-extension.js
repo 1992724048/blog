@@ -1,6 +1,19 @@
 'use strict'
 
 const { CARRIER_SYMBOL } = require('./carrier')
+const { placeholderHtml } = require('./pipeline/materialize')
+
+const EXTENSION_NAME = 'arknights-line-marker'
+const PLACEHOLDER_CONTEXT = 'block-placeholder'
+const PENDING_RENDER_STATE = 'pending-render'
+// The store issues a 24 byte nonce and an HMAC-SHA256 checksum, both base64url encoded; the
+// lexer shape must match that exact segment length so a token carrying a prefix or suffix is not
+// mistaken for a token.
+const TOKEN_PATTERN = /^arknights-line-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
+const METADATA_KEYS = Object.freeze([
+  'context', 'field', 'id', 'mode', 'parent', 'raw', 'sourceRange', 'state', 'token'
+])
+const PARENT_KEYS = Object.freeze(['field', 'type'])
 
 function createMarkedError(code, reason) {
   const error = new Error(code)
@@ -9,46 +22,19 @@ function createMarkedError(code, reason) {
   return error
 }
 
-const CARRIER_EXTENSION_NAME = 'arknights-marker-carrier'
-const METADATA_CONTEXT_STATES = Object.freeze({
-  text: 'pending-markdown',
-  'image-alt': 'raw-preserved',
-  'link-label': 'text-preserved',
-  'link-url': 'raw-preserved',
-  'link-title': 'raw-preserved',
-  'raw-html': 'raw-restored'
-})
-const METADATA_ENTRY_KEYS = Object.freeze([
-  'context', 'field', 'headingOnly', 'id', 'mode', 'parent', 'raw', 'state', 'token'
-])
-const METADATA_PARENT_KEYS = Object.freeze(['field', 'type'])
-const CARRIER_TOKEN_PATTERN = /arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}/g
-const CARRIER_TOKEN_EXACT_PATTERN = /^arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
-const CARRIER_ID_PATTERN = /^o[0-9]+$/
-const HTML_TEXT_ENTITIES = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;'
-})
-
-function escapeHtmlText(value) {
-  return value.replace(/[&<>]/g, character => HTML_TEXT_ENTITIES[character])
-}
-
 function isObject(value) {
   return value !== null && typeof value === 'object'
 }
 
 function isCarrier(value) {
   return isObject(value) &&
-    typeof value.findOccurrences === 'function' &&
     typeof value.bindContext === 'function' &&
-    typeof value.issuedTokens === 'function' &&
     typeof value.getOccurrenceByToken === 'function' &&
-    typeof value.getOccurrences === 'function'
+    typeof value.getOccurrences === 'function' &&
+    typeof value.issuedTokens === 'function'
 }
 
-function readCarrierFromOptions(options) {
+function readCarrier(options) {
   if (!isObject(options)) {
     return null
   }
@@ -69,73 +55,89 @@ function readCarrierFromOptions(options) {
   return carrier
 }
 
-function isPlainData(value) {
-  if (!isObject(value)) {
-    return false
-  }
-  const prototype = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
+function firstPhysicalLine(src) {
+  const lineEnd = src.indexOf('\n')
+  return lineEnd === -1 ? src : src.slice(0, lineEnd)
 }
 
-function freezeMetadataEntry(occurrence, parent, headingOnly) {
-  if (headingOnly !== null && typeof headingOnly !== 'boolean') {
-    throw createMarkedError('CARRIER_STATE_INVALID', 'heading metadata state is invalid')
+// Marked hands `start` the already sliced `src.slice(1)`, so both offset 0 and the code unit
+// right after it may sit on a line boundary the lexer has consumed; any later offset is only a
+// line start when the preceding code unit is CR or LF.
+const LEADING_SLICE_TOLERANCE = 1
+
+function ownsLineStart(src, index) {
+  return index <= LEADING_SLICE_TOLERANCE || src[index - 1] === '\n' || src[index - 1] === '\r'
+}
+
+function ownsPhysicalLine(src, index, token) {
+  if (src.slice(index, index + token.length) !== token) {
+    return false
   }
+  const after = src.slice(index + token.length)
+  return after === '' || after === '\n' || after.startsWith('\n')
+}
+
+function readOwnerToken(carrier, line) {
+  if (line !== line.trim() || !TOKEN_PATTERN.test(line)) {
+    return null
+  }
+  if (carrier !== null && carrier.getOccurrenceByToken(line) === null) {
+    return null
+  }
+  return line
+}
+
+function findOwnerStartIndex(carrier, src) {
+  for (const token of carrier === null ? syntacticTokens(src) : carrier.issuedTokens()) {
+    let from = 0
+    for (;;) {
+      const index = src.indexOf(token, from)
+      if (index === -1) {
+        break
+      }
+      if (ownsLineStart(src, index) && ownsPhysicalLine(src, index, token)) {
+        return index
+      }
+      from = index + 1
+    }
+  }
+  return -1
+}
+
+const TOKEN_CANDIDATE_PATTERN = /arknights-line-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}/g
+
+// Ownership is proven by the store, not by the source text: before 4 refuses any field that
+// already contains the token namespace, so every candidate reaching Marked was issued by us.
+function syntacticTokens(src) {
+  return typeof src === 'string' ? src.match(TOKEN_CANDIDATE_PATTERN) ?? [] : []
+}
+
+function attachMetadata(token, entry) {
+  if (Object.hasOwn(token, 'arknights')) {
+    throw createMarkedError('CARRIER_AUDIT_FAILED', 'owner token already has metadata')
+  }
+  Object.defineProperty(token, 'arknights', {
+    value: Object.freeze([entry]),
+    enumerable: false,
+    configurable: false,
+    writable: false
+  })
+}
+
+function freezeMetadataEntry(occurrence) {
   return Object.freeze({
     id: occurrence.id,
     token: occurrence.token,
     field: occurrence.field,
     mode: occurrence.mode,
     raw: occurrence.raw,
-    context: occurrence.context,
-    state: occurrence.state,
-    parent: Object.freeze({ type: parent.type, field: parent.field }),
-    headingOnly
-  })
-}
-
-function isSyntheticLink(token) {
-  if (token.type !== 'link' || Object.hasOwn(token, 'title') || token.text !== token.href) {
-    return false
-  }
-  if (!Array.isArray(token.tokens) || token.tokens.length !== 1) {
-    return false
-  }
-  const child = token.tokens[0]
-  return child?.type === 'text' && child.raw === child.text && child.text === token.text
-}
-
-function restoreField(value, occurrences) {
-  if (typeof value !== 'string' || occurrences.length === 0) {
-    return value
-  }
-  let restored = value
-  for (const occurrence of [...occurrences].sort((left, right) => right.start - left.start)) {
-    if (restored.slice(occurrence.start, occurrence.end) !== occurrence.token) {
-      throw createMarkedError('CARRIER_AUDIT_FAILED', 'token field could not be restored')
-    }
-    restored = restored.slice(0, occurrence.start) + occurrence.raw + restored.slice(occurrence.end)
-  }
-  return restored
-}
-
-function appendMetadata(token, entries) {
-  const hasMetadata = Object.hasOwn(token, 'arknights')
-  if (entries.length === 0) {
-    if (hasMetadata) {
-      throw createMarkedError('CARRIER_AUDIT_FAILED', 'projection token has owner metadata')
-    }
-    return
-  }
-  if (hasMetadata) {
-    throw createMarkedError('CARRIER_AUDIT_FAILED', 'owner token already has metadata')
-  }
-  const metadata = Object.freeze(entries)
-  Object.defineProperty(token, 'arknights', {
-    value: metadata,
-    enumerable: false,
-    configurable: false,
-    writable: false
+    sourceRange: Object.freeze({
+      start: occurrence.sourceRange.start,
+      end: occurrence.sourceRange.end
+    }),
+    context: PLACEHOLDER_CONTEXT,
+    state: PENDING_RENDER_STATE,
+    parent: Object.freeze({ type: EXTENSION_NAME, field: 'text' })
   })
 }
 
@@ -160,280 +162,80 @@ function validateMetadataDescriptor(token) {
     throw createMarkedError('CARRIER_AUDIT_FAILED', 'token metadata descriptor is invalid')
   }
   for (const entry of descriptor.value) {
-    let parentType = null
-    let parentField = null
+    let keysOk = false
+    let parentKeysOk = false
     try {
-      if (!isPlainData(entry) || !Object.isFrozen(entry) || !isObject(entry.parent) ||
-          !Object.isFrozen(entry.parent) ||
-          Object.keys(entry).sort().join('|') !== METADATA_ENTRY_KEYS.join('|') ||
-          Object.keys(entry.parent).sort().join('|') !== METADATA_PARENT_KEYS.join('|')) {
-        throw new Error('invalid metadata entry')
-      }
-      parentType = entry.parent.type
-      parentField = entry.parent.field
+      keysOk = Object.keys(entry).sort().join('|') === [...METADATA_KEYS].sort().join('|')
+      parentKeysOk = isObject(entry.parent) &&
+        Object.keys(entry.parent).sort().join('|') === [...PARENT_KEYS].sort().join('|')
     } catch {
       throw createMarkedError('CARRIER_AUDIT_FAILED', 'token metadata entry is invalid')
     }
-    const validLinkField = parentType !== 'link' || ['text', 'href', 'title'].includes(parentField)
-    const validParentField = parentType === CARRIER_EXTENSION_NAME
-      ? parentField === 'text'
-      : parentType === 'image'
-        ? parentField === 'alt'
-        : parentType === 'html'
-          ? parentField === 'text'
-          : parentType === 'link' && validLinkField
     if (
-      typeof parentType !== 'string' || parentType.length === 0 || !validParentField ||
-      (entry.headingOnly !== null && typeof entry.headingOnly !== 'boolean') ||
-      typeof entry.context !== 'string' ||
-      METADATA_CONTEXT_STATES[entry.context] !== entry.state ||
-      entry.field !== 'content' || typeof entry.id !== 'string' ||
-      !CARRIER_ID_PATTERN.test(entry.id) || typeof entry.token !== 'string' ||
-      !CARRIER_TOKEN_EXACT_PATTERN.test(entry.token) ||
-      !['block', 'inline'].includes(entry.mode) || typeof entry.raw !== 'string'
+      !keysOk ||
+      !parentKeysOk ||
+      !Object.isFrozen(entry) ||
+      !Object.isFrozen(entry.parent) ||
+      typeof entry.id !== 'string' ||
+      typeof entry.token !== 'string' ||
+      !TOKEN_PATTERN.test(entry.token) ||
+      typeof entry.raw !== 'string' ||
+      entry.field !== 'content' ||
+      entry.mode !== 'block' ||
+      entry.context !== PLACEHOLDER_CONTEXT ||
+      entry.state !== PENDING_RENDER_STATE ||
+      entry.parent.type !== EXTENSION_NAME ||
+      entry.parent.field !== 'text' ||
+      !Number.isInteger(entry.sourceRange?.start) ||
+      !Number.isInteger(entry.sourceRange?.end)
     ) {
       throw createMarkedError('CARRIER_AUDIT_FAILED', 'token metadata entry is invalid')
     }
   }
 }
 
-function stripCarrierText(value) {
-  return typeof value === 'string' ? value.replace(CARRIER_TOKEN_PATTERN, '') : ''
+// Marked advances the block source by token.raw and then folds a single following LF back into
+// raw, so the stored raw is either the bare token or the token plus one LF.
+function ownsTokenText(token) {
+  return typeof token.text === 'string' &&
+    TOKEN_PATTERN.test(token.text) &&
+    (token.raw === token.text || token.raw === `${token.text}\n`)
 }
 
-function hasCarrierText(value) {
-  return typeof value === 'string' && stripCarrierText(value) !== value
-}
-
-function inspectCarrierChildren(token) {
-  return (token.tokens ?? []).reduce((result, child) => {
-    const inspected = inspectCarrierVisibility(child)
-    result.hasCarrier ||= inspected.hasCarrier
-    result.visible += inspected.visible
-    return result
-  }, { hasCarrier: false, visible: '' })
-}
-
-function inspectCarrierVisibility(token) {
-  if (token.type === CARRIER_EXTENSION_NAME) {
-    return { hasCarrier: true, visible: '' }
-  }
-  if (token.type === 'html') {
-    return { hasCarrier: hasCarrierText(token.text), visible: '' }
-  }
-  if (isSyntheticLink(token) && typeof token.text === 'string') {
-    const visible = stripCarrierText(token.text)
-    return {
-      hasCarrier: visible !== token.text,
-      visible
-    }
-  }
-  if (token.type === 'link') {
-    const inspected = inspectCarrierChildren(token)
-    return {
-      hasCarrier: inspected.hasCarrier || hasCarrierText(token.text) ||
-        hasCarrierText(token.href) || hasCarrierText(token.title),
-      visible: inspected.visible
-    }
-  }
-  if (Array.isArray(token.tokens)) {
-    return inspectCarrierChildren(token)
-  }
-  const visible = stripCarrierText(token.text)
-  return {
-    hasCarrier: hasCarrierText(token.text),
-    visible
-  }
-}
-
-function collectHeadingOnlyMetadata(token, headingOnlyByToken) {
-  if (token.type === 'heading') {
-    const inspected = (token.tokens ?? []).reduce((result, child) => {
-      const childResult = inspectCarrierVisibility(child)
-      result.hasCarrier ||= childResult.hasCarrier
-      result.visible += childResult.visible
-      return result
-    }, { hasCarrier: false, visible: '' })
-    headingOnlyByToken.set(token, inspected.hasCarrier && inspected.visible.trim() === '')
+function claimOwnerToken(token, carrier) {
+  if (token.type !== EXTENSION_NAME) {
     return
   }
-  for (const child of token.tokens ?? []) {
-    collectHeadingOnlyMetadata(child, headingOnlyByToken)
+  if (!ownsTokenText(token)) {
+    throw createMarkedError('CARRIER_BINDING_ERROR', 'owner token provenance is missing')
   }
-}
-
-function collectCarrierFieldClaims(carrier, value, context, inheritedById) {
-  const claims = []
-  for (const occurrence of carrier.findOccurrences(value, 'content')) {
-    const inheritedSnapshot = inheritedById.get(occurrence.id)
-    if (inheritedSnapshot !== undefined) {
-      claims.push({ occurrence, snapshot: inheritedSnapshot, inherited: true })
-      continue
-    }
-    claims.push({
-      occurrence,
-      snapshot: carrier.bindContext(occurrence.id, context),
-      inherited: false
-    })
-  }
-  return claims
-}
-
-function claimCarrierField(token, value, context, parentField, carrier, inheritedById, headingOnly) {
-  if (typeof value !== 'string') {
-    return { claims: [], direct: [] }
-  }
-  const claims = collectCarrierFieldClaims(carrier, value, context, inheritedById)
-  const direct = []
-  for (const claim of claims) {
-    if (!claim.inherited) {
-      direct.push({
-        claim,
-        metadata: freezeMetadataEntry(
-          claim.snapshot,
-          { type: token.type, field: parentField },
-          headingOnly
-        )
-      })
-    }
-  }
-  return { claims, direct }
-}
-
-function restoreCarrierClaims(value, claims) {
-  return restoreField(
-    value,
-    claims.map(claim => ({
-      start: claim.occurrence.start,
-      end: claim.occurrence.end,
-      token: claim.occurrence.token,
-      raw: claim.snapshot.raw
-    }))
-  )
-}
-
-function restoreCarrierTokenFields(token, syntheticLink, fields, carrier) {
-  if (token.type === CARRIER_EXTENSION_NAME) {
-    if (fields.text.claims.length === 0) {
-      if (carrier.getOccurrenceByToken(token.text) === null) {
-        throw createMarkedError('CARRIER_BINDING_ERROR', 'carrier token provenance is missing')
-      }
-    } else if (fields.text.claims.every(claim => claim.inherited)) {
-      const snapshot = fields.text.claims[0].snapshot
-      token.text = snapshot.context === 'link-label'
-        ? escapeHtmlText(snapshot.raw)
-        : snapshot.raw
-    }
+  if (Object.hasOwn(token, 'arknights')) {
     return
   }
-  if (token.type === 'image' && typeof token.text === 'string') {
-    token.text = restoreCarrierClaims(token.text, fields.text.claims)
-    return
+  const occurrence = carrier.getOccurrenceByToken(token.text)
+  if (occurrence === null) {
+    throw createMarkedError('CARRIER_BINDING_ERROR', 'owner token provenance is missing')
   }
-  if (syntheticLink) {
-    token.href = restoreCarrierClaims(token.href, fields.href.claims)
-    token.text = token.href
-    const child = token.tokens?.[0]
-    if (child?.type === 'text') {
-      child.text = token.href
-      child.raw = token.href
-    }
-    return
-  }
-  if (token.type === 'link') {
-    if (typeof token.text === 'string') {
-      token.text = restoreCarrierClaims(token.text, fields.text.claims)
-    }
-    if (typeof token.href === 'string') {
-      token.href = restoreCarrierClaims(token.href, fields.href.claims)
-    }
-    if (typeof token.title === 'string') {
-      token.title = restoreCarrierClaims(token.title, fields.title.claims)
-    }
-    return
-  }
-  if (token.type === 'html' && token.block === true && typeof token.text === 'string') {
-    token.text = restoreCarrierClaims(token.text, fields.text.claims)
-  }
+  attachMetadata(token, freezeMetadataEntry(carrier.bindContext(occurrence.id, PLACEHOLDER_CONTEXT)))
 }
 
-function walkCarrierChildren(token, inheritedById, headingOnly, walk) {
-  if (token.tokens !== undefined) {
-    walk(token.tokens, inheritedById, headingOnly)
-  }
-  if (token.type === 'list') {
+function walkOwnerTokens(tokens, carrier) {
+  for (const token of tokens ?? []) {
+    claimOwnerToken(token, carrier)
+    if (Array.isArray(token.tokens)) {
+      walkOwnerTokens(token.tokens, carrier)
+    }
     for (const item of token.items ?? []) {
-      walk(item.tokens, inheritedById, headingOnly)
+      walkOwnerTokens(item.tokens, carrier)
     }
-  }
-  if (token.type === 'table') {
     for (const cell of token.header ?? []) {
-      walk(cell.tokens, inheritedById, headingOnly)
+      walkOwnerTokens(cell.tokens, carrier)
     }
     for (const row of token.rows ?? []) {
       for (const cell of row) {
-        walk(cell.tokens, inheritedById, headingOnly)
+        walkOwnerTokens(cell.tokens, carrier)
       }
     }
-  }
-}
-
-function processCarrierToken(token, carrier, headingOnlyByToken, inheritedById, headingOnly) {
-  const syntheticLink = token.type === 'link' && isSyntheticLink(token)
-  const parentHeadingOnly = token.type === 'heading'
-    ? headingOnlyByToken.get(token) === true
-    : headingOnly
-  const empty = () => ({ claims: [], direct: [] })
-  let text = empty()
-  let href = empty()
-  let title = empty()
-  if (token.type === CARRIER_EXTENSION_NAME) {
-    text = claimCarrierField(
-      token, token.text, 'text', 'text', carrier, inheritedById, parentHeadingOnly
-    )
-  } else if (token.type === 'html' && token.block === true) {
-    text = claimCarrierField(
-      token, token.text, 'raw-html', 'text', carrier, inheritedById, parentHeadingOnly
-    )
-  } else if (token.type === 'image') {
-    text = claimCarrierField(
-      token, token.text, 'image-alt', 'alt', carrier, inheritedById, parentHeadingOnly
-    )
-  } else if (syntheticLink) {
-    href = claimCarrierField(
-      token, token.href, 'link-url', 'href', carrier, inheritedById, parentHeadingOnly
-    )
-  } else if (token.type === 'link') {
-    text = claimCarrierField(
-      token, token.text, 'link-label', 'text', carrier, inheritedById, parentHeadingOnly
-    )
-    href = claimCarrierField(
-      token, token.href, 'link-url', 'href', carrier, inheritedById, parentHeadingOnly
-    )
-    title = claimCarrierField(
-      token, token.title, 'link-title', 'title', carrier, inheritedById, parentHeadingOnly
-    )
-  }
-
-  const direct = [...text.direct, ...href.direct, ...title.direct]
-  appendMetadata(token, direct.map(entry => entry.metadata))
-  restoreCarrierTokenFields(token, syntheticLink, { text, href, title }, carrier)
-  if (syntheticLink) {
-    return
-  }
-
-  const nextInherited = new Map(inheritedById)
-  for (const { claim } of direct) {
-    nextInherited.set(claim.occurrence.id, claim.snapshot)
-  }
-  walkCarrierChildren(token, nextInherited, parentHeadingOnly, (items, inherited, nestedHeadingOnly) => {
-    walkCarrierTree(items, carrier, headingOnlyByToken, inherited, nestedHeadingOnly)
-  })
-}
-
-function walkCarrierTree(tokens, carrier, headingOnlyByToken, inheritedById = new Map(), headingOnly = null) {
-  for (const token of tokens ?? []) {
-    processCarrierToken(token, carrier, headingOnlyByToken, inheritedById, headingOnly)
   }
 }
 
@@ -442,152 +244,77 @@ function installMarkedExtension(markedUse) {
     throw createMarkedError('INVALID_MARKED_USE', 'marked use must be a function')
   }
 
-  function findIssuedTokenStart(carrier, src) {
-    let matchIndex = -1
-    let matchToken = null
-    for (const token of carrier.issuedTokens()) {
-      const index = src.indexOf(token)
-      if (index !== -1 && (matchIndex === -1 || index < matchIndex)) {
-        matchIndex = index
-        matchToken = token
-      }
-    }
-    return { matchIndex, matchToken }
+  function findOwnerStart(src) {
+    return findOwnerStartIndex(readCarrier(this === undefined ? null : this.lexer?.options) ?? null, src)
   }
 
-  function findCarrierStart(src) {
-    const carrier = readCarrierFromOptions(this.lexer.options)
-    if (carrier === null || typeof src !== 'string') {
+  function tokenizeOwnerToken(src) {
+    const carrier = readCarrier(this === undefined ? null : this.lexer?.options)
+    const token = readOwnerToken(carrier, firstPhysicalLine(src))
+    if (token === null) {
       return undefined
     }
-    const { matchIndex } = findIssuedTokenStart(carrier, src)
-    return matchIndex === -1 ? undefined : matchIndex
+    return { type: EXTENSION_NAME, raw: token, text: token }
   }
 
-  function tokenizeCarrier(src) {
-    const carrier = readCarrierFromOptions(this.lexer.options)
-    if (carrier === null || typeof src !== 'string') {
-      return undefined
+  function recordOwnerProvenance(tokens) {
+    const options = this === undefined ? null : this.options
+    if (!isObject(options) || !Object.hasOwn(options, CARRIER_SYMBOL)) {
+      return tokens
     }
-    const { matchIndex, matchToken } = findIssuedTokenStart(carrier, src)
-    if (matchIndex !== 0 || typeof matchToken !== 'string' ||
-        carrier.getOccurrenceByToken(matchToken) === null) {
-      return undefined
-    }
-    return { type: CARRIER_EXTENSION_NAME, raw: matchToken, text: matchToken }
-  }
-
-  function recordCarrierProvenance(tokens) {
-    const shouldCleanup = isObject(this.options)
     try {
-      const carrier = readCarrierFromOptions(this.options)
-      if (carrier === null) {
-        return tokens
-      }
-
-      const headingOnlyByToken = new Map()
-      for (const token of tokens) {
-        collectHeadingOnlyMetadata(token, headingOnlyByToken)
-      }
-
-      walkCarrierTree(tokens, carrier, headingOnlyByToken)
-
-      const unclassified = carrier.getOccurrences().filter(occurrence => (
-        occurrence.field === 'content' && occurrence.state === 'issued'
-      ))
-      if (unclassified.length > 0) {
-        throw createMarkedError('CARRIER_AUDIT_FAILED', 'content occurrence has no token owner')
+      const carrier = readCarrier(options)
+      if (carrier !== null) {
+        walkOwnerTokens(tokens, carrier)
+        const unclaimed = carrier.getOccurrences().filter(
+          (occurrence) => occurrence.field === 'content' && occurrence.state === 'issued'
+        )
+        if (unclaimed.length > 0) {
+          throw createMarkedError('CARRIER_AUDIT_FAILED', 'content occurrence has no token owner')
+        }
       }
       return tokens
     } finally {
-      if (shouldCleanup) {
-        try {
-          const deleted = Reflect.deleteProperty(this.options, CARRIER_SYMBOL)
-          if (!deleted && Object.hasOwn(this.options, CARRIER_SYMBOL)) {
-            throw new Error('carrier symbol cleanup failed')
-          }
-        } catch {
-          throw createMarkedError('CARRIER_AUDIT_FAILED', 'carrier symbol cleanup failed')
+      try {
+        const deleted = Reflect.deleteProperty(options, CARRIER_SYMBOL)
+        if (!deleted && Object.hasOwn(options, CARRIER_SYMBOL)) {
+          throw new Error('carrier symbol cleanup failed')
         }
+      } catch {
+        throw createMarkedError('CARRIER_AUDIT_FAILED', 'carrier symbol cleanup failed')
       }
     }
   }
 
-  function renderCarrierWrapper(token) {
-    if (token.type !== CARRIER_EXTENSION_NAME) {
+  function renderOwnerToken(token) {
+    validateMetadataDescriptor(token)
+    if (token.type !== EXTENSION_NAME) {
       return false
     }
-    validateMetadataDescriptor(token)
-    const metadata = token.arknights?.[0]
-    if (metadata === undefined) {
-      if (typeof token.text === 'string' && token.text !== token.raw) {
-        return token.text
-      }
-      throw createMarkedError('CARRIER_AUDIT_FAILED', 'carrier wrapper metadata is missing')
+    const metadata = token.arknights
+    const owned = Array.isArray(metadata) ? metadata[0] : null
+    if (metadata !== undefined && (owned === undefined || owned.token !== token.text)) {
+      throw createMarkedError('CARRIER_AUDIT_FAILED', 'owner token metadata is invalid')
     }
-    if (metadata.context !== 'text' || metadata.state !== 'pending-markdown' ||
-        metadata.parent.type !== CARRIER_EXTENSION_NAME || metadata.parent.field !== 'text') {
-      throw createMarkedError('CARRIER_AUDIT_FAILED', 'carrier wrapper metadata is invalid')
-    }
-    return `<span data-arknights-carrier="${metadata.token}"></span>`
+    return placeholderHtml(token.text) + '\n'
   }
 
-  function renderImageContext(token) {
-    validateMetadataDescriptor(token)
-    return this.parser.renderer.image(token)
-  }
-
-  function renderLinkContext(token) {
-    validateMetadataDescriptor(token)
-    return this.parser.renderer.link(token)
-  }
-
-  function renderHtmlContext(token) {
-    validateMetadataDescriptor(token)
-    return this.parser.renderer.html(token)
-  }
-
-  function renderHeadingWithCarrier(token) {
-    const metadata = token.arknights ?? []
-    const descendantMetadata = []
-    const collectMetadata = items => {
-      for (const child of items ?? []) {
-        if (Array.isArray(child.arknights)) {
-          descendantMetadata.push(...child.arknights)
-        }
-        collectMetadata(child.tokens)
-      }
-    }
-    collectMetadata(token.tokens)
-    const headingOnly = [...metadata, ...descendantMetadata].length > 0 &&
-      [...metadata, ...descendantMetadata].every(entry => entry.headingOnly === true)
-    if (!headingOnly) {
-      return this.parser.renderer.heading(token)
-    }
-    const originalTokens = token.tokens
-    return `<h${token.depth}>${this.parser.parseInline(originalTokens)}</h${token.depth}>\n`
-  }
-
-  function auditCarrierToken(token) {
+  function auditOwnerToken(token) {
     validateMetadataDescriptor(token)
   }
 
   markedUse({
     extensions: [
       {
-        name: CARRIER_EXTENSION_NAME,
-        level: 'inline',
-        start: findCarrierStart,
-        tokenizer: tokenizeCarrier,
-        renderer: renderCarrierWrapper
-      },
-      { name: 'image', renderer: renderImageContext },
-      { name: 'link', renderer: renderLinkContext },
-      { name: 'html', renderer: renderHtmlContext },
-      { name: 'heading', renderer: renderHeadingWithCarrier }
+        name: EXTENSION_NAME,
+        level: 'block',
+        start: findOwnerStart,
+        tokenizer: tokenizeOwnerToken,
+        renderer: renderOwnerToken
+      }
     ],
-    hooks: { processAllTokens: recordCarrierProvenance },
-    walkTokens: auditCarrierToken
+    hooks: { processAllTokens: recordOwnerProvenance },
+    walkTokens: auditOwnerToken
   })
 }
 

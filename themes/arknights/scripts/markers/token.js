@@ -3,40 +3,31 @@
 const { createHmac, randomBytes: createRandomBytes, timingSafeEqual } = require('node:crypto')
 
 const VERSION = 1
-const TOKEN_PREFIX = 'arknights-marker-v1:'
+const MODE = 'block'
+const TOKEN_PREFIX = 'arknights-line-marker-v1:'
+const PLACEHOLDER_ATTRIBUTE = 'data-arknights-line-marker'
+const PLACEHOLDER_CONTEXT = 'block-placeholder'
 const NONCE_BYTES = 24
 const NONCE_TEXT_LENGTH = 32
 const CHECKSUM_TEXT_LENGTH = 43
-const TOKEN_TEXT_LENGTH = TOKEN_PREFIX.length + NONCE_TEXT_LENGTH + 1 + CHECKSUM_TEXT_LENGTH
+const TOKEN_TEXT_LENGTH =
+  TOKEN_PREFIX.length + NONCE_TEXT_LENGTH + 1 + CHECKSUM_TEXT_LENGTH
 const MAX_GENERATION_ATTEMPTS = 32
-const TOKEN_PATTERN = /^arknights-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
-const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/
-const ENUM_PATTERN = /^[A-Z][A-Z0-9_-]*$/
+const TOKEN_PATTERN =
+  /^arknights-line-marker-v1:[A-Za-z0-9_-]{32}:[A-Za-z0-9_-]{43}$/
 const OCCURRENCE_FIELDS = new Set(['content', 'excerpt'])
-const OCCURRENCE_CONTEXTS = new Set([
-  'text',
-  'image-alt',
-  'link-label',
-  'link-url',
-  'link-title',
-  'raw-html'
-])
-const CONTEXT_STATES = Object.freeze({
-  text: 'pending-markdown',
-  'image-alt': 'raw-preserved',
-  'link-label': 'text-preserved',
-  'link-url': 'raw-preserved',
-  'link-title': 'raw-preserved',
-  'raw-html': 'raw-restored'
-})
 const TERMINAL_STATES = new Set(['consumed', 'failed'])
+const PENDING_STATES = new Set(['pending-render', 'excerpt-pending'])
 
-function isValidMode(mode) {
-  return mode === 'block' || mode === 'inline'
+function createStoreError(code, reason) {
+  const error = new Error(code)
+  error.code = code
+  error.reason = reason
+  return error
 }
 
 function copyRandomBytes(value, label) {
-  if (!Buffer.isBuffer(value) && !ArrayBuffer.isView(value)) {
+  if (!Buffer.isBuffer(value) && !Array.isArray(value)) {
     throw new TypeError(`${label} must return a byte array`)
   }
   const bytes = Buffer.from(value)
@@ -46,27 +37,17 @@ function copyRandomBytes(value, label) {
   return bytes
 }
 
-function createStoreError(code, reason) {
-  const error = new Error(code)
-  error.code = code
-  error.reason = reason
-  return error
+function isSourceRange(value) {
+  return value !== null &&
+    typeof value === 'object' &&
+    Number.isInteger(value.start) &&
+    Number.isInteger(value.end) &&
+    value.start >= 0 &&
+    value.end >= value.start
 }
 
-function copyParsedArgument(argument) {
-  if (argument === null || typeof argument !== 'object' || Array.isArray(argument)) {
-    throw new TypeError('parsed argument must be an object')
-  }
-  if (argument.type === 'enum' && typeof argument.value === 'string' && ENUM_PATTERN.test(argument.value)) {
-    return Object.freeze({ type: 'enum', value: argument.value })
-  }
-  if (argument.type === 'text' && typeof argument.value === 'string') {
-    return Object.freeze({ type: 'text', value: argument.value })
-  }
-  if (argument.type === 'null' && argument.value === null) {
-    return Object.freeze({ type: 'null', value: null })
-  }
-  throw new TypeError('parsed argument has an invalid type or value')
+function freezeRange(range) {
+  return Object.freeze({ start: range.start, end: range.end })
 }
 
 function createTokenStore(options) {
@@ -75,6 +56,12 @@ function createTokenStore(options) {
   }
   if (typeof options.occupiedText !== 'string') {
     throw new TypeError('occupiedText must be a string')
+  }
+  if (
+    options.occupiedText.includes(TOKEN_PREFIX) ||
+    options.occupiedText.includes(PLACEHOLDER_ATTRIBUTE)
+  ) {
+    throw createStoreError('TOKEN_COLLISION', 'source fields already contain the token namespace')
   }
 
   const randomBytes = options.randomBytes ?? createRandomBytes
@@ -88,20 +75,24 @@ function createTokenStore(options) {
   const occurrences = new Map()
   let nextOccurrenceId = 0
 
-  function calculateChecksum(nonce, mode, raw) {
-    const payload = JSON.stringify([VERSION, nonce, mode, raw])
-    return createHmac('sha256', storeKey).update(payload, 'utf8').digest('base64url')
+  function calculateChecksum(nonce, raw) {
+    return createHmac('sha256', storeKey)
+      .update(JSON.stringify([VERSION, nonce, MODE, raw]), 'utf8')
+      .digest('base64url')
   }
 
   function issue(input) {
-    if (input === null || typeof input !== 'object') {
+    if (input === null || typeof input !== 'object' || Array.isArray(input)) {
       throw new TypeError('token input must be an object')
     }
     if (typeof input.raw !== 'string') {
       throw new TypeError('token raw must be a string')
     }
-    if (!isValidMode(input.mode)) {
-      throw new TypeError('token mode must be block or inline')
+    if (!OCCURRENCE_FIELDS.has(input.field)) {
+      throw new TypeError('token field must be content or excerpt')
+    }
+    if (!isSourceRange(input.sourceRange)) {
+      throw new TypeError('token sourceRange must be a valid range')
     }
 
     for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt += 1) {
@@ -109,152 +100,73 @@ function createTokenStore(options) {
       if (nonceBytes.length !== NONCE_BYTES) {
         throw new TypeError(`nonce randomBytes must return ${NONCE_BYTES} bytes`)
       }
-
       const nonce = nonceBytes.toString('base64url')
-      const checksum = calculateChecksum(nonce, input.mode, input.raw)
-      const token = `${TOKEN_PREFIX}${nonce}:${checksum}`
+      const token = `${TOKEN_PREFIX}${nonce}:${calculateChecksum(nonce, input.raw)}`
       const collides = options.occupiedText.includes(token) ||
         input.raw.includes(token) ||
-        Array.from(records.keys()).some((issuedToken) => issuedToken.includes(token))
-
+        [...records.keys()].some((issued) => issued.includes(token))
       if (!collides) {
-        const record = Object.freeze({
+        records.set(token, Object.freeze({
           version: VERSION,
-          mode: input.mode,
+          mode: MODE,
           raw: input.raw,
-          name: null,
-          args: null,
+          field: input.field,
+          sourceRange: freezeRange(input.sourceRange),
           nonce,
-          checksum
-        })
-        records.set(token, record)
+          checksum: token.slice(TOKEN_PREFIX.length + NONCE_TEXT_LENGTH + 1)
+        }))
         return token
       }
     }
 
-    const error = new Error('TOKEN_GENERATION_EXHAUSTED')
-    error.code = 'TOKEN_GENERATION_EXHAUSTED'
-    throw error
+    throw createStoreError('TOKEN_GENERATION_EXHAUSTED', 'no collision free token was generated')
   }
 
   function lookup(token) {
-    if (typeof token !== 'string') {
+    if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) {
       return null
     }
-    return records.get(token) ?? null
-  }
-
-  function hasValidChecksum(record) {
-    const expected = Buffer.from(calculateChecksum(record.nonce, record.mode, record.raw), 'base64url')
+    const record = records.get(token)
+    if (record === null || record === undefined) {
+      return null
+    }
+    const expected = Buffer.from(calculateChecksum(record.nonce, record.raw), 'base64url')
     const actual = Buffer.from(record.checksum, 'base64url')
-    return actual.length === expected.length && timingSafeEqual(actual, expected)
-  }
-
-  function decode(token, expectedMode) {
-    if (expectedMode !== undefined && !isValidMode(expectedMode)) {
-      return null
-    }
-    const record = lookup(token)
-    if (record === null || !TOKEN_PATTERN.test(token) || record.version !== VERSION) {
-      return null
-    }
-    if (!hasValidChecksum(record) || (expectedMode !== undefined && record.mode !== expectedMode)) {
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
       return null
     }
     return record
   }
 
-  function attachParsed(token, metadata) {
-    const record = lookup(token)
-    if (record === null || decode(token) === null) {
-      throw new Error('UNKNOWN_TOKEN')
-    }
-    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
-      throw new TypeError('parsed metadata must be an object')
-    }
-    if (typeof metadata.name !== 'string' || !NAME_PATTERN.test(metadata.name)) {
-      throw new TypeError('parsed marker name is invalid')
-    }
-    if (!Array.isArray(metadata.args) || metadata.args.length === 0) {
-      throw new TypeError('parsed marker args must be a non-empty array')
-    }
-
-    const args = []
-    for (let index = 0; index < metadata.args.length; index += 1) {
-      args.push(copyParsedArgument(metadata.args[index]))
-    }
-
-    records.set(
-      token,
-      Object.freeze({
-        version: record.version,
-        mode: record.mode,
-        raw: record.raw,
-        name: metadata.name,
-        args: Object.freeze(args),
-        nonce: record.nonce,
-        checksum: record.checksum
-      })
-    )
-  }
-
-  function readTokenAt(content, start) {
-    if (!TOKEN_PATTERN.test(content.slice(start, start + TOKEN_TEXT_LENGTH))) {
-      return null
-    }
-    const end = start + TOKEN_TEXT_LENGTH
-    if (end > content.length) {
-      return null
-    }
-
-    const token = content.slice(start, end)
-    return { token, end }
-  }
-
-  function findTokens(content) {
-    if (typeof content !== 'string') {
-      throw new TypeError('content must be a string')
-    }
-
+  function findTokens(value) {
     const found = []
     let searchStart = 0
-    while (searchStart < content.length) {
-      const start = content.indexOf(TOKEN_PREFIX, searchStart)
+    while (searchStart < value.length) {
+      const start = value.indexOf(TOKEN_PREFIX, searchStart)
       if (start === -1) {
         break
       }
-      const tokenMatch = readTokenAt(content, start)
-      if (tokenMatch === null) {
+      const end = start + TOKEN_TEXT_LENGTH
+      const token = value.slice(start, end)
+      if (lookup(token) === null) {
         searchStart = start + TOKEN_PREFIX.length
         continue
       }
-
-      const record = decode(tokenMatch.token)
-      if (record !== null) {
-        found.push({ token: tokenMatch.token, start, end: tokenMatch.end, record })
-      }
-      searchStart = tokenMatch.end
+      found.push({ token, start, end, record: records.get(token) })
+      searchStart = end
     }
     return found
   }
 
-  function restore(content) {
-    const found = findTokens(content)
-    let restored = content
-    for (let index = found.length - 1; index >= 0; index -= 1) {
-      const occurrence = found[index]
-      restored = restored.slice(0, occurrence.start) + occurrence.record.raw + restored.slice(occurrence.end)
-    }
-    return restored
-  }
-
-  function freezeOccurrenceSnapshot(occurrence) {
+  function freezeOccurrence(occurrence) {
     return Object.freeze({
       id: occurrence.id,
       token: occurrence.token,
       field: occurrence.field,
       mode: occurrence.mode,
       raw: occurrence.raw,
+      sourceRange: occurrence.sourceRange,
+      tokenRange: occurrence.tokenRange === null ? null : freezeRange(occurrence.tokenRange),
       context: occurrence.context,
       state: occurrence.state
     })
@@ -262,20 +174,25 @@ function createTokenStore(options) {
 
   function findOccurrences(value, field) {
     if (typeof value !== 'string' || !OCCURRENCE_FIELDS.has(field)) {
-      throw createStoreError('INVALID_INPUT', 'occurrence value and field must be supported')
+      throw createStoreError('CARRIER_BINDING_ERROR', 'occurrence value and field must be supported')
     }
 
-    const found = findTokens(value)
+    const located = findTokens(value)
     const snapshots = []
-    for (const match of found) {
+    for (const match of located) {
       let occurrence = occurrencesByToken.get(match.token)
       if (occurrence === undefined) {
+        if (match.record.field !== field) {
+          throw createStoreError('CARRIER_BINDING_ERROR', 'an occurrence cannot cross source fields')
+        }
         occurrence = {
           id: `o${nextOccurrenceId}`,
           token: match.token,
           field,
           mode: match.record.mode,
           raw: match.record.raw,
+          sourceRange: match.record.sourceRange,
+          tokenRange: Object.freeze({ start: match.start, end: match.end }),
           context: null,
           state: field === 'excerpt' ? 'excerpt-pending' : 'issued'
         }
@@ -286,13 +203,17 @@ function createTokenStore(options) {
         throw createStoreError('CARRIER_BINDING_ERROR', 'an occurrence cannot cross source fields')
       }
 
+      const snapshot = freezeOccurrence(occurrence)
       snapshots.push(Object.freeze({
-        id: occurrence.id,
-        token: match.token,
-        start: match.start,
-        end: match.end,
-        raw: occurrence.raw,
-        mode: occurrence.mode
+        id: snapshot.id,
+        token: snapshot.token,
+        field: snapshot.field,
+        mode: snapshot.mode,
+        raw: snapshot.raw,
+        sourceRange: snapshot.sourceRange,
+        tokenRange: Object.freeze({ start: match.start, end: match.end }),
+        context: snapshot.context,
+        state: snapshot.state
       }))
     }
     return Object.freeze(snapshots)
@@ -302,19 +223,19 @@ function createTokenStore(options) {
     if (typeof id !== 'string' || !occurrences.has(id)) {
       throw createStoreError('CARRIER_BINDING_ERROR', 'occurrence id is unknown')
     }
-    if (!OCCURRENCE_CONTEXTS.has(context)) {
+    if (context !== PLACEHOLDER_CONTEXT) {
       throw createStoreError('CARRIER_STATE_INVALID', 'context transition is not available')
     }
     const occurrence = occurrences.get(id)
     if (occurrence.context !== null) {
       throw createStoreError('CARRIER_BINDING_ERROR', 'an occurrence can only be bound once')
     }
-    if (occurrence.field === 'excerpt' || occurrence.state !== 'issued') {
+    if (occurrence.field !== 'content' || occurrence.state !== 'issued') {
       throw createStoreError('CARRIER_STATE_INVALID', 'content occurrence is not bindable')
     }
     occurrence.context = context
-    occurrence.state = CONTEXT_STATES[context]
-    return freezeOccurrenceSnapshot(occurrence)
+    occurrence.state = 'pending-render'
+    return freezeOccurrence(occurrence)
   }
 
   function markTerminal(id, state) {
@@ -322,40 +243,33 @@ function createTokenStore(options) {
       throw createStoreError('CARRIER_STATE_INVALID', 'terminal occurrence state is invalid')
     }
     const occurrence = occurrences.get(id)
-    const canTerminate = occurrence.state === 'excerpt-pending' ||
-      (occurrence.state === 'pending-markdown' && occurrence.field === 'content')
-    if (!canTerminate) {
+    if (!PENDING_STATES.has(occurrence.state)) {
       throw createStoreError('CARRIER_STATE_INVALID', 'occurrence cannot enter the requested terminal state')
     }
     occurrence.state = state
-    return freezeOccurrenceSnapshot(occurrence)
+    return freezeOccurrence(occurrence)
   }
 
   function getOccurrence(id) {
     const occurrence = occurrences.get(id)
-    return occurrence === undefined ? null : freezeOccurrenceSnapshot(occurrence)
+    return occurrence === undefined ? null : freezeOccurrence(occurrence)
   }
 
   function getOccurrenceByToken(token) {
     const occurrence = occurrencesByToken.get(token)
-    return occurrence === undefined ? null : freezeOccurrenceSnapshot(occurrence)
+    return occurrence === undefined ? null : freezeOccurrence(occurrence)
   }
 
   function getOccurrences() {
-    return Object.freeze(Array.from(occurrences.values(), freezeOccurrenceSnapshot))
+    return Object.freeze([...occurrences.values()].map(freezeOccurrence))
   }
 
   function issuedTokens() {
-    return Object.freeze(Array.from(records.keys()))
+    return Object.freeze([...records.keys()])
   }
 
-  return {
+  return Object.freeze({
     issue,
-    attachParsed,
-    lookup,
-    decode,
-    findTokens,
-    restore,
     findOccurrences,
     bindContext,
     markConsumed: id => markTerminal(id, 'consumed'),
@@ -364,7 +278,7 @@ function createTokenStore(options) {
     getOccurrenceByToken,
     getOccurrences,
     issuedTokens
-  }
+  })
 }
 
 module.exports = { createTokenStore }

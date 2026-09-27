@@ -1,7 +1,8 @@
 'use strict'
 
-const SUPPORTED_MODES = new Set(['block', 'inline'])
-const HANDLER_METHODS = ['parse', 'render', 'toPlainText']
+const SUPPORTED_MODES = new Set(['block'])
+const HANDLER_METHODS = Object.freeze(['parse', 'render', 'toPlainText'])
+const HANDLER_NAME_PATTERN = /^[A-Z][A-Za-z0-9_-]*$/
 
 function registrationError(code, message) {
   const error = new Error(message)
@@ -10,9 +11,17 @@ function registrationError(code, message) {
 }
 
 function failure(code, reason) {
-  return {
-    ok: false,
-    error: Object.freeze({ code, reason })
+  return Object.freeze({ ok: false, code, reason })
+}
+
+function validatePositions(positions) {
+  if (!Array.isArray(positions) || positions.length === 0) {
+    throw registrationError('INVALID_HANDLER', 'handler positions must be a non-empty array')
+  }
+  for (const position of positions) {
+    if (typeof position !== 'string' || position === '') {
+      throw registrationError('INVALID_HANDLER', 'handler position must be a non-empty string')
+    }
   }
 }
 
@@ -20,24 +29,16 @@ function validateHandler(handler) {
   if (typeof handler !== 'object' || handler === null || Array.isArray(handler)) {
     throw registrationError('INVALID_HANDLER', 'handler must be an object')
   }
-  if (typeof handler.name !== 'string' || handler.name.trim() === '') {
-    throw registrationError('INVALID_HANDLER', 'handler name must be a non-empty string')
+  if (typeof handler.name !== 'string' || !HANDLER_NAME_PATTERN.test(handler.name)) {
+    throw registrationError('INVALID_HANDLER', 'handler name must start with an uppercase letter')
   }
-  if (!Array.isArray(handler.modes) || handler.modes.length === 0) {
-    throw registrationError('INVALID_HANDLER', 'handler modes must be a non-empty array')
+  if (!SUPPORTED_MODES.has(handler.mode)) {
+    throw registrationError('INVALID_HANDLER', `unsupported handler mode: ${String(handler.mode)}`)
   }
-
-  const seenModes = new Set()
-  for (const mode of handler.modes) {
-    if (!SUPPORTED_MODES.has(mode)) {
-      throw registrationError('INVALID_HANDLER', `unsupported handler mode: ${String(mode)}`)
-    }
-    if (seenModes.has(mode)) {
-      throw registrationError('INVALID_HANDLER', `duplicate handler mode: ${mode}`)
-    }
-    seenModes.add(mode)
+  validatePositions(handler.positions)
+  if (typeof handler.fields !== 'object' || handler.fields === null || Array.isArray(handler.fields)) {
+    throw registrationError('INVALID_HANDLER', 'handler fields must be an object')
   }
-
   for (const method of HANDLER_METHODS) {
     if (typeof handler[method] !== 'function') {
       throw registrationError('INVALID_HANDLER', `handler ${method} must be a function`)
@@ -61,23 +62,23 @@ function createRegistry() {
       handlers.set(handler.name, handler)
     },
 
-    dispatch(name, args, context) {
+    dispatch(name, input, context) {
       const handler = handlers.get(name)
       if (handler === undefined) {
         return failure('UNKNOWN_MARKER', `marker handler is not registered: ${String(name)}`)
       }
-
-      const mode = context === null || typeof context !== 'object' ? null : context.mode
-      if (!handler.modes.includes(mode)) {
-        return failure('UNSUPPORTED_MODE', `handler ${name} does not support mode: ${String(mode)}`)
-      }
-
       try {
-        const result = handler.parse(args, context)
-        if (result.ok === true) {
+        const result = handler.parse(input, context)
+        if (result === null || typeof result !== 'object' || typeof result.ok !== 'boolean') {
+          return failure('HANDLER_ERROR', `handler ${name} returned an invalid parse result`)
+        }
+        if (result.ok) {
           return { ok: true, handler, node: result.node }
         }
-        return result
+        return failure(
+          typeof result.code === 'string' ? result.code : 'HANDLER_ERROR',
+          typeof result.reason === 'string' ? result.reason : `handler ${name} rejected its input`
+        )
       } catch {
         return failure('HANDLER_ERROR', `handler ${name} failed during parse`)
       }

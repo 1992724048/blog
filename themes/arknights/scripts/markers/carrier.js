@@ -5,13 +5,7 @@ const { randomBytes } = require('node:crypto')
 const CARRIER_SYMBOL = Symbol('arknights.markerCarrier')
 const BRIDGE_KEY = 'markdown'
 const ALLOWED_FIELDS = new Set(['content', 'excerpt'])
-const CONTENT_AUDIT_STATES = new Set([
-  'raw-restored',
-  'text-preserved',
-  'raw-preserved',
-  'consumed',
-  'failed'
-])
+const TERMINAL_STATES = new Set(['consumed', 'failed'])
 
 function createCarrierError(code, reason) {
   const error = new Error(code)
@@ -85,15 +79,14 @@ function createRenderCarrier(options) {
   if (data === null || typeof data !== 'object' || store === null || typeof store !== 'object') {
     throw new TypeError('carrier data and store must be objects')
   }
-  if (!Array.isArray(fields) || fields.length === 0) {
-    throw new TypeError('carrier fields must be a non-empty array')
+  if (!Array.isArray(fields)) {
+    throw new TypeError('carrier fields must be an array')
   }
   if (Object.hasOwn(options, 'id') || Object.hasOwn(options, 'occurrences')) {
     throw new TypeError('carrier identity is store-owned')
   }
 
   const originalFields = new Map()
-  const explicitFields = new Set()
   for (const entry of fields) {
     if (
       entry === null ||
@@ -108,9 +101,6 @@ function createRenderCarrier(options) {
       throw new TypeError('carrier field entries must be unique')
     }
     originalFields.set(entry.field, entry.originalValue)
-    if (entry.explicit) {
-      explicitFields.add(entry.field)
-    }
   }
 
   const carrierId = randomBytes(16).toString('base64url')
@@ -176,26 +166,8 @@ function createRenderCarrier(options) {
     },
     audit() {
       for (const occurrence of store.getOccurrences()) {
-        if (occurrence.field === 'excerpt') {
-          if (explicitFields.has('excerpt') && !['consumed', 'failed'].includes(occurrence.state)) {
-            return Object.freeze({
-              ok: false,
-              error: Object.freeze({
-                code: 'CARRIER_AUDIT_FAILED',
-                reason: 'explicit excerpt occurrence is not terminal'
-              })
-            })
-          }
-          continue
-        }
-        if (!CONTENT_AUDIT_STATES.has(occurrence.state)) {
-          return Object.freeze({
-            ok: false,
-            error: Object.freeze({
-              code: 'CARRIER_AUDIT_FAILED',
-              reason: 'content occurrence is not terminal'
-            })
-          })
+        if (!TERMINAL_STATES.has(occurrence.state)) {
+          return Object.freeze({ ok: false, reason: 'occurrence is not terminal' })
         }
       }
       return Object.freeze({ ok: true })
@@ -305,17 +277,17 @@ function restoreCarrierBridge(data, carrier) {
 function getCarrierFromOptions(options, expectedCarrier) {
   if (options === null || typeof options !== 'object' || expectedCarrier === null ||
       typeof expectedCarrier !== 'object') {
-    return null
+    throw createCarrierError('CARRIER_BINDING_ERROR', 'carrier options and expectation are invalid')
   }
   let descriptor
   try {
     descriptor = Object.getOwnPropertyDescriptor(options, CARRIER_SYMBOL)
   } catch {
-    return null
+    throw createCarrierError('CARRIER_BINDING_ERROR', 'carrier options could not be read')
   }
   if (descriptor === undefined || !Object.hasOwn(descriptor, 'value') ||
       descriptor.value !== expectedCarrier) {
-    return null
+    throw createCarrierError('CARRIER_BINDING_ERROR', 'carrier options do not bind the expected carrier')
   }
   return descriptor.value
 }
