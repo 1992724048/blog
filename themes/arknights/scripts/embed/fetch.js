@@ -8,12 +8,17 @@ const bilibiliProvider = require('./providers/bilibili')
 // 「独占一行」是本子系统唯一的行级规则，只在此处实现一次。
 const SOLE_LINK_LINE = /^\s*<(https?:\/\/[^>\s]+)>\s*$/
 
-// 一轮 provider 调用里最多发出的 HTTP 请求数：github 是仓库 + 提交数，
-// bilibili 短链是跳转 + 详情，其余情形只有一次，故 2 是上界。
+// 这个 2 不是「单卡请求数上界」：bilibili 短链在 retries=2 时会发 4 次请求（跳转探测
+// 固定 retries:0 只探 1 次，详情接口再走完整的 3 次尝试阶梯），故任何按请求数写的
+// 上界都小于它。它是一个纯**时间单元**的倍数——一轮 provider 调用里「走完整重试阶梯的
+// 请求数」上界为 2：github 的 /repos + /commits 恰好取到；bilibili 短链是 1 条完整阶梯
+// 加 1 次无退避探测（2·retries+2 ≤ 4·retries+2）；bilibili BV 号只有 1 条（2·retries+1）。
+// 故 timeUnits = 2 × (2·retries+1) 是各路径最坏时间单元数的**确切**上界，改动此处的
+// 倍数或下方阶梯的构成都会让「取整余量 ≤ timeUnits ms」的有界性证明失效。
 const MAX_REQUESTS_PER_CARD = 2
 
-// 一个「时间单元」是一次 HTTP 尝试或一次退避等待，故一轮调用里的最坏情形是
-// MAX_REQUESTS_PER_CARD × (retries 次退避 + retries+1 次尝试)。
+// 一个「时间单元」是一次 HTTP 尝试或一次退避等待；一条完整阶梯含 retries 次退避 +
+// retries+1 次尝试，即 2·retries+1 个单元。
 const timeUnits = (retries) => MAX_REQUESTS_PER_CARD * (2 * retries + 1)
 
 const collectSoleLinks = (documents) => {
