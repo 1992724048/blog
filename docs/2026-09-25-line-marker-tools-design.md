@@ -152,7 +152,7 @@ EndBoundary        = ?首个空行、不满足 FieldLine 的物理行，或当�
 
 - 列表
 - 相对缩进
-|$
+]$
 
 [#]>Editor|
 [language]| javascript
@@ -160,7 +160,7 @@ EndBoundary        = ?首个空行、不满足 FieldLine 的物理行，或当�
 [theme]| vs-dark
 [body]|$[
 const answer = 42;
-|$
+]$
 
 [#]>LinkCard|
 [avatar]| 示例站点
