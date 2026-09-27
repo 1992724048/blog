@@ -68,15 +68,16 @@
   .navContent > .navItem
     height 100%
 
-  // 一级导航为统一宽度（border-box，高度 36px 与顶栏 36px 外高一致）：min-width 取当前配置下最宽项
-  // 所需宽度（--nav-item-min-w = 左右内边距 24px + 最宽名称 2em + 4px 余量 = 3.75em @16px 字号），
-  // width auto 兜住更长的配置；图标项与文字项用同一组左右内边距取得一致的横向留白
-  // 配合 header.styl 的顺序化过渡（图标先收拢 / 名称后展开，两向皆然），过渡期内容宽度恒 ≤ max(图标, 名称)
-  // ≤ 该 min-width，故切换当前页时按钮宽度零跳变、后续按钮与右侧簇零位移
+  // 一级导航按内容自适应（border-box，高度 36px 与顶栏 36px 外高一致）：
+  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 12px×2 + 内容宽。
+  // 内容宽两态相等：非 active = 图标槽 --nav-icon-w（2em），active = 收起后的图标（0）+ 展开的名称（2em），
+  // 两者同为 2em；配合 header.styl 的顺序化过渡（图标先收拢 / 名称后展开，两向皆然），
+  // 过渡期内容宽度恒 ≤ max(图标槽, 名称) = 2em，不引入占位峰值
+  // → 切换当前页时任一按钮的两态自然宽度相同、其后按钮与右侧簇零位移（不靠 min-width 掩盖）
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
     width auto
-    min-width var(--nav-item-min-w)
+    min-width 0
     height 36px
     display flex
     align-items center
@@ -90,9 +91,8 @@
 
   // 底部凸出指示（仅桌面平铺态）：伪元素绝对定位、不参与布局，因此不改动按钮几何、
   // 不改动 nav 的对齐，也不加剧既有 1px 下沿溢出。锚点是 .navBlock 的 padding box 下沿
-  // （y = 36 − 2.5 = 33.5，.navBlock 的 position: relative 定位上下文）；向下让出既有
-  // 2.5px 底边后，伪元素总高 = 顶栏底边厚度 + 凸出量，故顶边恒为 y 35（顶栏外缘 y 36 的上沿），
-  // 与既有蓝条在最后一像素带重叠 → 无接缝；下沿 y 36 + 凸出量。
+  // （y = 36，按钮已无栏内底边），向下让出凸出量后，伪元素总高 = 顶栏底边厚度 + 凸出量，
+  // 故顶边恒为 y 35（顶栏外缘 y 36 的上沿），与顶栏末像素带重叠 → 无接缝；下沿 y 36 + 凸出量。
   // 凸出量由单一 --nav-tab-drop 决定，base 即最终几何（无第二处几何来源）
   .navContent > .navItem > :is(.navBlock, .navSecond)::after
     content ''
@@ -100,7 +100,7 @@
     left 0
     right 0
     z-index 1
-    bottom calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop)))
+    bottom calc(-1 * var(--nav-tab-drop))
     height calc(var(--topbar-border-w) + var(--nav-tab-drop))
     background-color transparent
     pointer-events none
@@ -108,7 +108,7 @@
 
   // active 与 hover / focus-visible 共用同一凸出几何与同一上色（同特异性 (0,4,1)），
   // 故合成一条规则以杜绝双源；状态区分改由按钮本体承担，不靠凸出尺寸：
-  // active = 中度对比底色 + 2.5px 主题蓝底边 + 名称展开；hover = 主题蓝块 + 白字；焦点另由焦点环承担
+  // active = 中度对比底色 + 名称展开；hover = 主题蓝块 + 白字；焦点另由焦点环承担
   .navContent > .navItem > :is(.navBlock, .navSecond):is(:hover, :focus-visible)::after,
   .navContent > .navItem.active > :is(.navBlock, .navSecond)::after
     background-color var(--nav-tab-color)

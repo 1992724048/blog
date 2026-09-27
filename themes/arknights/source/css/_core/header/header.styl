@@ -4,15 +4,16 @@
   // 顶栏底边厚度：header 的 border-bottom 与导航凸出段共用，避免两处字面量漂移
   --topbar-border-w 1px
   --search-row-h calc(var(--topbar-h) + 1px)
-  // 桌面一级导航（≥1024px）底部凸出指示：既有 2.5px 底边提为 token 供凸出段锚点复用；
-  // 凸出量收敛为单一 token（实机反馈第二轮：active 与 hover / focus-visible 同为 2px），
-  // 尺寸不再承担状态区分，改由按钮本体的底色 / 文字色 / 底边色承载
-  --nav-block-border-b 2.5px
+  // 桌面一级导航（≥1024px）底部凸出指示：凸出量收敛为单一 token（实机反馈第二轮：
+  // active 与 hover / focus-visible 同为 2px），尺寸不再承担状态区分，
+  // 改由按钮本体的底色 / 文字色承担
   --nav-tab-drop 2px
   --nav-tab-color var(--theme-highlight)
-  // 桌面一级导航按钮统一宽度：左右内边距 12px×2 + 最宽名称 2em（2 个全角字 @16px 字号）= 56px，
-  // 另留 4px 余量（每侧 2px）= 3.75em；用 em 随字号与页面缩放同步（WCAG 1.4.4），不写死 px
-  --nav-item-min-w 3.75em
+  // 桌面一级导航的图标槽宽：等于最宽菜单名的渲染宽（2 个全角字 × 1em/字 = 2em），
+  // 使「收起图标」与「展开名称」两态的内容宽恒相等，切换当前页时按钮与其后按钮零位移；
+  // 同时把 FontAwesome 各字形 14–20px 不等的 advance 统一到一个槽宽（字形居中、不裁切），
+  // 从根上消除「友链项比其它项宽」的字形差异。用 em 随字号 / 页面缩放同步（WCAG 1.4.4）
+  --nav-icon-w 2em
 
 header
   position sticky
@@ -75,7 +76,6 @@ ol.navContent
   position relative
   display block
   color var(--theme-text-light)
-  border-bottom var(--nav-block-border-b) solid transparent
   transition background-color .3s, color .3s
 
 .navItemTitle
@@ -94,13 +94,13 @@ ol.navContent
     color #fff
     text-shadow none
 
-// 当前页（.active 由 Header.ts 挂载）：沿用归档 / 分类列表项的选中语言——底边主题蓝条 + 中度对比底色；
+// 当前页（.active 由 Header.ts 挂载）：沿用归档 / 分类列表项的选中语言——中度对比底色 + 展开名称。
+// 底部不再有栏内底边（实机反馈第三轮：栏内 2.5px 蓝边与栏外 2px 凸出接成约 4.5px 的一段，偏粗），
+// 指示线只保留栏外凸出段；状态区分由「底色 + 名称展开 + 栏外凸出」承载，不靠颜色单独表达（WCAG 1.4.1）。
 // 特异性 (0,3,0) 高于上方 hover 的 (0,2,0)：选中项悬停时保持选中样式，不闪蓝块 / 白字
 // 注：Stylus 的 & 嵌套在 :is() 选择器下会错插进首个参数，标题规则须平铺书写
 .navItem.active > :is(.navBlock, .navSecond)
   background-color var(--theme-bg-soft-hover)
-  border-left 0
-  border-bottom-color var(--theme-highlight)
 
 .navItem.active > :is(.navBlock, .navSecond) > .navItemTitle
   color var(--theme-text-light)
@@ -112,12 +112,16 @@ ol.navContent
   display flex
   align-items center
 
-// 图标：当前页时收拢淡出；max-width 上限 1.5em（FontAwesome 实宽 ≤1.25em，留余量）
+// 图标：当前页时收拢淡出；槽宽固定为 --nav-icon-w（字形居中、不裁切），
+// 使 FontAwesome 各字形 14–20px 不等的 advance 不再进入布局计算（实测 fa-link 20px /
+// fa-database 14px，跨度 6px，正是「友链项更宽」的根因）。
 // .navItemTitle 为 flex 容器，图标作为弹性项可直接过渡 max-width；overflow hidden 兼作裁切与解除弹性项自动最小尺寸
 // 过渡为「顺序化」的一半（延迟 .15s）：离开当前页时名称先收起、图标随后展开（见 .navItemLabel 注释）
 .navBlockIcon > .navItemTitle > i
-  max-width 1.5em
+  width var(--nav-icon-w)
+  max-width var(--nav-icon-w)
   overflow hidden
+  text-align center
   transition max-width .15s .15s, opacity .15s .15s
 
 // 进入当前页：图标立即收拢淡出（无延迟），为随后展开的名称让出位置
@@ -127,10 +131,11 @@ ol.navContent
   transition max-width .15s, opacity .15s
 
 // 名称（active 项显示）：默认收起（0 宽 + 透明），随 active 平滑展开；类名避开 Header.ts 识别集合
-// 桌面一级项为统一宽度（flex_layout.styl 的 --nav-item-min-w），margin-left 归零配合 .navItemTitle 的 flex 1 + 居中，
-// 使名称在按钮内居中；≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
+// margin-left 归零配合 .navItemTitle 的 flex 1 + 居中，使名称在按钮内居中；
+// ≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
 // 过渡同样顺序化：收起方向立即（.15s），展开方向延迟 .15s。两段合计 .3s，与原同节奏总时长一致，
-// 但图标与名称不再同时占位 → 过渡期内容宽度恒 ≤ max(图标, 名称)，配合统一宽度即切换当前页时按钮宽度零跳变
+// 但图标与名称不再同时占位 → 过渡期内容宽度恒 ≤ max(图标槽, 名称)，配合「图标槽宽 = 名称宽」
+// 两端点相等，故切换当前页时按钮宽度零跳变、其后按钮与右侧簇零位移
 .navItemLabel
   display inline-block
   max-width 0

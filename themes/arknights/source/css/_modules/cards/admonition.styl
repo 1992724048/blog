@@ -1,12 +1,44 @@
 .admonition > .ex-header:nth-child(2)
   margin-right 2px
 
+// 类型图标与标题之间的视觉间距收敛为单一契约 token。
+// 原先图标盒恒为 20×20 正方形而 margin-right 只有 2px，但五个 SVG 都是 24×24 viewBox
+// 缩放进该盒，其墨迹右缘各不相同（见各类型 --ex-icon-w 的注释），于是「盒右缘 → 标题」
+// 的可见空白 = 盒内光学留白 + margin，各类型实测 2.83 / 4.50 / 3.67 / 6.17 / 2.83px 不等。
+// 现按各类型墨迹右缘收口盒宽（mask 仍按 --ex-icon-box 原尺寸左对齐居中，图标本身大小不变），
+// 使盒右缘 ≈ 墨迹右缘，可见空白恒等于 --ex-icon-gap。
+.admonition
+  // 图标盒基准边长（正方形，= mask 渲染尺寸）
+  --ex-icon-box 20px
+  // 墨迹右缘 → 标题的可见间距（设计带 6–8px 的下沿）
+  --ex-icon-gap 6px
+  // 盒宽默认值：未逐类型收口时等于基准边长
+  --ex-icon-w var(--ex-icon-box)
+
 .i-adm
   display inline-block
-  height 20px
-  width 20px
-  margin-right 2px
+  height var(--ex-icon-box)
+  width var(--ex-icon-w)
+  margin-right var(--ex-icon-gap)
   background var(--theme-text-light)
+  // mask 固定为 --ex-icon-box 正方形并左对齐居中：盒宽收口只裁掉右侧光学留白，
+  // 不会拉伸或位移字形（否则 width 变小会把 24×24 视图等比压扁）
+  mask-size var(--ex-icon-box)
+  -webkit-mask-size var(--ex-icon-box)
+  mask-position left center
+  -webkit-mask-position left center
+  mask-repeat no-repeat
+  -webkit-mask-repeat no-repeat
+
+// 各类型盒宽 = 基准边长 20px × (该 SVG 墨迹最大 x ÷ viewBox 24)，构建期已算成 px 字面量：
+//   note / important  20×22÷24 = 18.33px
+//   warning           20×23÷24 = 19.17px
+//   success           20×21÷24 = 17.5px
+//   failure           20×19÷24 = 15.83px
+// 分子取自下方 @css 中各 path 数据的墨迹最大 x 坐标；整条公式由
+// .temp/theme-ui-alerts.test.js 从那些 path 数据复算校验，任何一侧不一致即门禁失败。
+// （不写成 calc(...)*N/24：Stylus 会把 calc 内的乘除当自身表达式求值而报解析错。）
+admIconW = { note: 18.33px, warning: 19.17px, success: 17.5px, failure: 15.83px, important: 18.33px }
 
 for name in note warning success failure important
   .i-{name}
@@ -14,6 +46,7 @@ for name in note warning success failure important
     -webkit-mask-image var(--adm-icon- + name)
   .admonition.adm-{name}
     --ex-color var(--theme-adm- + name)
+    --ex-icon-w admIconW[name]
 
 @css {
   :root {

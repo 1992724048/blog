@@ -1,7 +1,11 @@
+// 横向外边距必须为 0：正文区域内 table（border-collapse + 无 margin）与代码块
+// （figure.highlight 的 margin 1em 0 + border unset）都贴齐 #post-content 的内容左缘，
+// 只有本容器原先的 margin 1em 会额外右移 1em（16px @16px 字号），造成左边缘不对齐。
+// 改为 margin 1em 0 后，左右两侧同时贴齐，横向留白与表格 / 代码块完全一致。
 .expand-box
   --ex-color var(--theme-ex-header)
 
-  margin 1em
+  margin 1em 0
   border-left 5px solid
   border-color var(--ex-color)
   & > .ex-header::before

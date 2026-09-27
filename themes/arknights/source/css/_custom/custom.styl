@@ -240,6 +240,10 @@ blockquote.alert
   border-left-width 4px
   border-left-style solid
   border-radius 0
+  // 类型图标与标题之间的可见间距（设计带 6–8px）。图标盒 16×16 与五个 SVG 的 16×16 视图
+  // 一一对应（1:1 渲染，盒内光学留白 0–1.92px），故 flex gap 即视觉间距的主项，
+  // 收敛为单一 token 与 Alerts marker 的 --ex-icon-gap 同值，两套呈现口径一致
+  --alert-icon-gap 6px
   // 只过渡背景色：alpha 变化不带动尺寸、间距与边框；减动效下由下方媒体查询整体取消
   transition background-color .2s
   p
@@ -247,7 +251,7 @@ blockquote.alert
   strong
     display flex
     align-items center
-    gap 6px
+    gap var(--alert-icon-gap)
     margin-bottom 0
     color var(--alert-title-color, var(--theme-text))
     &::before
