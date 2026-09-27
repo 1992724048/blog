@@ -73,6 +73,8 @@
 .article-item
   padding-inline 20px
   display flex
+  // 摘要（.list-excerpt）宽度 100% 故自动换行到标题下方；无 wrap 时它会被压在同一行右侧
+  flex-wrap wrap
   position relative
   margin-bottom 15px
   &::after
@@ -83,6 +85,13 @@
     bottom -5px
     left 15px
     border-bottom: 1px var(--theme-unimportant-trans) solid
+  // 摘要左缘与标题对齐（复用日期列宽 55px = .control-archive 的宽度），
+  // 使其视觉上从属于标题而非日期
+  .list-excerpt
+    box-sizing border-box
+    width 100%
+    margin-top 6px
+    padding-left 55px
 
 #Categories
   height fit-content

@@ -5,7 +5,7 @@ article
   min-height calc(100vh - 10px)
   height fit-content
   min-width 1px
-  #post-content p, .recent-excerpt p
+  #post-content p
     line-height 150%
 
 .posts
@@ -69,7 +69,10 @@ article
         color var(--theme-text-rev)
       .recent-info::after
         background-color var(--theme-bg-hover)
-      .recent-excerpt a, a:hover
+      //- 摘要文本级颜色不随卡片底色继承：悬停时底色变主题蓝，须显式切到近黑（明暗两套均为 #000）
+      .list-excerpt
+        color var(--theme-text-hover)
+      a:hover
         color var(--theme-text-light)
       hr
         color var(--theme-highlight)
@@ -105,8 +108,18 @@ article
     position relative
     bottom -6px
 
-.recent-excerpt
-  margin 12px 0 28px 0
+// 列表页摘要的共享视觉契约：首页卡片与归档 / 分类 / 标签条目共用同一套文本排版
+// 数据源是 frontmatter 的 description（纯文本，非 marked 产物），故只需文本级样式；
+// 与标题的间距 / 缩进等几何由各容器上下文另行给出。
+// 颜色取 --theme-text（明 #222 / 暗 #c4c4c4，对两套底色均 >10:1，满足 WCAG AA 正文门槛），
+// 不取容器继承的 --theme-unimportant（#767676 对浅色底仅 4.16:1，未达 4.5:1）。
+.list-excerpt
+  color var(--theme-text)
+  font-size small
+  line-height 150%
+  // 首页卡片：摘要夹在标题与「阅读文章 +」之间，下边距让开负外边距的按钮
+  .recent-post &
+    margin 12px 0 28px 0
 
 .post-sticky
   background-color var(--theme-highlight)

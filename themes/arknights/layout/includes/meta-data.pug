@@ -25,13 +25,24 @@ link(rel="preload", as="font", crossorigin="anonymous", href=url_for('font/JetBr
 //- 非阻塞引入：media="print" 让浏览器以非渲染阻塞优先级下载，onload 切回 all 生效；
 //- noscript 回退保证禁用 JS 时字体 CSS 仍同步生效（回退路径会重新引入阻塞，是刻意的正确性取舍）
 link(rel='preconnect', href='https://cdn.jsdelivr.net', crossorigin)
+//- 第三方域预连接：把 DNS / TCP / TLS 往返前置到 HTML 解析期，缩短首屏第三方资源的等待
+//- href 取协议相对形式，与下文实际引用的 `//unpkg.com/...`、`//cdnjs...` 同源，
+//- 保证 http / https 两种部署下提示都落在真正被请求的那个源上，不会白建连接
+//- 不加 crossorigin：本主题对这两个域的引用全是 `<link rel=stylesheet>` 与经典 `<script>`（no-cors 连接池），
+//- 加了 crossorigin 反而会改建 CORS 池连接而无法被这些请求复用（同理 jsDelivr 那条带 crossorigin，
+//- 是因为它服务的是 webfont，字体必须走 CORS）
+link(rel='preconnect', href='//unpkg.com')
+link(rel='preconnect', href='//cdnjs.cloudflare.com')
+//- Cloudflare Browser Insights（static.cloudflareinsights.com）由边缘注入、不在本仓源码内，
+//- 无法在本地构建中验证，故只给最廉价的 DNS 提示（不占连接）；该功能未启用时提示自动失效
+link(rel='dns-prefetch', href='//static.cloudflareinsights.com')
 link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css' media='print' onload="this.media='all'")
 link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css' media='print' onload="this.media='all'")
 noscript
   link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css')
   link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css')
 //- 缓存版本号：修改主题 Stylus（arknights.css 产物）后同步递增，避免 Cloudflare / 浏览器缓存旧版
-- var cssVersion = "20260961"
+- var cssVersion = "20260962"
 link(rel="stylesheet", href=url_for("css/arknights.css") + "?v=" + cssVersion)
 style.
   //- font-display 取值依据（均为 swap，相对原「未声明 ≈ block、最长 3s 不可见」是双向改善）：

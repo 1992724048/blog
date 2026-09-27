@@ -25,8 +25,10 @@ if page.posts.length > 0
           if post.sticky > 0
             span.post-sticky #{__('page.sticky')}
           = post.title
-        .recent-excerpt
-          if post.excerpt.length > 0
+        //- 摘要复用 frontmatter 的 description（纯文本）；缺失 / 空白则整块不渲染
+        - var summary = (typeof post.description === 'string' ? post.description : '').trim()
+        if summary
+          .list-excerpt
             hr
-            != post.excerpt
+            = summary
         span.read-more #{__('page.readMore')}
