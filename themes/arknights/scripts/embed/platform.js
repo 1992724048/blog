@@ -39,7 +39,7 @@ const identifyPlatform = (rawUrl) => {
     return {
       platform: 'bilibili',
       id: null,
-      webUrl: url,
+      webUrl: `https://b23.tv/${short[1]}`,
       apiUrl: null,
       shortCode: short[1],
       needsShortLinkResolve: true
@@ -58,19 +58,30 @@ const cacheKey = (target) => {
 
 const groupDigits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 
-const formatCountEn = (value) => {
+// 升序档位表，每项为 [档位下界, 除数, 单位, 小数位]；除数与下界是两件事
+// （英文 'k' 自 10000 起入档但除以 1000，中文 '万' 两者同为 10000）
+const COUNT_UNITS_EN = [[10000, 1000, 'k', 1], [1000000, 1000000, 'M', 2]]
+const COUNT_UNITS_ZH = [[10000, 10000, '万', 1], [100000000, 100000000, '亿', 2]]
+
+// 档位不能只看原始值：999999 落 'k' 档会渲染成 '1000.0k'，名字已跨过 'M' 档。
+// 故取档后再按渲染值复核，触到下一档下界就提升一档重算，输出永不出现已越过的单位。
+// plain 是最低档（不足 10000）的渲染方式：英文按千分位分组，中文原样。
+const formatCountByUnits = (value, units, plain) => {
   if (!Number.isFinite(value) || value < 0) return ''
-  if (value < 10000) return groupDigits(value)
-  if (value < 1000000) return `${(value / 1000).toFixed(1)}k`
-  return `${(value / 1000000).toFixed(2)}M`
+  let level = units.findIndex(([lower]) => value >= lower)
+  while (level > -1 && level + 1 < units.length) {
+    const [, divisor, , digits] = units[level]
+    if (Number((value / divisor).toFixed(digits)) < units[level + 1][0] / divisor) break
+    level += 1
+  }
+  if (level < 0) return plain(value)
+  const [, divisor, unit, digits] = units[level]
+  return `${(value / divisor).toFixed(digits)}${unit}`
 }
 
-const formatCountZh = (value) => {
-  if (!Number.isFinite(value) || value < 0) return ''
-  if (value < 10000) return String(value)
-  if (value < 100000000) return `${(value / 10000).toFixed(1)}万`
-  return `${(value / 100000000).toFixed(2)}亿`
-}
+const formatCountEn = (value) => formatCountByUnits(value, COUNT_UNITS_EN, groupDigits)
+
+const formatCountZh = (value) => formatCountByUnits(value, COUNT_UNITS_ZH, String)
 
 const pad = (n) => String(n).padStart(2, '0')
 
