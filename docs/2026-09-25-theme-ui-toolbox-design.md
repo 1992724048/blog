@@ -20,7 +20,7 @@
 | AI 样式 | `themes/arknights/source/css/_custom/custom.styl` | tooltip 使用 visibility/opacity/transform 160ms 双向动画；状态色为 PASS 绿、EDIT 紫、UNKN 灰、NONE 橙。 |
 | 导航 active | `themes/arknights/source/css/_core/header/header.styl` | active 使用全断点 2.5px 透明占位底边与主题高亮底边，不再使用 5px 左边框及旧 padding 补偿。 |
 | 桌面侧栏 footer | `themes/arknights/source/css/_core/aside/aside.styl` | `aside > footer` 位于 sticky aside 底部，≥769px 使用 `max(0px, calc(30px - 1lh))`；`flex_layout.styl` 的 ≤768px 移动规则不变。 |
-| 工具箱 DOM 与样式 | `themes/arknights/layout/includes/bottom-btn.pug`、`themes/arknights/source/css/_page/post/bottom_btn.styl` | 工具箱为标注、分享、收藏、截图、音乐五项，按固定扇形角度展开；右列独立 BGM 按钮已删除。 |
+| 工具箱 DOM 与样式 | `themes/arknights/layout/includes/bottom-btn.pug`、`themes/arknights/source/css/_page/post/bottom_btn.styl`、`themes/arknights/source/css/_page/post/annotate_toolbar.styl` | 工具箱为标注、分享、收藏、截图、音乐五项，按实际项数均分扇形角度；右列独立 BGM 按钮已删除。`bottom_btn.styl` 只管按钮组与工具箱几何（含减动效横切块），`annotate_toolbar.styl` 只管标注模式与选中文字工具栏 / `.hl-mark` 色板，两者经 `_page/page.styl` 的 `@import 'post/*'` 自动接入、无需改 import。 |
 | 工具箱控制器 | `themes/arknights/source/js/_src/include/Toolbox.ts` | `Toolbox` 负责展开、标注、分享、收藏、共享 status 与 `data-action` document 委托；截图/BGM 委托独立控制器。 |
 | BGM 控制器 | `themes/arknights/source/js/_src/include/BgmControl.ts` | 长生命周期控制器持有唯一 audio，处理播放/暂停、媒体事件、失败重试与 Pjax 后按钮同步。 |
 | 项目悬停 | `themes/arknights/source/js/_src/include/ProjectTooltip.ts` | 已并入主题 bundle，用模块私有 `WeakSet` 防止重复绑定并在 `pjax:success` 重扫；独立源文件已删除。 |
@@ -366,6 +366,7 @@ B 批次只改变脚本归属和绑定实现。若 artifact 显示 card DOM 或 
 - 5 项全存在时与原表等价，最大偏差 0.331px。
 - §7.2 条款 3（`≥769px` 径向抽出 + 1.08 放大）、条款 4（投影）、条款 5（40×40 目标）、条款 6（≤768px 不增 hover 业务）继续有效；1.08 改由旋钮 `--fan-scale` 提供，值不变。
 - 已知限制：若头部 ordinal 缺席，钳制会致层叠；当前 `annotate` 无条件渲染故不可达，升级路径为 flag 累加排名制。
+- 样式文件边界：几何留在 `bottom_btn.styl`，`#annotate-toolbar` 全段 + `.at-*` + `.hl-mark` 色板（连同 `body.annotating`）移入 `annotate_toolbar.styl`；工具箱侧只留 `.toolbox-annotate.active` 视觉态，减动效块作为横切块整块留在 `bottom_btn.styl` 末尾。
 
 ## 8. ScreenshotControl 规格
 
@@ -811,6 +812,9 @@ D 的文档修正可独立提交；若自动化失败，UI 缺陷回到 A—C �
 | 工具箱 | 非文章页 | 无截图按钮；其余可用工具正常。 |
 | BGM 禁用 fixture | 专项测试单独传入 `enable=false` | 无音乐按钮和 audio，其它工具正常；该 fixture 不代表也不得替代默认站点配置。 |
 | 扇形 | 五项展开 | 半径 66px，角度 0/22.5/45/67.5/90，无第 4 项起堆叠。 |
+| 扇形 | 非文章页四项展开（缺截图，全站常态） | 半径 66px，角度 0/30/60/90；音乐 ordinal 4 被 clamp 压到槽位 3 落 90°，原空洞位被填，无层叠。 |
+| 扇形 | 文章页四项展开（`bgm.enable: false`） | 半径 66px，角度 0/30/60/90；截图 ordinal 3 落 90°，不留空洞。 |
+| 扇形 | 三项 / 两项 / 一项兜底 | 三项角度 0/45/90；两项 0/90；单项落象限平分线 45°（不贴 toggle）。 |
 | 扇形 | 桌面 hover/focus、reduced motion | 正常径向抽出与 1.08 放大；reduce 下无过渡但状态不变。 |
 | AI 键盘提示 | Tab/focus、重复 marker、同名同文案、content/excerpt 与多页面输出 | 根 badge 可聚焦；tooltip ID 全局唯一并由 `aria-describedby` 关联；SVG `aria-hidden`；无嵌套交互元素。 |
 | ARIA | Tab/Enter/Space | 所有按钮可操作；标注/收藏/BGM pressed，截图 busy，status 可读。 |
