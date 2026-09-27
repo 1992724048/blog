@@ -83,8 +83,9 @@ const fetchEmbedMetadata = async (hexo, deps) => {
   for (const model of ['Post', 'Page']) {
     try {
       documents.push(...hexo.model(model).toArray())
-    } catch {
+    } catch (err) {
       // 模型不存在时跳过，不阻断构建
+      warn(`[embed] 读取 ${model} 模型失败，本次构建不扫描该模型：${err && err.message ? err.message : 'Error'}`)
     }
   }
 
