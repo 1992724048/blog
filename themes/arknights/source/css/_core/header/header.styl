@@ -29,14 +29,17 @@ header
   align-items center
   padding 0 12px
   font-family Bender
-  // 毛玻璃顶栏：底色 alpha 按主题降至 0.85（见下），blur 观感依赖底色透出
+  // 毛玻璃顶栏：底色 alpha 按主题取 --topbar-bg-*（.7，见 _core/color/base.styl），
+  // blur 观感依赖底色透出——原 .85 只留 15% 背后内容参与模糊，而顶栏背后本就低频，
+  // 两者相乘使模糊几乎不可见（实机反馈）。故 alpha 降到 .7、模糊半径同时由 8px 提到 12px：
+  // 透出比例由 15% 提到 35%（2.3 倍），再配合更大的模糊半径把透出的低频内容抹得更开。
   background-color var(--theme-bg-trans0)
-  -webkit-backdrop-filter blur(8px)
-  backdrop-filter blur(8px)
+  -webkit-backdrop-filter blur(12px)
+  backdrop-filter blur(12px)
   // 顶栏底边：与首页文章列表条目边框同色（--theme-unimportant 两主题 #767676 / #898989），随主题自动适配
   border-bottom var(--topbar-border-w) solid var(--theme-unimportant)
 
-// 毛玻璃底色：仅覆盖顶栏（取 --theme-bg-trans0 原色值降 alpha），弹层 / 下拉仍用 --theme-bg-trans0
+// 毛玻璃底色：仅覆盖顶栏（取 --theme-bg-trans0 原色值降 alpha 至 .7），弹层 / 下拉仍用 --theme-bg-trans0
 // 取值来自 _core/color/base.styl 的常驻 token（--topbar-bg-light / --topbar-bg-dark）：
 // 导航选中项栏外竖排标签的反色底经 --nav-invert-bg 指向对面那一条，两处不再各持一份字面量
 :root[theme-mode=light] header
@@ -45,6 +48,7 @@ header
   background-color var(--topbar-bg-dark)
 
 // 回退：不支持 backdrop-filter（含 -webkit- 前缀）时维持原 0.95 高不透明底，保证文字可读性
+// （该分支本就无 blur，只负责可读性，故不随毛玻璃 alpha 的调整而改动）
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))
   :root[theme-mode=light] header,
   :root[theme-mode=dark] header
@@ -206,10 +210,12 @@ ol.navContent
     transition none
   .navContent > .navItem > :is(.navBlock, .navSecond)::after
     transition none
-  // 竖排标签的进 / 退场时序（flex_layout.styl 桌面块）：降为瞬时——transition none 后
-  // opacity 与 visibility 同帧生效；声明点与该规则同文件外，用完整选择器保持唯一
+  // 竖排标签的显 / 隐时序（flex_layout.styl 桌面块）：显形规则与基础（默认隐藏）规则各一条，
+  // 降为瞬时——transition none 后 opacity 与 visibility 同帧生效；
+  // 声明点与该规则同文件外，用完整选择器保持唯一
   .navContent > .navItem > .navBlockIcon::before,
-  .navContent > .navItem.active > .navBlockIcon::before
+  header:hover .navContent > .navItem.active > .navBlockIcon::before,
+  header:focus-within .navContent > .navItem.active > .navBlockIcon::before
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl

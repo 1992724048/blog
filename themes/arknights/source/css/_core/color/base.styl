@@ -13,12 +13,20 @@
   // 供「顶栏本体」与「导航选中项栏外竖排标签的反色底」两处共同消费（后者经
   // light.styl / dark.styl 的 --nav-invert-bg 指向对面那一条，见该两文件）。
   // 常驻于 :root 而非主题块内，故两套主题在任一时刻都各自持有对方色板的取值。
-  --topbar-bg-light rgba(#f4f5f6, .85)
-  --topbar-bg-dark rgba(20, 21, 22, .85)
+  //
+  // alpha .7（实机反馈「背景模糊没生效」的修法）：.85 只让 15% 的背后内容进入 blur 结果，
+  // 而顶栏背后的内容本就低频（body 的 cover + fixed 背景照片、#post-bg 的 alpha .8 平色），
+  // 两者相乘后模糊观感几乎不可见。降到 .7 使 35% 的背后内容参与模糊，是原来的 2.3 倍。
+  // 顶栏内的前景（导航 / 社交图标 --theme-text-light、搜索框自带不透明底 --theme-search-bg）
+  // 在 .7 上仍全部过 WCAG：明暗两套最劣包络（背后为纯白 / 纯黑）均 >= 4.5:1，
+  // 底边 --theme-unimportant 亦 >= 3:1（WCAG 1.4.11），详见 .temp/theme-ui-nav.test.js 的实算。
+  --topbar-bg-light rgba(#f4f5f6, .7)
+  --topbar-bg-dark rgba(20, 21, 22, .7)
 
-  // 导航选中项栏外竖排标签的反色底（颜色沿用上面两条的原色，alpha 提到 .95）：
-  // 顶栏本体仍消费 .85 那两条（blur 观感依赖其透出），故此处是标签自有的另一对取值，
-  // 不改顶栏 token 本身。.95 的理由：标签是 header 的后代，会进入顶栏的 backdrop root 被
-  // backdrop-filter 一并处理，.85 叠在正文上观感发灰（实机反馈）。
-  --nav-invert-bg-light rgba(#f4f5f6, .95)
-  --nav-invert-bg-dark rgba(20, 21, 22, .95)
+  // 导航选中项栏外竖排标签的反色底：颜色沿用上面两条的原色，alpha 提到 1（完全不透明）。
+  // 顶栏本体消费 .7 那两条（blur 观感依赖其透出），故此处是标签自有的另一对取值，
+  // 不改顶栏 token 本身。完全不透明的理由：标签是 header 的后代、会进入顶栏的 backdrop root
+  // 被一并处理，半透明值叠正文观感发灰（实机反馈）；且实机反馈要求的 60% 会让标签文字对比度
+  // 跌破 WCAG AA 的 4.5:1，改判为完全不透明后对比度与背后内容彻底解耦。
+  --nav-invert-bg-light rgba(#f4f5f6, 1)
+  --nav-invert-bg-dark rgba(20, 21, 22, 1)

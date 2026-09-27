@@ -70,10 +70,13 @@
     height 100%
 
   // 一级导航按内容自适应（border-box，高度 36px 与顶栏 36px 外高一致）：
-  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 12px×2 + 内容宽。
+  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 9px×2 + 内容宽。
   // 两态内容宽相同：名称在桌面恒折叠（由 header.styl 桌面块的「中和一」拉平）、
   // 图标恒占满 --nav-icon-w 槽（「中和二」），故 active 与非 active 的按钮宽完全相等，
   // 切换当前页时其后按钮与右侧簇零位移（内边距取值只影响绝对宽度，不影响等宽与零位移）。
+  // 内边距 9px：实机反馈要求「每个按钮宽度缩小 6px」（12px → 9px，左右各减 3px），
+  // 按钮宽由 20px 槽 + 24px = 44px 收到 38px，接近方形更紧凑；栏外竖排标签宽跟随按钮
+  // （见下方 ::before 规则由 left 0 / right 0 解出 = 包含块 = 按钮宽），故同步收为 38px。
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
     width auto
@@ -82,7 +85,7 @@
     display flex
     align-items center
     justify-content center
-    padding 0 12px
+    padding 0 9px
 
   // 标题占满按钮可用宽度并水平居中：桌面端按钮内容只有图标槽，居中即图标居中
   .navContent > .navItem > :is(.navBlock, .navSecond) > .navItemTitle
@@ -133,32 +136,40 @@
   // 底色取 --nav-invert-bg（指向对面色板的「标签专用」顶栏底色 token，见 _core/color/base.styl 与
   // light.styl / dark.styl），前景色取既有 --theme-text-rev：浅色主题 = 深底白字、
   // 深色主题 = 浅底黑字，即「相反主题导航栏同背景」。
-  // 该 token 的 alpha 是 .95 而非顶栏本体的 .85：标签是 header 的后代、会进入顶栏的 backdrop root
-  // 被一并处理，.85 叠在正文上观感发灰（实机反馈）；顶栏自身的 .85 两条不受影响，blur 观感不变。
+  // 该 token 现为完全不透明（alpha 1）：实机反馈先要求降到 60%，复核后改判为完全不透明——
+  // 60% 会让标签文字对比度跌破 WCAG AA 的 4.5:1。完全不透明同时让对比度与背后内容彻底解耦
+  // （不再需要「叠在正文上会不会发灰」的合成推算）。顶栏自身的 alpha 是另一对取值，见 base.styl。
+  //
+  // 显隐由「顶栏是否被指针 / 键盘占用」反向驱动（详见下方显形规则的注释）：标签默认隐藏，
+  // 指针移出顶栏去读正文时即收起，故不会遮挡正文；点击穿透由 pointer-events none 全程承担。
   .navContent > .navItem > .navBlockIcon::before
     content attr(data-label)
     position absolute
     top calc(100% + var(--nav-tab-drop))
     left 0
     right 0
-    // 高度随文字自适应：竖排下 inline 轴 = 纵向，故 height 即「字符数 × 字宽」，
-    // 两字名称恒 2em；不写死 height、也不用 min-height 撑
+    // 高度随文字自适应：竖排下 inline 轴 = 纵向，故 height 即「字形前进宽 + 字间距」；
+    // 不写死 height、也不用 min-height 撑
     height auto
     // 不声明 width、也不再用 auto 外边距居中：width auto 且 left / right 均非 auto 时，
     // 宽度由「left + margin + border + padding + width + right = 包含块宽」直接解出，
     // 标签 margin box 恰等于包含块（.navBlockIcon 的 padding box）= 按钮宽
-    // （图标槽 --nav-icon-w 1.25em = 20px + 左右内边距 12px×2 = 44px），六项恒等、不随字数参差。
+    // （图标槽 --nav-icon-w 1.25em = 20px + 左右内边距 9px×2 = 38px），六项恒等、不随字数参差。
     //
-    // 盒宽（44px）大于字列厚（line-height 1.25em = 20px，竖排下由 line-height 决定），
+    // 盒宽（38px）大于字列厚（line-height 1.25em = 20px，竖排下由 line-height 决定），
     // 故字列须沿 block 轴居中：vertical-rl 的 block 轴 = 横向且起点在右缘，不居中会贴右留白。
     // text-align 沿 inline 轴居中（此处 inline 轴 = 纵向），横向居中做不到，
     // 改由 flex 的交叉轴（= block 轴 = 横向）承担；主轴无富余（height auto 恰好包住文字），
     // 故只需 align-items、无需 justify-content。
     display flex
     align-items center
-    // 物理上下各 3px：竖排下 inline 轴恰是物理纵向，故这是 inline 轴两端各留 3px，
-    // 两字盒高 = 2em + 3px×2 = 38px @16px；横向内边距归零——宽度已跟随按钮，不再为文字让位
-    padding 3px 0
+    // 物理上下各 6px：竖排下 inline 轴恰是物理纵向，故这是 inline 轴两端各留 6px
+    // （实机反馈：原 3px 过紧）。横向内边距归零——宽度已跟随按钮，不再为文字让位
+    padding 6px 0
+    // 字间距 4px（实机反馈）：CSS Text 定义 letter-spacing 沿 inline 轴生效，竖排下 inline 轴
+    // = 纵向，故只增大盒高、不影响盒宽——block 向尺寸仍由 line-height 决定（= 20px），
+    // 与 38px 盒宽无冲突、不会把两字撑破盒宽。
+    letter-spacing 4px
     z-index 2
     writing-mode vertical-rl
     text-orientation upright
@@ -170,15 +181,30 @@
     line-height 1.25
     color var(--theme-text-rev)
     background-color var(--nav-invert-bg)
-    // 标签悬在栏外、覆盖正文：不吃指针事件，且 visibility hidden 使非选中项完全不参与命中
+    // 标签悬在栏外、覆盖正文：不吃指针事件（点击穿透，WCAG 2.5.8 命中盒不变），
+    // 且 visibility hidden 使非选中项完全不参与命中
     pointer-events none
+    // 默认隐藏：显隐改由「顶栏是否被指针 / 键盘占用」驱动（见下方规则），
+    // 故基础规则不再依赖 .active——指针离开顶栏去读正文时标签即收起，不再遮挡文字
     opacity 0
     visibility hidden
     // 退场：先淡出 .15s，再在 .15s 处切 visibility（否则淡出过程仍可被 AT 读到）
     transition opacity .15s, visibility 0s .15s
 
+  // 显：仅当指针停留在顶栏内（含当前页按钮本身）或键盘焦点在顶栏内时显示。
+  //
+  // 为什么用「顶栏祖先态」反向驱动、而不是给标签自己写 :hover：
+  // 标签自身一旦 :hover 就 opacity 0 → 立刻不再命中 :hover → 又显回来，来回闪烁。
+  // 反向驱动是稳定的单向依赖：命中集合只由顶栏决定，标签的显隐不影响顶栏是否被命中。
+  // 命中判据用后代组合器而非 :has()：指针在按钮上时 header 自身即匹配 :hover
+  // （悬停后代会让祖先一并匹配），而标签带 pointer-events none 且几何上位于顶栏之外
+  // （y 38 起，顶栏 0–36），故指针移向标签时 header 失配 → 标签收起，「移入拼接部分即隐藏」成立。
+  // header 是 main 的子元素且 navBlockIcon 全在其中，命中集合与 main:has(header:hover) 等价，
+  // 但不依赖 :has() 支持、不多写一层祖先约束。
+  // 仍只对 .active 项显形：标签的用途是标出「当前页」是哪一页，全量六项同时弹出反而是噪音。
   // 进场：visibility 立即切、opacity 同步淡入（与退场同长，合计无堆叠）
-  .navContent > .navItem.active > .navBlockIcon::before
+  header:hover .navContent > .navItem.active > .navBlockIcon::before,
+  header:focus-within .navContent > .navItem.active > .navBlockIcon::before
     opacity 1
     visibility visible
     transition opacity .15s, visibility 0s
