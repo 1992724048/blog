@@ -211,11 +211,13 @@ ol.navContent
   .navContent > .navItem > :is(.navBlock, .navSecond)::after
     transition none
   // 竖排标签的显 / 隐时序（flex_layout.styl 桌面块）：显形规则与基础（默认隐藏）规则各一条，
-  // 降为瞬时——transition none 后 opacity 与 visibility 同帧生效；
+  // 另有换页抑制规则一条（header[data-nav-hover-stale]:hover，data 状态位由 Header.ts 写），
+  // 三条一并降为瞬时——transition none 后 opacity 与 visibility 同帧生效；
   // 声明点与该规则同文件外，用完整选择器保持唯一
   .navContent > .navItem > .navBlockIcon::before,
   header:hover .navContent > .navItem.active > .navBlockIcon::before,
-  header:focus-within .navContent > .navItem.active > .navBlockIcon::before
+  header:focus-within .navContent > .navItem.active > .navBlockIcon::before,
+  header[data-nav-hover-stale]:hover .navContent > .navItem.active > .navBlockIcon::before
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl

@@ -208,3 +208,25 @@
     opacity 1
     visibility visible
     transition opacity .15s, visibility 0s
+
+  // 换页抑制：Pjax 换页时指针往往仍停在顶栏上，header:hover 依旧成立，于是新页面的选中项标签
+  // 会立刻弹出并压住正文，直到用户移动鼠标。纯 CSS 无法区分「刚导航完」与「主动悬停」——
+  // 两者在 CSS 侧的匹配集合完全相同，故必须有一个状态位：由 Header.ts 在 pjax:success 时给
+  // header 打上 data-nav-hover-stale（顶栏的悬停态已过期于本次导航），并在 header 的
+  // pointerleave（悬停态真正结束）时清除。不设兜底超时：定时器到点后指针仍停在顶栏上，
+  // 标签会重新弹出，等于把同一个缺陷挪成「过一会儿再犯」，而 pointerleave 是确定性的
+  // 状态结束事件，且不新增 document / window / main 级监听。
+  //
+  // 抑制只挂在 :hover 上，语义即「压掉过期的指针悬停」，由此拿到两条性质：
+  //   1) 选择器多一个 :hover → 特异性 (0,6,2)，严格高于上方显形规则两条的 (0,5,2)，
+  //      与编译序无关地恒定生效（attr 选择器按 CSS 规范计入「类」列，与 :hover 同档）；
+  //   2) 不覆盖 :focus-within —— 键盘意图优先。pointerleave 是纯指针事件，纯键盘用户永远
+  //      等不到它，状态位会一直挂着；若抑制规则连 :focus-within 一起压掉，则键盘用户在换页后
+  //      将永久看不到标签（WCAG 2.4.7「焦点可见」被破坏），故焦点优先于导航抑制。
+  // 标记只在「标签本来就会显形」的那一侧起作用：指针不在顶栏时标签本就隐藏，无需重复表达。
+  header[data-nav-hover-stale]:hover .navContent > .navItem.active > .navBlockIcon::before
+    opacity 0
+    visibility hidden
+    // 退场时序须在此显式重写：高特异性的上方显形规则把 transition 抢成了进场值
+    // （visibility 0s 即时切），若不重写，淡出过程会被立刻切掉的 visibility 抹掉
+    transition opacity .15s, visibility 0s .15s
