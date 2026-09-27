@@ -353,6 +353,57 @@ class BgmControl {
         this.playbackState = audio !== null && !audio.paused ? 'playing' : 'paused';
         this.reconcile({ token: token, publishStatus: true });
     };
+    // ===== 惰性音源注入 =====
+    // 首屏 HTML 只带 data-bgm-src（惰性属性，浏览器不据此发起任何请求），首次播放前才把 URL
+    // 提升为真正的 src 并 load()。这是一次性幂等动作：属性随即被删除，重复调用直接返回，
+    // 因此失败重试路径与 Pjax 换页后都不会二次注入，也不会与 toggle 的重试 load() 叠加。
+    ensureSource = () => {
+        const audio = this.audio;
+        if (audio === null) {
+            return;
+        }
+        const lazySource = audio.dataset.bgmSrc;
+        if (lazySource === undefined || lazySource === '') {
+            return;
+        }
+        delete audio.dataset.bgmSrc;
+        audio.setAttribute('src', lazySource);
+        audio.load();
+    };
+    // ===== 自动播放开关 =====
+    // 仅当配置显式开启 data-bgm-autoplay 才在首屏后尝试一次自动播放。浏览器自动播放策略在
+    // 无用户手势时通常直接 reject：这既不是媒体加载失败（不得进 failed），也不该发布任何文案，
+    // 故只把本次试探性的 starting 收回 paused。成功路径由常驻 media 'play' 事件统一接管，
+    // 此处不重复写终态。整个过程不新增任何 document/window 监听。
+    attemptAutoplay = () => {
+        const audio = this.audio;
+        if (audio === null || audio.dataset.bgmAutoplay !== 'true') {
+            return;
+        }
+        this.ensureSource();
+        this.playbackState = 'starting';
+        this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
+        const unwind = () => {
+            // 只收回自己写下的试探态；若期间已有其它路径接管（playing/failed/starting 之外的状态变化），不越权覆盖
+            if (this.playbackState !== 'starting') {
+                return;
+            }
+            this.playbackState = 'paused';
+            this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
+        };
+        let started;
+        try {
+            started = audio.play();
+        }
+        catch (error) {
+            unwind();
+            return;
+        }
+        // 老浏览器 play() 返回 undefined，既不 resolve 也不 reject：保持 starting 交由 media 事件裁决
+        if (started !== undefined && typeof started.catch === 'function') {
+            started.catch(unwind);
+        }
+    };
     // ===== 用户操作 =====
     toggle = async () => {
         const audio = this.audio;
@@ -375,6 +426,7 @@ class BgmControl {
             this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: true });
             return;
         }
+        this.ensureSource();
         if (this.playbackState === 'failed') {
             this.playbackState = 'retrying-load';
             this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
@@ -430,6 +482,7 @@ class BgmControl {
         document.addEventListener('pjax:error', this.onPjaxLifecycle);
         document.addEventListener('pjax:success', this.onPjaxLifecycle);
         this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
+        this.attemptAutoplay();
     }
 }
 var bgmControl = new BgmControl();
@@ -1789,6 +1842,25 @@ class Header {
             this.close();
         }
     };
+    // Pjax 换页抑制「过期悬停」：换页时指针往往仍停在顶栏上，header:hover 依旧成立，
+    // 新页面的选中项标签会立刻弹出并压住正文，直到用户移动鼠标。纯 CSS 无法区分「刚导航完」
+    // 与「主动悬停」（两者匹配集合完全相同），故须有一个状态位。状态位的生命周期即
+    // 「顶栏的悬停态自上次导航以来没有真正结束过」：写入见 afterNavigate，清除见 onPointerLeave。
+    markHoverStale = () => {
+        this.header.setAttribute('data-nav-hover-stale', '');
+    };
+    // 悬停态结束（指针离开顶栏）即清除，此后再次悬停走 header:hover 原路径。
+    // 只挂 pointerenter 会让状态位在指针一直停在顶栏时长期挂着，两者对用户不可见地等价，
+    // 取 pointerleave 是因为它对应「过期状态真正结束」这一语义本身。
+    onPointerLeave = () => {
+        this.header.removeAttribute('data-nav-hover-stale');
+    };
+    // 先写状态位再重算当前项：relabel 末尾的父级回溯循环在结构异常时会抛出，
+    // 状态位必须无条件落下，否则抑制失效（标签又会挡住正文）
+    afterNavigate = () => {
+        this.markHoverStale();
+        this.relabel();
+    };
     inHeader = (mouse) => {
         const target = mouse.target;
         const popup = document.querySelector('.search-popup');
@@ -1843,9 +1915,12 @@ class Header {
     };
     constructor() {
         this.relabel();
-        document.addEventListener('pjax:success', this.relabel);
+        document.addEventListener('pjax:success', this.afterNavigate);
         document.addEventListener('pjax:send', () => this.close());
         document.addEventListener('keyup', this.closeByEscape);
+        // 元素级监听（非 document / window / main，故不进入全站 listener 基线）：
+        // 顶栏被 Pjax selectors 排除在替换区外，本元素跨换页存活，无需重绑
+        this.header.addEventListener('pointerleave', this.onPointerLeave);
         this.button.onclick = () => this.reverse(this.header);
         document.querySelectorAll('.navItemList').forEach((item) => {
             item = getParent(item);
