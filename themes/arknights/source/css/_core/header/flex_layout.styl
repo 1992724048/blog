@@ -38,12 +38,19 @@
     align-items center
     flex-wrap wrap
     box-sizing border-box
+    min-width 0
+    justify-content flex-start
     min-height 48px
     padding 10px 20px
 
   .navContent .navItemTitle
     flex 1
     font-size 15px
+
+  // 移动端 active 名称继续与图标成组（6px 间距）；桌面固定宽度下由 header.styl 归零居中
+  // 选择器带 ol.navContent 前缀：特异性高于 header.styl 的同名规则（该文件编译序在后）
+  ol.navContent .navItem.active > .navBlock .navItemLabel
+    margin-left 6px
 
 // ≥1024px：导航平铺 + 右侧常驻搜索框；☰ / 搜索图标按钮隐藏
 @media ( min-width 1024px )
@@ -61,12 +68,19 @@
   .navContent > .navItem
     height 100%
 
-  .navContent > .navItem > .navBlock
+  // 一级导航固定 72x36（border-box，与顶栏 36px 外高一致）：active 项收起图标、名称展开时
+  // 按钮宽度不变，消除后续按钮与右侧簇的横向位移；图标项与文字项的内部布局保持一致
+  .navContent > .navItem > :is(.navBlock, .navSecond)
+    box-sizing border-box
+    width 72px
+    min-width 72px
+    height 36px
     display flex
     align-items center
-    height 100%
-    padding 0 20px
+    justify-content center
+    padding 0
 
-  // 图标态菜单项：水平内边距收窄（按钮变窄），命中区仍为全高 36px（≥24px）
-  .navContent > .navItem > .navBlock.navBlockIcon
-    padding 0 12px
+  // 标题占满按钮可用宽度并水平居中：名称的展开 / 收起不改变图标与名称的相对位置
+  .navContent > .navItem > :is(.navBlock, .navSecond) > .navItemTitle
+    flex 1
+    justify-content center

@@ -1,11 +1,14 @@
 'use strict'
 
-// 标注/收藏/标注色的纯数据层：零 DOM 查询、零事件、零 timer
+// 共享叶子层：存储键、序列化与跨控制器反馈时序常量（零 DOM 查询、零事件、零 timer）
 namespace ToolboxModules {
   export const HIGHLIGHT_KEY_PREFIX = 'arknights:highlights:'
   export const FAVORITES_KEY = 'arknights:favorites'
   export const ANNOTATE_COLOR_KEY = 'arknights:annotate-color'
   export const ANNOTATE_COLORS: readonly string[] = ['yellow', 'green', 'blue', 'pink', 'orange']
+  // 复制成功反馈（分享 URL 与选区复制共用）的 .copied 态停留时长：常量随 owner 下沉到共享叶子，
+  // 避免同层控制器之间跨文件裸取对方命名空间成员（namespace 跨文件无编译期防护）
+  export const COPIED_DELAY = 1200
 
   export interface HighlightRecord { start: number; length: number; color?: string; text?: string }
   export interface FavoriteItem { url: string; title: string; time: number }

@@ -411,6 +411,7 @@ function clearStatus(): void
 | 形参收敛 | 全仓只保留 `claimStatus(message, { owner, delay? })` 一种写法（见上方引用块）；`delay` 省略即不建 timer，A 阶段两个 controller 正是这种调用 |
 | 加边内容 | 新增 `Share -> StatusLease` 与 `Favorite -> StatusLease` 两条**出边**；反向禁令全部保留：`ToolboxStatusLease.ts` 不得引用 `Toolbox.ts` / `BgmControl.ts` / 任何 controller（Global Constraints 第 14 条与 A1-2 的 `test_toolbox_dependency_edges` 断言），Share / Favorite 仍互不引用，也不得引用 facade |
 | 为何不选 facade 代理写入 | 若由 facade 代写 status，`.toolbox-status` 会出现 facade 与 lease 两个写入者，且 `window.toolbox` 需新增内部写入方法，直接破坏「公开面只有 `toggle/annotate/share/favorite`」的冻结契约（规格第 12.1.1 节冻结面） |
+| C 批补 `ScreenshotControl.ts -> ToolboxStatusLease.ts` | 主控附加要求 2 要求 `.toolbox-status` 全局唯一写入者，而截图控制器在 A 结束时仍自写 `writeStatus`。补边方向与上述三条完全同构（controller → 共享叶子），不新增层级、不成环，且由静态门禁锁死「只有 lease 触碰该节点」；详见第 12.2 节的裁决记录与追认状态 |
 | `observer` / `timer` 联合类型 | A 阶段两者恒为 `null`（零 timer、零 observer）；C3-2 起 `claimStatus` 内部创建后非 null。类型保持 `MutationObserver \| null` / `number \| null` 的联合形态以同时覆盖两个阶段，不分裂出第二份 `StatusLease` 形状 |
 
 ```typescript
@@ -3519,8 +3520,17 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | A | `6cc23d4` / `67543a7` / `b0d1f79` / `69af105` / `75a86af` / A3（激活与同步，hash 见 `git log --oneline -6`） | 全绿：12 个现存探针退出码全 0；全部改动 JS `node --check` 通过；`npm --prefix themes/arknights run build` 产物与仓库内 `arknights.js` 逐字节一致；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 U+0000 零命中；`public/search.json` 形态合规。**但 21 个旧门禁探针源码永久丢失、不重建，因此本批没有旧协议回归网** | 未完成（GC10）：AI tooltip、项目悬停、告警盒展开/折叠、真实截图 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与站内 Pjax 重绑仍须真实有头浏览器人工验收 |
 | P | 待填 | 待填 | 不涉及（纯构建期协议，不改 CSS/TS 产物，不递增 `cssVersion`/`jsVersion`） |
 | B | `refactor(tags): 删除旧标签并同步内容文档`（B 批唯一原子 commit，hash 见 `git log --oneline -1`） | 全绿：13 个活门禁退出码全 0 + 本批新增 `b-legacy-scan.js` / `b-readme-examples.js` / `b-artifact-regression.js` 退出码 0；全部改动 JS `node --check` 通过；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 NUL 零命中；CSS 产物差异恰为 13 个死规则块（8 个 hide + 5 个 link）且零新增，HTML 集合 32 个文件与删除前逐字一致；`cssVersion=20260954` / `jsVersion=20260951`；三语 README 9 个示例逐字喂真实 pipeline 全部产出契约 DOM 且三语逐字一致。**但 21 个旧门禁探针源码永久丢失、不重建，因此本批同样没有旧协议回归网** | 未完成（GC10）：真实截图 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与站内 Pjax 重绑、AI tooltip、项目悬停仍须真实有头浏览器人工验收 |
-| C | 待填 | 待填 | 待填 |
+| C | `fix(theme-ui): 修复告警导航与音乐状态`（C 批唯一原子 commit，hash 见 `git log --oneline -1`） | 全绿：16 个活门禁退出码全 0（含本批新增 `theme-ui-bgm.test.js` / `theme-ui-alerts.test.js` / `theme-ui-nav.test.js`）；全部改动 JS `node --check` 通过；`npm --prefix themes/arknights run build` 双 tsconfig 零诊断、产物与工作树内 `arknights.js` 一致；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 NUL 零命中；产物级 Alert 分层（5 类 × resting/hover）与桌面 72×36 契约成立；`cssVersion=20260955` / `jsVersion=20260952`；listener 清点为「A 批工具箱侧 10 个不变 + BgmControl 独占 3 个 = 全站 13 个」。**但 18 个旧门禁探针源码永久丢失、不重建，因此本批同样没有旧协议回归网** | 未完成（GC10）：Alert 明暗悬停/聚焦对比度、桌面导航 72×36 与断点、真实截图 PNG、BGM 播放/错误重试、Pjax 重绑、懒加载、搜索仍须真实有头浏览器人工验收 |
 | D | 待填 | 待填 | 待填 |
+
+### 12.2 C 批加边与偏差裁决记录
+
+| 项 | 内容 |
+| --- | --- |
+| `ScreenshotControl.ts -> ToolboxStatusLease.ts` 加边 | 主控附加要求 2 要求「`.toolbox-status` 全局唯一写入者」。A 结束时唯一写入者只对工具箱侧成立：`ScreenshotControl.ts` 与 `BgmControl.ts` 各带一个自写 `writeStatus`，`BgmControl` 一侧由 GC14 已批准的边收敛到 lease，`ScreenshotControl` 一侧无对应已批准边。本批按同一方向补一条出边（controller → 共享叶子，无环、方向不变），`line-marker-pipeline.test.js` 追加「全 `include/` 只有 lease 触碰 `.toolbox-status`」与「`ScreenshotControl` 必须声明 reference 并以 `claimStatus(..., { owner: 'screenshot' })` 写入」两条门禁。**GC14 白名单因此新增第 4 条出边，待主控追认** |
+| 任务书 C3-1 探针的两处修正 | 任务书给定的 `test_lifecycle_generation_per_pjax_dispatch` 断言 `operationGeneration() === 0`，但同一探针的 `toggleFromPaused()` 必然经 `beginOperation()` + `retireOperation()` 各推进一次（规格第 16.3 节第 3 条），故该字面断言与规格自相矛盾；实现改为「记录 pjax 前的 operation 基线并断言三次 dispatch 后不变」，规格意图（健康路径 operation 增量为 0）完整保留。任务书同段断言 pjax:send 后 `bgmLeaseOwned() === false`，但规格要求 pjax handler 以新 `L` reconcile 并发布状态（只有初始化用 `publishStatus:false`），故改为断言「旧 lease 的 observer 恰好 disconnect 一次 + reconcile 恰好新签一条 lease」，`clearStatus` 与 observer 失效语义由同文件的另外两条用例覆盖 |
+| `ToolboxAnnotationController.ts` 结构处置 | 主控附加要求 4 要求处置 492/500 的多职责聚合。GC19 硬约束「`include/` 恰 24 个文件、不得新增 TS 文件」使「Range/偏移几何簇下沉到第 25 个文件」在本批不可执行；且任务书与 GC14 均禁止再以压行/删空行凑门禁。本批因此交付**经论证的替代方案**：C 批对该文件零改动（0 行增减，余量仍为 8 行），拆分位（`TextLayout` 与 12 个几何/选区函数，约 110 行）、目标文件、预计行数（492 → 约 380）与所需 GC19 修订已原样登记进 `AGENTS.md`，排入 D 批执行 |
+| 探针文件的三条丢失重建 | 任务书假定 `theme-ui-bgm.test.js` 已存在并在其上追加，但该探针（连同 `theme-ui-alerts` / `theme-ui-nav`）源码已永久丢失。C 批按任务书给出的 fixture 与断言要点重写三份探针，并按 `AGENTS.md`「活门禁重建要点」表登记覆盖范围；BGM 探针另按规格第 16.3 节的 fixture 清单补齐原生 `play/pause/ended/error`、失败重试 `load()` 路径与 `clearStatus` 无 lease no-op 三组用例 |
 
 ### 12.1 P 协议修订裁决记录（插在批次 A 与 B 之间）
 

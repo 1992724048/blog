@@ -1,31 +1,88 @@
 "use strict";
 'use strict';
-// A 阶段最小实现：只记录 generation 与 owner，不建 timer、不挂 MutationObserver
+// 全站 .toolbox-status 的唯一写入口：写入、delay 自动清除与「其它 owner 接管」失效都收敛在此。
+// 观察者挂在共享节点上，任何其它控制器的写入（哪怕文本逐字相同）都会产生 mutation record
+// 并使本 lease 失效，因此持有者之外的任何人都不可能依赖本模块的 timer 去清空别人的文案。
 let statusGeneration = 0;
 let statusLease = null;
+const releaseStatusLease = (lease) => {
+    if (lease.timer !== null) {
+        window.clearTimeout(lease.timer);
+    }
+    if (lease.observer !== null) {
+        lease.observer.disconnect();
+    }
+    lease.timer = null;
+    lease.observer = null;
+};
+function currentStatusLease() {
+    return statusLease;
+}
+// 规格 16.3 的 claimStatus：递增 generation → 释放旧 lease 但不清空旧 node → 建 observer 并 observe
+// → 写 node → takeRecords 丢弃本次自有写入 → delay > 0 时为该 lease 建唯一 timer
 function claimStatus(message, options) {
     statusGeneration += 1;
-    statusLease = null;
+    if (statusLease !== null) {
+        releaseStatusLease(statusLease);
+        statusLease = null;
+    }
     const node = document.querySelector('.toolbox-status');
     if (node === null) {
         return;
     }
+    const observer = new MutationObserver(() => {
+        const lease = statusLease;
+        if (lease === null || lease.observer !== observer) {
+            return;
+        }
+        statusGeneration += 1;
+        releaseStatusLease(lease);
+        statusLease = null;
+    });
+    observer.observe(node, {
+        attributes: true,
+        attributeFilter: ['hidden'],
+        childList: true,
+        characterData: true,
+        subtree: true
+    });
     node.textContent = message;
     node.hidden = false;
-    statusLease = {
+    observer.takeRecords();
+    const lease = {
         token: statusGeneration,
-        node,
-        message,
+        node: node,
+        message: message,
         owner: options.owner,
-        observer: null,
+        observer: observer,
         timer: null
     };
+    statusLease = lease;
+    if (options.delay !== undefined && options.delay > 0) {
+        lease.timer = window.setTimeout(() => {
+            // 身份守卫：陈旧 timer 只清理自己创建时的那个 lease，绝不落到后来者头上
+            if (statusLease === lease) {
+                clearStatus();
+            }
+        }, options.delay);
+    }
 }
+// 规格 16.3 的 invalidateStatusLease：待处理 mutation 视为其它 owner 已接管；校验 token、node 身份
+// 与文本一致才交还 node 供调用方清空；两种情形都递增 generation、清 timer、disconnect 并丢弃 lease
 function invalidateStatusLease() {
-    statusGeneration += 1;
     const lease = statusLease;
+    if (lease === null) {
+        return null;
+    }
+    const pending = lease.observer === null ? [] : lease.observer.takeRecords();
+    const owned = pending.length === 0
+        && lease.token === statusGeneration
+        && document.querySelector('.toolbox-status') === lease.node
+        && lease.node.textContent === lease.message;
+    statusGeneration += 1;
+    releaseStatusLease(lease);
     statusLease = null;
-    return lease === null ? null : lease.node;
+    return owned ? lease.node : null;
 }
 function clearStatus() {
     const ownedNode = invalidateStatusLease();
@@ -35,110 +92,278 @@ function clearStatus() {
     ownedNode.textContent = '';
     ownedNode.hidden = true;
 }
+// 播放 / 暂停终态的提示停留时长；failed 的提示不自动清除
+const BGM_STATUS_DELAY = 2500;
+// 单一状态机：用户 toggle、原生 media 事件与 Pjax 生命周期都只经由 reconcile / enterFailed
+// 写最终态，不允许各自的 continuation 直接覆盖状态。
+// operationGeneration 与 lifecycleGeneration 是两个正交的失效维度：前者作废未完成的播放操作，
+// 后者作废跨 Pjax 存活的原生 listener 绑定；两者只能经下面的私有修改函数改变。
 class BgmControl {
     audio;
+    playbackState = 'paused';
     mediaFailed = false;
+    operationGeneration = 0;
+    lifecycleGeneration = 0;
+    // 绑定 persistent media listener 时捕获的 lifecycle token；解绑时置 null
+    persistentToken = null;
+    // 规格 16.3 列出的 statusLease 状态由共享 lease 模块持有，此处只做只读映射，
+    // 避免同一状态出现第二份副本
+    get statusLease() {
+        return currentStatusLease();
+    }
     get button() {
         return document.querySelector('.toolbox-bgm[data-action="bgm"]');
     }
-    writeStatus = (message) => {
-        const status = document.querySelector('.toolbox-status');
-        if (status === null) {
-            return;
-        }
-        status.textContent = message;
-        status.hidden = message === '';
+    // ===== generation 与 token =====
+    snapshotLifecycleToken = () => {
+        return Object.freeze({ kind: 'lifecycle', lifecycle: this.lifecycleGeneration });
     };
-    syncButton = () => {
-        const button = this.button;
+    advanceOperationGeneration = () => {
+        this.operationGeneration += 1;
+        return this.operationGeneration;
+    };
+    // 形态校验先行：JS 侧（含门禁探针的非 token 输入）可传入任意值，读字段前必须先确认它带 kind
+    acceptsOperation = (token) => {
+        return typeof token === 'object' && token !== null && token.kind === 'operation'
+            && token.operation === this.operationGeneration
+            && token.lifecycle === this.lifecycleGeneration;
+    };
+    acceptsLifecycle = (token) => {
+        return typeof token === 'object' && token !== null
+            && token.kind === 'lifecycle' && token.lifecycle === this.lifecycleGeneration;
+    };
+    beginOperation = () => {
+        this.advanceOperationGeneration();
+        // 上一 OperationToken 自此失效：它的 Promise continuation 与排队回调在写任何字段前都会被
+        // acceptsOperation 拒绝。操作期不新增 media listener（原生事件统一由 persistent listener 承担），
+        // 因此这里没有需要解绑的 operation-scoped listener 集合。
+        return Object.freeze({
+            kind: 'operation',
+            operation: this.operationGeneration,
+            lifecycle: this.lifecycleGeneration
+        });
+    };
+    retireOperation = (token) => {
+        if (!this.acceptsOperation(token)) {
+            return false;
+        }
+        this.advanceOperationGeneration();
+        return true;
+    };
+    invalidateLifecycle = (reason) => {
+        this.lifecycleGeneration += 1;
+        const token = this.snapshotLifecycleToken();
+        this.unbindPersistentListeners();
+        const ownedNode = invalidateStatusLease();
+        if (ownedNode !== null) {
+            ownedNode.textContent = '';
+            ownedNode.hidden = true;
+        }
+        this.bindPersistentListeners(token);
+        return token;
+    };
+    // ===== persistent media listener =====
+    bindPersistentListeners = (token) => {
         const audio = this.audio;
-        if (button === null || audio === null) {
+        if (audio === null) {
             return;
         }
-        const playing = !audio.paused;
-        button.setAttribute('aria-pressed', String(playing));
-        button.setAttribute('aria-busy', 'false');
-        const label = this.mediaFailed
+        this.persistentToken = token;
+        audio.addEventListener('play', this.onPlay);
+        audio.addEventListener('pause', this.onPause);
+        audio.addEventListener('ended', this.onEnded);
+        audio.addEventListener('error', this.onError);
+    };
+    unbindPersistentListeners = () => {
+        const audio = this.audio;
+        if (audio === null) {
+            return;
+        }
+        audio.removeEventListener('play', this.onPlay);
+        audio.removeEventListener('pause', this.onPause);
+        audio.removeEventListener('ended', this.onEnded);
+        audio.removeEventListener('error', this.onError);
+        this.persistentToken = null;
+    };
+    // ===== 状态渲染与终态 =====
+    isHealthy = () => {
+        const audio = this.audio;
+        return audio !== null && !audio.paused && !this.mediaFailed && audio.error === null;
+    };
+    enterFailed = (reason, token) => {
+        // reason 标识进入路径（media-play / play / load-sync / pjax-error 等），只用于状态机内部诊断
+        if (this.acceptsOperation(token)) {
+            this.retireOperation(token);
+        }
+        else if (this.acceptsLifecycle(token)) {
+            this.advanceOperationGeneration();
+        }
+        else {
+            return;
+        }
+        this.mediaFailed = true;
+        this.playbackState = 'failed';
+        this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: true });
+    };
+    reconcile = (input) => {
+        if (!this.acceptsLifecycle(input.token)) {
+            return;
+        }
+        const button = this.button;
+        const state = this.playbackState;
+        if (button === null) {
+            return;
+        }
+        const pending = state === 'starting' || state === 'retrying-load' || state === 'retrying-play';
+        button.setAttribute('aria-pressed', String(state === 'playing'));
+        button.setAttribute('aria-busy', String(pending));
+        const label = state === 'failed'
             ? button.dataset.labelError
-            : playing
+            : state === 'playing'
                 ? button.dataset.labelPause
                 : button.dataset.labelPlay;
         if (label !== undefined) {
             button.setAttribute('aria-label', label);
             button.setAttribute('title', label);
         }
-    };
-    onPlay = () => {
-        this.syncButton();
-        if (this.audio !== null && !this.audio.paused) {
-            const button = this.button;
-            if (button !== null) {
-                this.writeStatus(button.dataset.labelPlayingStatus || '');
-            }
+        if (!input.publishStatus) {
+            return;
         }
+        // 中间态不发布文案：用户只会看到开始与结束之间的稳定反馈
+        if (state === 'playing' || state === 'paused') {
+            claimStatus(state === 'playing'
+                ? button.dataset.labelPlayingStatus || ''
+                : button.dataset.labelPausedStatus || '', { owner: 'bgm', delay: BGM_STATUS_DELAY });
+        }
+        else if (state === 'failed') {
+            claimStatus(button.dataset.labelFailedStatus || '', { owner: 'bgm' });
+        }
+    };
+    // ===== 原生 media 事件 =====
+    onPlay = () => {
+        const token = this.persistentToken;
+        if (token === null) {
+            return;
+        }
+        if (!this.isHealthy()) {
+            this.enterFailed('media-play', token);
+            return;
+        }
+        this.beginOperation();
+        this.playbackState = 'playing';
+        this.reconcile({ token: token, publishStatus: true });
     };
     onPause = () => {
-        this.syncButton();
-        const button = this.button;
-        if (button !== null) {
-            this.writeStatus(button.dataset.labelPausedStatus || '');
+        const token = this.persistentToken;
+        if (token === null) {
+            return;
         }
+        if (this.mediaFailed || (this.audio !== null && this.audio.error !== null)) {
+            this.enterFailed('media-pause', token);
+            return;
+        }
+        this.beginOperation();
+        this.playbackState = 'paused';
+        this.reconcile({ token: token, publishStatus: true });
     };
     onEnded = () => {
-        this.syncButton();
+        this.onPause();
     };
     onError = () => {
-        this.mediaFailed = true;
-        this.syncButton();
-        const button = this.button;
-        if (button !== null) {
-            this.writeStatus(button.dataset.labelFailedStatus || '');
+        const token = this.persistentToken;
+        if (token === null) {
+            return;
         }
+        this.enterFailed('audio-error', token);
     };
+    // ===== Pjax 生命周期：三个事件各一个 listener，pjax:error 的唯一 owner =====
+    onPjaxLifecycle = (event) => {
+        const token = this.invalidateLifecycle(event.type);
+        const audio = this.audio;
+        if (this.mediaFailed || (audio !== null && audio.error !== null)) {
+            this.enterFailed(`pjax-${event.type}`, token);
+            return;
+        }
+        this.playbackState = audio !== null && !audio.paused ? 'playing' : 'paused';
+        this.reconcile({ token: token, publishStatus: true });
+    };
+    // ===== 用户操作 =====
     toggle = async () => {
         const audio = this.audio;
-        const button = this.button;
-        if (audio === null || button === null) {
+        if (audio === null) {
             return;
         }
+        const token = this.beginOperation();
         if (!audio.paused) {
-            audio.pause();
-            this.syncButton();
-            this.writeStatus(button.dataset.labelPausedStatus || '');
+            try {
+                audio.pause();
+            }
+            catch (error) {
+                this.enterFailed('pause-sync', token);
+                return;
+            }
+            if (this.acceptsOperation(token)) {
+                this.retireOperation(token);
+            }
+            this.playbackState = 'paused';
+            this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: true });
             return;
         }
-        if (this.mediaFailed) {
-            audio.load();
+        if (this.playbackState === 'failed') {
+            this.playbackState = 'retrying-load';
+            this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
+            try {
+                audio.load();
+            }
+            catch (error) {
+                this.enterFailed('load-sync', token);
+                return;
+            }
+            // mediaFailed 的唯一清除点：重试的 load() 正常返回后先清零，再以同一 token 继续 play()
             this.mediaFailed = false;
+            this.playbackState = 'retrying-play';
+            this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
         }
-        button.setAttribute('aria-busy', 'true');
+        else {
+            this.playbackState = 'starting';
+            this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
+        }
+        let played;
         try {
-            await audio.play();
+            played = audio.play();
         }
         catch (error) {
-            button.setAttribute('aria-busy', 'false');
-            this.syncButton();
-            this.writeStatus(button.dataset.labelFailedStatus || '');
+            this.enterFailed('play-sync', token);
             return;
         }
-        button.setAttribute('aria-busy', 'false');
-        this.syncButton();
-        this.writeStatus(audio.paused
-            ? button.dataset.labelPausedStatus || ''
-            : button.dataset.labelPlayingStatus || '');
+        try {
+            await played;
+        }
+        catch (error) {
+            this.enterFailed('play', token);
+            return;
+        }
+        if (!this.acceptsOperation(token)) {
+            return;
+        }
+        if (!this.isHealthy()) {
+            this.enterFailed('play', token);
+            return;
+        }
+        this.retireOperation(token);
+        this.playbackState = 'playing';
+        this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: true });
     };
     clearStatus = () => {
         clearStatus();
     };
     constructor() {
         this.audio = document.getElementById('bgm');
-        if (this.audio !== null) {
-            this.audio.addEventListener('play', this.onPlay);
-            this.audio.addEventListener('pause', this.onPause);
-            this.audio.addEventListener('ended', this.onEnded);
-            this.audio.addEventListener('error', this.onError);
-        }
-        document.addEventListener('pjax:success', this.syncButton);
+        this.bindPersistentListeners(this.snapshotLifecycleToken());
+        document.addEventListener('pjax:send', this.onPjaxLifecycle);
+        document.addEventListener('pjax:error', this.onPjaxLifecycle);
+        document.addEventListener('pjax:success', this.onPjaxLifecycle);
+        this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false });
     }
 }
 var bgmControl = new BgmControl();
@@ -1979,13 +2204,9 @@ class ScreenshotControl {
         anchor.remove();
         window.URL.revokeObjectURL(url);
     };
+    // 共享 status 的唯一写入口在 lease：本次写入同时作废其它持有者（如 BGM）的 lease 与 timer
     writeStatus = (message) => {
-        const status = document.querySelector('.toolbox-status');
-        if (status === null) {
-            return;
-        }
-        status.textContent = message;
-        status.hidden = message === '';
+        claimStatus(message, { owner: 'screenshot' });
     };
     bindCurrentButton = () => {
         const button = document.querySelector('.toolbox-screenshot[data-action="screenshot"]');
@@ -2305,13 +2526,16 @@ class TocControl {
     };
 }
 var tocControl = new TocControl();
-// 标注/收藏/标注色的纯数据层：零 DOM 查询、零事件、零 timer
+// 共享叶子层：存储键、序列化与跨控制器反馈时序常量（零 DOM 查询、零事件、零 timer）
 var ToolboxModules;
 (function (ToolboxModules) {
     ToolboxModules.HIGHLIGHT_KEY_PREFIX = 'arknights:highlights:';
     ToolboxModules.FAVORITES_KEY = 'arknights:favorites';
     ToolboxModules.ANNOTATE_COLOR_KEY = 'arknights:annotate-color';
     ToolboxModules.ANNOTATE_COLORS = ['yellow', 'green', 'blue', 'pink', 'orange'];
+    // 复制成功反馈（分享 URL 与选区复制共用）的 .copied 态停留时长：常量随 owner 下沉到共享叶子，
+    // 避免同层控制器之间跨文件裸取对方命名空间成员（namespace 跨文件无编译期防护）
+    ToolboxModules.COPIED_DELAY = 1200;
     function readRaw(key) {
         try {
             return window.localStorage.getItem(key);
@@ -2900,7 +3124,6 @@ var ToolboxModules;
 // 分享与 .copied 反馈：唯一 status 写入者为共享 lease，自有唯一一次性 timer
 var ToolboxModules;
 (function (ToolboxModules) {
-    ToolboxModules.COPIED_DELAY = 1200;
     function createShareController(closeToolbox) {
         const getShareButton = () => document.querySelector('.toolbox-share');
         const copyShareUrl = (url) => {

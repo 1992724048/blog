@@ -1,3 +1,5 @@
+/// <reference path="ToolboxStatusLease.ts" />
+
 'use strict'
 
 const RESOURCE_TIMEOUT_MS = 15_000
@@ -263,13 +265,9 @@ class ScreenshotControl {
     window.URL.revokeObjectURL(url)
   }
 
+  // 共享 status 的唯一写入口在 lease：本次写入同时作废其它持有者（如 BGM）的 lease 与 timer
   private writeStatus = (message: string): void => {
-    const status = document.querySelector<HTMLElement>('.toolbox-status')
-    if (status === null) {
-      return
-    }
-    status.textContent = message
-    status.hidden = message === ''
+    claimStatus(message, { owner: 'screenshot' })
   }
 
   private bindCurrentButton = (): void => {

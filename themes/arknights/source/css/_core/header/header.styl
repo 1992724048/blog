@@ -113,6 +113,8 @@ ol.navContent
   opacity 0
 
 // 名称（active 项显示）：默认收起（0 宽 + 透明），随 active 平滑展开；类名避开 Header.ts 识别集合
+// 桌面一级项宽度固定（flex_layout.styl 的 72px），margin-left 归零使名称在按钮内居中；
+// ≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
 .navItemLabel
   display inline-block
   max-width 0
@@ -123,7 +125,7 @@ ol.navContent
   transition max-width .3s, margin-left .3s, opacity .3s
 .navItem.active > .navBlock .navItemLabel
   max-width 5em
-  margin-left 6px
+  margin-left 0
   opacity 1
 
 // 移动端下拉行标题默认两端对齐（navSecond.styl）：图标态改为左对齐（图标 + 名称成组）

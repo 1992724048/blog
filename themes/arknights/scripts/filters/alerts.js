@@ -11,7 +11,11 @@ hexo.extend.filter.register('after_post_render', function (data) {
     throw Object.assign(new Error('ENCRYPTION_STATE_AMBIGUOUS'), { code: 'ENCRYPTION_STATE_AMBIGUOUS' })
   }
   data.content = replaceAlerts(data.content)
-  data.excerpt = replaceAlerts(data.excerpt)
+  // 显式 excerpt 才改写：无 excerpt 时不得凭空造出 own `excerpt: undefined`，
+  // 否则后续 before 4 会把该字段当作非字符串而 fail-closed（core excerpt 在 priority 10 才派生）
+  if (typeof data.excerpt === 'string') {
+    data.excerpt = replaceAlerts(data.excerpt)
+  }
   if (data.more) data.more = replaceAlerts(data.more)
   return data
 }, 5)

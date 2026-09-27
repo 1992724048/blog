@@ -5,8 +5,6 @@
 
 // 分享与 .copied 反馈：唯一 status 写入者为共享 lease，自有唯一一次性 timer
 namespace ToolboxModules {
-  export const COPIED_DELAY = 1200
-
   export interface ShareController { share(): void }
 
   export function createShareController(closeToolbox: () => void): ShareController {
