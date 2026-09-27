@@ -223,6 +223,60 @@ class BgmControl {
     this.reconcile({ token: token, publishStatus: true })
   }
 
+  // ===== 惰性音源注入 =====
+
+  // 首屏 HTML 只带 data-bgm-src（惰性属性，浏览器不据此发起任何请求），首次播放前才把 URL
+  // 提升为真正的 src 并 load()。这是一次性幂等动作：属性随即被删除，重复调用直接返回，
+  // 因此失败重试路径与 Pjax 换页后都不会二次注入，也不会与 toggle 的重试 load() 叠加。
+  private ensureSource = (): void => {
+    const audio = this.audio
+    if (audio === null) {
+      return
+    }
+    const lazySource = audio.dataset.bgmSrc
+    if (lazySource === undefined || lazySource === '') {
+      return
+    }
+    delete audio.dataset.bgmSrc
+    audio.setAttribute('src', lazySource)
+    audio.load()
+  }
+
+  // ===== 自动播放开关 =====
+
+  // 仅当配置显式开启 data-bgm-autoplay 才在首屏后尝试一次自动播放。浏览器自动播放策略在
+  // 无用户手势时通常直接 reject：这既不是媒体加载失败（不得进 failed），也不该发布任何文案，
+  // 故只把本次试探性的 starting 收回 paused。成功路径由常驻 media 'play' 事件统一接管，
+  // 此处不重复写终态。整个过程不新增任何 document/window 监听。
+  private attemptAutoplay = (): void => {
+    const audio = this.audio
+    if (audio === null || audio.dataset.bgmAutoplay !== 'true') {
+      return
+    }
+    this.ensureSource()
+    this.playbackState = 'starting'
+    this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false })
+    const unwind = (): void => {
+      // 只收回自己写下的试探态；若期间已有其它路径接管（playing/failed/starting 之外的状态变化），不越权覆盖
+      if (this.playbackState !== 'starting') {
+        return
+      }
+      this.playbackState = 'paused'
+      this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false })
+    }
+    let started: Promise<void> | undefined
+    try {
+      started = audio.play()
+    } catch (error) {
+      unwind()
+      return
+    }
+    // 老浏览器 play() 返回 undefined，既不 resolve 也不 reject：保持 starting 交由 media 事件裁决
+    if (started !== undefined && typeof started.catch === 'function') {
+      started.catch(unwind)
+    }
+  }
+
   // ===== 用户操作 =====
 
   public toggle = async (): Promise<void> => {
@@ -245,6 +299,7 @@ class BgmControl {
       this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: true })
       return
     }
+    this.ensureSource()
     if (this.playbackState === 'failed') {
       this.playbackState = 'retrying-load'
       this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false })
@@ -298,6 +353,7 @@ class BgmControl {
     document.addEventListener('pjax:error', this.onPjaxLifecycle)
     document.addEventListener('pjax:success', this.onPjaxLifecycle)
     this.reconcile({ token: this.snapshotLifecycleToken(), publishStatus: false })
+    this.attemptAutoplay()
   }
 }
 

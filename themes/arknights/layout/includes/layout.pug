@@ -53,7 +53,9 @@ html(lang=config.language theme-mode=htmlThemeMode)
         include ./bottom-btn.pug
       include ./aside.pug
     if theme.bgm && theme.bgm.enable
-      audio#bgm(src=url_for(theme.bgm.src) preload="metadata" loop=theme.bgm.loop)
+      //- 首屏不带 src：音频 URL 只以惰性属性 data-bgm-src 下发，由 BgmControl 在首次播放前注入并 load()，
+      //- 使 /audio/bgm.mp3 完全不进入首屏网络请求（preload="none" 是双保险，即便属性被误读也不预取）
+      audio#bgm(preload="none" loop=theme.bgm.loop data-bgm-src=url_for(theme.bgm.src) data-bgm-autoplay=theme.bgm.autoplay === true ? 'true' : null)
     if theme.canvas_dust
       canvas#canvas-dust
 

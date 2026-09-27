@@ -22,24 +22,38 @@ link(rel="preload", as="font", crossorigin="anonymous", href=url_for("font/Bende
 link(rel="preload", as="font", crossorigin="anonymous", href=url_for("font/BenderLight.woff2"))
 link(rel="preload", as="font", crossorigin="anonymous", href=url_for('font/JetBrainsMono-Regular.woff2'))
 //- 中文字体：HarmonyOS Sans SC 分包 CSS（jsDelivr CDN，版本锁定 1.1.0，unicode-range 按需加载）
+//- 非阻塞引入：media="print" 让浏览器以非渲染阻塞优先级下载，onload 切回 all 生效；
+//- noscript 回退保证禁用 JS 时字体 CSS 仍同步生效（回退路径会重新引入阻塞，是刻意的正确性取舍）
 link(rel='preconnect', href='https://cdn.jsdelivr.net', crossorigin)
-link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css')
-link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css')
+link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css' media='print' onload="this.media='all'")
+link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css' media='print' onload="this.media='all'")
+noscript
+  link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Regular.css')
+  link(rel='stylesheet', href='https://cdn.jsdelivr.net/npm/harmonyos-sans-sc-webfont-splitted@1.1.0/dist/Bold.css')
 //- 缓存版本号：修改主题 Stylus（arknights.css 产物）后同步递增，避免 Cloudflare / 浏览器缓存旧版
 - var cssVersion = "20260961"
 link(rel="stylesheet", href=url_for("css/arknights.css") + "?v=" + cssVersion)
 style.
+  //- font-display 取值依据（均为 swap，相对原「未声明 ≈ block、最长 3s 不可见」是双向改善）：
+  //- Bender / BenderLight 是展示字体（站点字标 + 文章与分区标题），缺失即品牌与排版失真，
+  //- 两者又都已被 preload 提前取回、阻塞窗口很短，故要「最终一定生效」而非 optional 的整轮放弃；
+  //- 代价是标题字宽变化带来的轻微重排，相对 3s 空白不可见是数量级更小的代价。
+  //- JetBrains Mono 是代码字体（正文代码块），swap 到等宽回退时逐字宽度基本一致，CLS 近乎为零，
+  //- 且 optional 一旦抢跑失败会让整篇文章的代码在本次会话永久退回系统等宽，故取 swap。
   @font-face {
     font-family: Bender;
     src: local('Bender'), url("#{config.root}font/Bender.ttf");
+    font-display: swap;
   }
   @font-face {
     font-family: BenderLight;
     src: local('BenderLight'), url("#{config.root}font/BenderLight.woff2") format('woff2');
+    font-display: swap;
   }
   @font-face {
     font-family: 'JetBrains Mono';
     src: local('JetBrains Mono'), url('#{config.root}font/JetBrainsMono-Regular.woff2') format('woff2');
+    font-display: swap;
   }
 
 meta(name="page-config" content=JSON.stringify({ code_fold: page.code_fold || null }))
@@ -71,7 +85,9 @@ if theme.mermaid && theme.mermaid.enable === true && theme.mermaid.version
 link(type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lightgallery.css")
 link(type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lg-zoom.css")
 link(type="text/css" rel="stylesheet" href="//unpkg.com/lightgallery@2.7.1/css/lg-thumbnail.css")
-link(type="text/css" rel="stylesheet" href=url_for("/lib/fontawesome/css/all.min.css"))
+//- vendored FontAwesome CSS 同挂 cssVersion：它是版本化产物之外的另一份主题 CSS 资产，
+//- 本地定制（裁掉未用字重的 @font-face）必须能被 Cloudflare / 浏览器缓存正确失效
+link(type="text/css" rel="stylesheet" href=url_for("/lib/fontawesome/css/all.min.css") + "?v=" + cssVersion)
 
 
 if theme.stylesheets && theme.stylesheets.length > 0
