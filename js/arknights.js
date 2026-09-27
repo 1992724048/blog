@@ -1,10 +1,26 @@
 "use strict";
 'use strict';
-// 全站 .toolbox-status 的唯一写入口：写入、delay 自动清除与「其它 owner 接管」失效都收敛在此。
-// 观察者挂在共享节点上，任何其它控制器的写入（哪怕文本逐字相同）都会产生 mutation record
-// 并使本 lease 失效，因此持有者之外的任何人都不可能依赖本模块的 timer 去清空别人的文案。
+// 全站 .toolbox-status 的唯一写入口：写入、delay 自动清除、进入期同步清空与「其它 owner 接管」失效都收敛在此。
+// 任何模块都不得自行写 textContent / hidden（含经 invalidateStatusLease 交还的节点），否则观察者语义与
+// 「谁持有文案」的唯一事实来源同时失效。观察者挂在共享节点上，任何其它控制器的写入（哪怕文本逐字相同）
+// 都会产生 mutation record 并使本 lease 失效，因此持有者之外的任何人都不可能依赖本模块的 timer 去清空别人的文案。
+// 进入动效由 CSS 承担（.toolbox-status:not([hidden]) 上的 @keyframes，由 hidden 的 false 写入天然触发）；
+// 退场必须发生在 hidden = true 之前，故本模块用 WAJ + generation 守卫 timer 收尾，退场常量镜像 CSS token。
 let statusGeneration = 0;
 let statusLease = null;
+let exitAnimation = null;
+let exitTimer = null;
+const STATUS_SLIDE_GAP_PX = 12;
+const STATUS_SCALE = 0.96;
+const STATUS_EXIT_MS = 180;
+const STATUS_EXIT_EASING = 'cubic-bezier(.4, 0, 1, 1)';
+const STATUS_EXIT_FADE = 0.6;
+const STATUS_REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+// 节点终结写入的唯一实现：清文本 + 落 hidden。退场（动画）必须先于它，故退场路径在调用它之前完成动画
+const clearOwnedNodeNow = (node) => {
+    node.textContent = '';
+    node.hidden = true;
+};
 const releaseStatusLease = (lease) => {
     if (lease.timer !== null) {
         window.clearTimeout(lease.timer);
@@ -18,10 +34,38 @@ const releaseStatusLease = (lease) => {
 function currentStatusLease() {
     return statusLease;
 }
-// 规格 16.3 的 claimStatus：递增 generation → 释放旧 lease 但不清空旧 node → 建 observer 并 observe
-// → 写 node → takeRecords 丢弃本次自有写入 → delay > 0 时为该 lease 建唯一 timer
+// 撤销在飞的退场：新文案接管时必须立刻恢复静止态，否则旧退场动画会继续把新文案淡出
+function cancelStatusExit() {
+    if (exitTimer !== null) {
+        window.clearTimeout(exitTimer);
+        exitTimer = null;
+    }
+    if (exitAnimation !== null) {
+        exitAnimation.cancel();
+        exitAnimation = null;
+    }
+}
+// 返回 false 表示本次不播退场（减动效偏好或环境缺 WAJ），调用方须走同步清空回退路径
+function startStatusExit(node) {
+    if (typeof node.animate !== 'function' || window.matchMedia(STATUS_REDUCED_MOTION).matches) {
+        return false;
+    }
+    const view = window.getComputedStyle(node);
+    const fromTransform = view.transform === '' ? 'none' : view.transform;
+    const fromOpacity = view.opacity === '' ? '1' : view.opacity;
+    const offset = -1 * (node.getBoundingClientRect().width + STATUS_SLIDE_GAP_PX);
+    exitAnimation = node.animate([
+        { opacity: fromOpacity, transform: fromTransform, offset: 0 },
+        { opacity: '0', offset: STATUS_EXIT_FADE },
+        { opacity: '0', transform: `translateX(${offset}px) scale(${STATUS_SCALE})`, offset: 1 }
+    ], { duration: STATUS_EXIT_MS, easing: STATUS_EXIT_EASING, fill: 'forwards' });
+    return true;
+}
+// 规格 16.3 的 claimStatus：递增 generation → 撤销在飞的退场 → 释放旧 lease 但不清空旧 node
+// → 建 observer 并 observe → 写 node → takeRecords 丢弃本次自有写入 → delay > 0 时为该 lease 建唯一 timer
 function claimStatus(message, options) {
     statusGeneration += 1;
+    cancelStatusExit();
     if (statusLease !== null) {
         releaseStatusLease(statusLease);
         statusLease = null;
@@ -67,12 +111,13 @@ function claimStatus(message, options) {
         }, options.delay);
     }
 }
-// 规格 16.3 的 invalidateStatusLease：待处理 mutation 视为其它 owner 已接管；校验 token、node 身份
-// 与文本一致才交还 node 供调用方清空；两种情形都递增 generation、清 timer、disconnect 并丢弃 lease
-function invalidateStatusLease() {
+// 规格 16.3 的租约交还有效期校验：待处理 mutation 视为其它 owner 已接管；校验 token、node 身份
+// 与文本一致才算「本次确实终结的是自有文案」。两种情形都递增 generation、清 timer、disconnect 并丢弃 lease。
+// 节点引用只以回调参数的形式在本模块内流动、绝不作为返回值外泄，故全局不存在第二写入点。
+const withOwnedNode = (use) => {
     const lease = statusLease;
     if (lease === null) {
-        return null;
+        return;
     }
     const pending = lease.observer === null ? [] : lease.observer.takeRecords();
     const owned = pending.length === 0
@@ -82,15 +127,38 @@ function invalidateStatusLease() {
     statusGeneration += 1;
     releaseStatusLease(lease);
     statusLease = null;
-    return owned ? lease.node : null;
-}
-function clearStatus() {
-    const ownedNode = invalidateStatusLease();
-    if (ownedNode === null) {
-        return;
+    if (owned) {
+        use(lease.node);
     }
-    ownedNode.textContent = '';
-    ownedNode.hidden = true;
+};
+// 清空（带退场）：持 lease 时先播 180ms 退场再落 hidden（退场必须先于 hidden，否则纯 CSS 无从过渡）；
+// 无 lease（他人已接管）时不启动退场、不写节点、不建 timer。
+// 退场在飞时被新 claimStatus 接管：generation 已再推进一步，终结写入被守卫作废，退场同时被 cancel。
+function clearStatus() {
+    withOwnedNode(node => {
+        if (startStatusExit(node) === false) {
+            clearOwnedNodeNow(node);
+            return;
+        }
+        const generation = statusGeneration;
+        exitTimer = window.setTimeout(() => {
+            exitTimer = null;
+            if (statusGeneration !== generation || node.isConnected === false) {
+                return;
+            }
+            clearOwnedNodeNow(node);
+            if (exitAnimation !== null) {
+                exitAnimation.cancel();
+                exitAnimation = null;
+            }
+        }, STATUS_EXIT_MS);
+    });
+}
+// 同步清空（无退场、无 timer）：Pjax 换页窗口内节点即将被替换，播退场既无观感也无意义。
+// 与 clearStatus 的差别仅在退场面，租约校验与终结写入完全共用。
+function clearStatusNow() {
+    cancelStatusExit();
+    withOwnedNode(clearOwnedNodeNow);
 }
 // 播放 / 暂停终态的提示停留时长；failed 的提示不自动清除
 const BGM_STATUS_DELAY = 2500;
@@ -154,11 +222,9 @@ class BgmControl {
         this.lifecycleGeneration += 1;
         const token = this.snapshotLifecycleToken();
         this.unbindPersistentListeners();
-        const ownedNode = invalidateStatusLease();
-        if (ownedNode !== null) {
-            ownedNode.textContent = '';
-            ownedNode.hidden = true;
-        }
+        // 共享 status 节点的终结写入收敛到 lease 模块：Pjax 换页窗口内节点即将被替换，
+        // 故走同步清空（无退场、无 timer），但租约校验与写入点仍只有一处
+        clearStatusNow();
         this.bindPersistentListeners(token);
         return token;
     };
@@ -3205,20 +3271,174 @@ var ToolboxModules;
     }
     ToolboxModules.createFavoriteController = createFavoriteController;
 })(ToolboxModules || (ToolboxModules = {}));
-// 工具箱 facade：只拥有自身 DOM 状态、data-action 委托、外点/Escape 与既有 pjax 重置，
+// 扇形布局：纯计算（layoutFan）与副作用（写入 CSS 自定义属性）分离，取代原「纯 CSS 动态角度」方案。
+// 被取代的方案用 `:has()` 四档 + clamp() + cos()/sin() 派生链，只覆盖 ≤5 项，且 4 项时步长被拉大到 30°、
+// 相邻圆心距涨到 34.2px（对 40px 目标既稀疏又角部重叠），末项仍顶在象限端点 90°。
+// 现算法为「恒定角密度 + 半径随项数自适应」：步长 = 象限张角 / (n − 1)，
+// 半径 = max(让位半径, 圆心距 / (2·sin(步长/2)))，相邻圆心距在密度未被让位半径顶高时恒为五项档弦长 FAN_DENSITY_PX。
+// 让位半径（不再是一个与项数无关的标量下限）= 工具项命中盒与 toggle 命中盒轴对齐不再重叠所需的半径：
+// 命中盒在两轴上的投影为 R·|cosθ| 与 R·|sinθ|，两轴都不重叠要求 R ≥ 边长 / max(|cosθ|, |sinθ|)；
+// 半径整簇共用，故取簇内最大需求（在象限平分线处最大，因为该处 max(|cosθ|,|sinθ|) 最小）。
+// 注意：40px 命中盒彼此在 n ≥ 3 时必然重叠（密度 25.75px < 40px），这是「密排小图标 + 大命中盒」的
+// 既有取舍，不是可由半径消除的量；可由半径消除的是「工具项与 toggle 自身重叠」与「项间图标相压」，
+// 前者由让位半径保证，后者因各档半径下相邻两轴偏移至少有一轴 > 图标边长 16px 而恒成立。
+// 几何只依赖模块常量与项数，无字体度量参与，故没有 document.fonts.ready 触发点。
+const FAN_RADIANS = Math.PI / 180;
+const FAN_SPAN_DEG = 90;
+// 五项档是密度基准：密度值即该档弦长，故 n=5 与旧硬编码表逐值相同（回归见证）
+const FAN_REFERENCE_RADIUS_PX = 66;
+const FAN_REFERENCE_STEP_DEG = 22.5;
+const FAN_DENSITY_PX = 2 * FAN_REFERENCE_RADIUS_PX * Math.sin(FAN_REFERENCE_STEP_DEG / 2 * FAN_RADIANS);
+// 命中盒边长镜像 .bottom-btn 的 `a, button` 声明（width 40px / height 40px），与 toggle 同尺寸
+const FAN_HIT_BOX_PX = 40;
+const FAN_PULL_PX = 10;
+// 悬停放大倍率的唯一消费方是 CSS hover 规则的 scale()；此处镜像常量只为两侧数值同表可审
+// （与 .toolbox-status 的 --status-exit-* 镜像 token 同款约定）
+const FAN_SCALE = 1.08;
+const FAN_PX_PRECISION = 1000;
+const FAN_KNOBS = {
+    spanDeg: FAN_SPAN_DEG,
+    densityPx: FAN_DENSITY_PX,
+    hitBoxPx: FAN_HIT_BOX_PX,
+    pullPx: FAN_PULL_PX
+};
+// actions 为 .toolbox-items 内工具项 data-action 的 DOM 顺序序列：顺序即扇形顺序，身份由 action 承载
+// （不再有 ordinal 表，也不再由 child index 或 :nth-of-type 决定身份）。
+// 零项返回空数组；单项落在象限平分线、半径取让位半径；y 与 pullY 沿用负号约定（向上为负）。
+function layoutFan(actions, knobs) {
+    const count = actions.length;
+    if (count === 0) {
+        return [];
+    }
+    // 单项没有 0° 起点，直接落象限平分线；n ≥ 2 时第 index 项落在 index × 步长
+    const stepDeg = count > 1 ? knobs.spanDeg / (count - 1) : knobs.spanDeg / 2;
+    const angleDeg = actions.map((_, index) => (count > 1 ? index * stepDeg : stepDeg));
+    const radians = angleDeg.map(value => value * FAN_RADIANS);
+    let clearancePx = 0;
+    for (const radian of radians) {
+        const projected = Math.max(Math.abs(Math.cos(radian)), Math.abs(Math.sin(radian)));
+        clearancePx = Math.max(clearancePx, knobs.hitBoxPx / projected);
+    }
+    const densityRadiusPx = count > 1 ? knobs.densityPx / (2 * Math.sin(stepDeg / 2 * FAN_RADIANS)) : 0;
+    const radiusPx = Math.max(clearancePx, densityRadiusPx);
+    return actions.map((action, index) => {
+        return {
+            action: action,
+            index: index,
+            angleDeg: angleDeg[index],
+            radiusPx: radiusPx,
+            xPx: radiusPx * Math.cos(radians[index]),
+            yPx: -radiusPx * Math.sin(radians[index]),
+            pullX: knobs.pullPx * Math.cos(radians[index]),
+            pullY: -knobs.pullPx * Math.sin(radians[index])
+        };
+    });
+}
+const fanPx = (value) => `${Math.round(value * FAN_PX_PRECISION) / FAN_PX_PRECISION}px`;
+// 工具箱 facade：只拥有自身 DOM 状态（含扇形布局写入）、data-action 委托、外点/Escape 与既有 pjax 重置，
 // 标注 / 分享 / 收藏分别下沉到同层 controller
 class Toolbox {
     annotation;
     shareController;
     favoriteController;
+    fanSignature = '';
+    fanEpochSeq = 0;
+    fanEpochs = new WeakMap();
+    fanObserver = null;
+    fanTarget = null;
     get toolbox() {
         return document.querySelector('.toolbox');
     }
     get toggleButton() {
         return document.querySelector('#to-toolbox');
     }
+    // 元素身份：WeakMap 内的单调 epoch。被整体替换的元素必然是全新对象，故必得新 epoch；
+    // 同一对象被摘下再插回时身份保持不变（它自带的内联几何也跟着走，无需重写）
+    fanEpochOf = (item) => {
+        const known = this.fanEpochs.get(item);
+        if (known !== undefined) {
+            return known;
+        }
+        this.fanEpochSeq += 1;
+        this.fanEpochs.set(item, this.fanEpochSeq);
+        return this.fanEpochSeq;
+    };
+    // 后置条件：该项是否已带着给定槽位的内联几何（脏判定的第二道依据）
+    hasInlineFanLayout = (item, slot) => {
+        return item.style.getPropertyValue('--fan-x') === fanPx(slot.xPx)
+            && item.style.getPropertyValue('--fan-y') === fanPx(slot.yPx)
+            && item.style.getPropertyValue('--pull-x') === fanPx(slot.pullX)
+            && item.style.getPropertyValue('--pull-y') === fanPx(slot.pullY);
+    };
+    // 脏判定：项序签名（并入元素身份）未变、且每项确实仍带着该槽位的内联几何时才跳过重写，
+    // 避免 ResizeObserver / 重复 pjax:success 引发无谓的样式写入。
+    // 签名必须并入元素身份：站内 Pjax 换页会整体替换 .toolbox-items（全新元素、无任何内联 --fan-*），
+    // 只比对 data-action 序列会在项集相同时误判为「未变」而早退，五项全部回落 0px 兜底、扇形塌回 toggle。
+    syncFanLayout = () => {
+        const container = document.querySelector('.toolbox-items');
+        if (container === null) {
+            return;
+        }
+        const items = [];
+        for (const child of Array.from(container.children)) {
+            if (child.classList.contains('toolbox-item')) {
+                items.push(child);
+            }
+        }
+        const actions = items.map(item => item.getAttribute('data-action') ?? '');
+        const slots = layoutFan(actions, FAN_KNOBS);
+        const signature = items.map((item, index) => `${actions[index]}#${this.fanEpochOf(item)}`).join(' ');
+        if (signature === this.fanSignature
+            && items.every((item, index) => this.hasInlineFanLayout(item, slots[index]))) {
+            return;
+        }
+        this.fanSignature = signature;
+        const owners = new Map();
+        for (const item of items) {
+            owners.set(item.getAttribute('data-action') ?? '', item);
+        }
+        for (const slot of slots) {
+            const owner = owners.get(slot.action);
+            if (owner === undefined) {
+                continue;
+            }
+            owner.style.setProperty('--fan-x', fanPx(slot.xPx));
+            owner.style.setProperty('--fan-y', fanPx(slot.yPx));
+            owner.style.setProperty('--pull-x', fanPx(slot.pullX));
+            owner.style.setProperty('--pull-y', fanPx(slot.pullY));
+        }
+    };
+    onFanResize = () => {
+        this.syncFanLayout();
+    };
+    watchFanTarget = () => {
+        const toolbox = this.toolbox;
+        if (toolbox === null) {
+            return;
+        }
+        if (this.fanObserver === null) {
+            if (typeof ResizeObserver === 'undefined') {
+                return;
+            }
+            this.fanObserver = new ResizeObserver(this.onFanResize);
+        }
+        if (this.fanTarget !== toolbox) {
+            this.fanObserver.disconnect();
+            this.fanObserver.observe(toolbox);
+            this.fanTarget = toolbox;
+        }
+    };
+    releaseFanTarget = () => {
+        this.fanObserver?.disconnect();
+        this.fanTarget = null;
+    };
     applyState = (open) => {
         const toolbox = this.toolbox;
+        if (open) {
+            // 展开前先落几何：class 翻转与 transform 写入必须同帧，否则首帧会从 toggle 位置散开
+            this.watchFanTarget();
+            this.syncFanLayout();
+        }
         if (toolbox !== null) {
             toolbox.classList.toggle('toolbox-open', open);
         }
@@ -3313,10 +3533,15 @@ class Toolbox {
         this.applyState(false);
         this.annotation.restore();
         this.favoriteController.restore();
+        // Pjax 换页后工具项集合可能变化（如从文章页切到非文章页），须重算扇形
+        this.watchFanTarget();
+        this.syncFanLayout();
     };
     onPjaxSend = () => {
         this.applyState(false);
         this.annotation.hideToolbar();
+        // 导航期间旧容器即将被替换，停止观察；下一次 pjax:success 或展开时重新挂载
+        this.releaseFanTarget();
     };
     annotate = () => {
         this.annotation.annotate();
@@ -3337,6 +3562,8 @@ class Toolbox {
         document.addEventListener('click', this.onDocumentClick);
         document.addEventListener('pjax:success', this.onPjaxSuccess);
         document.addEventListener('pjax:send', this.onPjaxSend);
+        this.watchFanTarget();
+        this.syncFanLayout();
         this.annotation.restore();
         this.favoriteController.restore();
     }
