@@ -48,7 +48,8 @@ header.topbar
               href= url_for(item.url)
               class= menuIcon ? 'navBlockIcon' : null
               title= menuIcon ? item.label : null
-              aria-label= menuIcon ? item.label : null)
+              aria-label= menuIcon ? item.label : null
+              data-label= menuIcon ? item.label : null)
               span.navItemTitle
                 if menuIcon
                   i(class= menuIcon aria-hidden='true')

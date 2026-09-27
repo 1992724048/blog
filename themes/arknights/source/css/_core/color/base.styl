@@ -7,3 +7,11 @@
   --theme-adm-success #00c853
   --theme-adm-failure #C0392B
   --theme-adm-important #8B5CF6
+
+  // 顶栏毛玻璃底色的两套原值（常驻 token，单一事实来源）：不新造色值，只是把
+  // header.styl 里 :root[theme-mode=light|dark] header 的两条 rgba 字面量提名为 token，
+  // 供「顶栏本体」与「导航选中项栏外竖排标签的反色底」两处共同消费（后者经
+  // light.styl / dark.styl 的 --nav-invert-bg 指向对面那一条，见该两文件）。
+  // 常驻于 :root 而非主题块内，故两套主题在任一时刻都各自持有对方色板的取值。
+  --topbar-bg-light rgba(#f4f5f6, .85)
+  --topbar-bg-dark rgba(20, 21, 22, .85)

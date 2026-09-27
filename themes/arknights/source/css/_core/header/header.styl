@@ -37,10 +37,12 @@ header
   border-bottom var(--topbar-border-w) solid var(--theme-unimportant)
 
 // 毛玻璃底色：仅覆盖顶栏（取 --theme-bg-trans0 原色值降 alpha），弹层 / 下拉仍用 --theme-bg-trans0
+// 取值来自 _core/color/base.styl 的常驻 token（--topbar-bg-light / --topbar-bg-dark）：
+// 导航选中项栏外竖排标签的反色底经 --nav-invert-bg 指向对面那一条，两处不再各持一份字面量
 :root[theme-mode=light] header
-  background-color rgba(#f4f5f6, .85)
+  background-color var(--topbar-bg-light)
 :root[theme-mode=dark] header
-  background-color rgba(20, 21, 22, .85)
+  background-color var(--topbar-bg-dark)
 
 // 回退：不支持 backdrop-filter（含 -webkit- 前缀）时维持原 0.95 高不透明底，保证文字可读性
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))
@@ -192,9 +194,9 @@ ol.navContent
   outline-offset -2px
 
 // 减动效横切块：覆盖元素集合与拆分前逐条一致（header / ol.navContent / 搜索相关 / 名称两态 /
-// 图标两态 / 桌面凸出段），只是按逻辑分组拆成四条短规则——原先挤在一行的超长逗号列表一旦被
-// 误写成嵌套规则就会编译出重复片段（ol.navContent .navContent > ...），拆分后每个选择器
-// 独立成行，风险面收敛且新增条目不必再挤进一行
+// 图标两态 / 桌面凸出段 / 桌面选中项栏外竖排标签），只是按逻辑分组拆成短规则——原先挤在一行的
+// 超长逗号列表一旦被误写成嵌套规则就会编译出重复片段（ol.navContent .navContent > ...），
+// 拆分后每个选择器独立成行，风险面收敛且新增条目不必再挤进一行
 @media (prefers-reduced-motion: reduce)
   header, ol.navContent, #search-header, .search-popup, .navBtnIconBar
     transition none
@@ -203,6 +205,11 @@ ol.navContent
   .navBlockIcon > .navItemTitle > i, .navItem.active > .navBlockIcon > .navItemTitle > i
     transition none
   .navContent > .navItem > :is(.navBlock, .navSecond)::after
+    transition none
+  // 竖排标签的进 / 退场时序（flex_layout.styl 桌面块）：降为瞬时——transition none 后
+  // opacity 与 visibility 同帧生效；声明点与该规则同文件外，用完整选择器保持唯一
+  .navContent > .navItem > .navBlockIcon::before,
+  .navContent > .navItem.active > .navBlockIcon::before
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl

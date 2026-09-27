@@ -112,3 +112,60 @@
   .navContent > .navItem > :is(.navBlock, .navSecond):is(:hover, :focus-visible)::after,
   .navContent > .navItem.active > :is(.navBlock, .navSecond)::after
     background-color var(--nav-tab-color)
+
+  // 选中项在栏外凸出段下方挂一枚「反色竖排文字框」（竖排如古文，高度随文字自适应）。
+  //
+  // 载体取 .navBlockIcon 的 ::before 伪元素 + attr(data-label)，本轮零 DOM 改动、零既有定位改动：
+  //   1) 伪元素 position absolute 即脱流。CSS Flexbox §4 只把「流内」的 ::before / ::after
+  //      变成弹性项，绝对定位者是 flex 容器的 out-of-flow 子盒、不参与弹性布局（等同
+  //      position absolute 的流内子元素不占 flex 项位）。本仓已用同一手法承载上方 ::after
+  //      凸出段并验证过不改动按钮几何，故此处结论对 ::before 同样成立。
+  //      → 不新增 flex 项、.navItemTitle 的 flex 1 与按钮内边距 / 宽高全部不受影响。
+  //   2) 定位基准是 .navBlockIcon 元素自身（.navBlock, .navSecond 基础层已是 position relative），
+  //      因此把标签挂到按钮下沿之外不需要改动任何既有定位属性。
+  //   3) 仅 .navBlockIcon 生效：无图标的项其 .navItemLabel 本身即可见文字，不该再挂重复标签。
+  //   4) 凸出段已占用 ::after，标签用 ::before，两者互不冲突。
+  //
+  // 上沿取 calc(100% + var(--nav-tab-drop))：100% = 按钮 padding box 高 36px（= 凸出段的锚点），
+  // 加同一个凸出量 token（该 token 已被凸出段消费一次，此处复用不改值），故上沿恒为
+  // y 38 = 凸出段下沿（36 + 2px），两者严丝合缝、无缝也无重叠。
+  //
+  // 底色取 --nav-invert-bg（指向对面色板的顶栏底色 token，见 _core/color/base.styl 与
+  // light.styl / dark.styl），前景色取既有 --theme-text-rev：浅色主题 = 深底白字、
+  // 深色主题 = 浅底黑字，即「相反主题导航栏同背景」。
+  .navContent > .navItem > .navBlockIcon::before
+    content attr(data-label)
+    position absolute
+    top calc(100% + var(--nav-tab-drop))
+    left 0
+    right 0
+    width fit-content
+    // 高度随文字自适应：竖排下 inline 轴 = 纵向，故 height 即「字符数 × 字宽」，
+    // 两字名称恒 2em；不写死 height、也不用 min-height 撑
+    height auto
+    // left + right + width 三者齐备时 auto 外边距取等分 → 标签盒在按钮内水平居中
+    margin 0 auto
+    padding 2px 0
+    z-index 2
+    writing-mode vertical-rl
+    text-orientation upright
+    white-space nowrap
+    // 顶栏声明的是 Bender（展示字体，无 CJK 字形），竖排中文须显式回到正文栈，
+    // 与 #search-input（_modules/search/base.styl）取同一条栈
+    font-family 'HarmonyOS Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif
+    // 竖排下 line-height 决定横向盒厚（block 轴），1.25em 让字形两侧各留 2px 余量
+    line-height 1.25
+    color var(--theme-text-rev)
+    background-color var(--nav-invert-bg)
+    // 标签悬在栏外、覆盖正文：不吃指针事件，且 visibility hidden 使非选中项完全不参与命中
+    pointer-events none
+    opacity 0
+    visibility hidden
+    // 退场：先淡出 .15s，再在 .15s 处切 visibility（否则淡出过程仍可被 AT 读到）
+    transition opacity .15s, visibility 0s .15s
+
+  // 进场：visibility 立即切、opacity 同步淡入（与退场同长，合计无堆叠）
+  .navContent > .navItem.active > .navBlockIcon::before
+    opacity 1
+    visibility visible
+    transition opacity .15s, visibility 0s
