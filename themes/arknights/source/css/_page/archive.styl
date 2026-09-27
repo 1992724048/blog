@@ -84,18 +84,24 @@
   flex-wrap wrap
   // 日期（time 用 Bender）与标题（正文字体栈）字体不同，line-height: normal 下两者的
   // 行盒高度与基线偏移都按各自字体度量算出，stretch 会让两段文字基线错开；
-  // baseline 对齐按各自首条基线就位，与具体字体度量无关，故在任何平台都恰好齐平。
+  // baseline 对齐按各自首条基线就位，与具体字体度量无关，故在任何平台都恰好齐平（0.000px）。
+  // 前提是日期与标题同处一条 flex 线——该前提由下方 .control-archive / .control-archive + a
+  // 的 border-box 契约保证；标题文本自身在窄视口下折行时按首条基线就位，结论仍成立。
   // 摘要占位的那条 flex 线上只有一个元素，基线对齐退化为不拉伸，位置与原先 stretch 一致。
   align-items baseline
   position relative
   margin-bottom 15px
   &::after
     content ''
-    width calc(100% - 30px)
+    // 绝对定位元素的包含块是本元素的 padding box（本元素无 border），故 left / right
+    // 与内容盒的 padding-inline 边距同基准：两端解出、不声明 width，分隔线两端与内容
+    // 盒齐平。条目内边距已提为 --list-item-pad-x，此处若再写死 15px / 30px 字面量，
+    // 20px 内边距下两端各会比内容多伸出 5px。
     position absolute
     display block
     bottom -5px
-    left 15px
+    left var(--list-item-pad-x)
+    right var(--list-item-pad-x)
     border-bottom: 1px var(--theme-unimportant-trans) solid
   // 摘要左缘与标题对齐（复用日期列宽），使其视觉上从属于标题而非日期
   .list-excerpt
@@ -121,10 +127,26 @@
   p
     text-align center
 
+// 条目是一行 flex：日期列占 --list-date-w 固定宽、标题链接占满余下宽度。
+// 全站没有 * { box-sizing: border-box } 重置（box-sizing 不继承），而 a 在 base.styl
+// 带 padding 0 3px（左右各 3px、合计 6px），故按 content-box 计算时两项外宽合计
+// 55 + (C - 55 + 6) = C + 6 > C（溢出恒为 6px，与视口宽度和标题长度都无关）。
+// flex-wrap 的断行判定发生在 flex-shrink 之前、只看 flex base size，于是日期与标题
+// 被拆到两条 flex 线：同一条线只剩一个元素，align-items baseline 形同虚设，
+// 弹窗的 left 也整体错位。日期列与标题都显式声明 border-box，使各自 width 含自身
+// 内边距，两项外宽合计恰为 C。
+// 不采用「把标题宽度再减 6px」补魔数，也不采用 flex-basis 0 的填充写法：
+// 后者 flex base 为 0 会让同为 flex item 的 width 100% 摘要（分类 / 标签页的行内态）
+// 在断行判定中「放得下」而挤进标题那一行，把标题压成 0 宽；且其 flex base 随标题
+// 文本长度变化，长标题仍会断行。本写法的 flex base 是确定长度，长标题只在盒内折行。
 .control-archive
+  box-sizing border-box
+  // 日期列是固定宽列：基准取自身 width 且不可伸缩，故任何情况下都恰为 --list-date-w
+  flex none
   width var(--list-date-w)
   display inline-block
   & + a
+    box-sizing border-box
     width calc(100% - var(--list-date-w))
 
 // 归档页条目摘要的悬停弹窗。基础块即「行内摘要」形态（静态定位、随条目占位），
