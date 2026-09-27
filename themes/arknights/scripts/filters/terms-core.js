@@ -1,5 +1,7 @@
 'use strict'
 
+const { tokenizeHtml } = require('./html-segments')
+
 const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // 词表过滤空 term、按长度降序（长词优先匹配）、按小写去重（先出现者胜）；避免零宽模式与大小写重复词条
@@ -24,8 +26,19 @@ const buildPattern = (terms) => {
   return new RegExp(parts.join('|'), 'gi')
 }
 
-// 保护段：<pre>/<code>/<a> 与 span.spoiler 整元素、任意 HTML 标签（属性区）
-const PROTECTED_SEGMENT = /(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<span\b[^>]*class="[^"]*\bspoiler\b[^"]*"[^>]*>[\s\S]*?<\/span>|<[^>]*>)/g
+// span.spoiler 整元素保护：遮盖内容允许再嵌 <span>（见 spoiler-core 的嵌套契约），
+// 故整段边界交给分段器按同名标签配对深度判定，不再用「取第一个 </span>」的正则
+const hasSpoilerClass = (tag) => {
+  const matched = /\sclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(tag)
+  if (!matched) return false
+  const value = matched[1] !== undefined ? matched[1] : matched[2] !== undefined ? matched[2] : matched[3]
+  return value.split(/\s+/).includes('spoiler')
+}
+
+const isProtectedElement = (name, tag) => {
+  if (name === 'pre' || name === 'code' || name === 'a') return true
+  return name === 'span' && hasSpoilerClass(tag)
+}
 
 // 将 HTML 中的术语替换为站内锚点链接；matched 以小写词条为键，按首次命中记录全局锚点与文章内编号
 const replaceTerms = (html, termList, matched = new Map()) => {
@@ -36,11 +49,10 @@ const replaceTerms = (html, termList, matched = new Map()) => {
   const definitions = new Map(
     terms.map(({ term, url }, index) => [term.toLowerCase(), { term, url, anchorIndex: index }])
   )
-  return html
-    .split(PROTECTED_SEGMENT)
-    .map((segment, index) => {
-      if (index % 2 === 1) return segment
-      return segment.replace(pattern, (match) => {
+  return tokenizeHtml(html, isProtectedElement)
+    .map((token) => {
+      if (token.kind !== 'text') return token.text
+      return token.text.replace(pattern, (match) => {
         const key = match.toLowerCase()
         let entry = matched.get(key)
         if (!entry) {

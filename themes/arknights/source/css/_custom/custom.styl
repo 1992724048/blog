@@ -19,12 +19,22 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
 
 // 「??内容??」遮盖（filters/spoiler.js 产出 span.spoiler）：默认色块完全遮住文字，悬停显示
 // --theme-bg-light 浅色主题 #000 / 深色主题 #fff（两主题均为高对比实心块）；触摸 / 键盘无 hover 属已知限制
+// 静止态「零装饰」靠两道声明，缺一不可：
+//   display inline-block —— CSS 2.1 §16.3.1 明文「文本装饰不传播进浮层、绝对定位后代与原子级内联后代的内容」，
+//     故作者写 **~~??…??~~** 时祖先 <del> 的 line-through 不会画进黑块；这也是唯一有效的切断手段，
+//     因为 MDN 明示子元素无法移除祖先的装饰（text-decoration: none / text-decoration-color 都做不到）
+//   text-decoration none —— 声明本元素自身不绘制任何装饰（对祖先传播线无效，是上者的语义补白）
+// 代价：遮盖块成为盒，色块高度由「字体内容区」变为「行盒高度」（正文 line-height 150%），
+//     块内不再参与跨行断行；副作用之一是 ::after 提示的定位基准由模糊的 inline box 变为精确的盒
 .spoiler
+  display inline-block
+  max-width 100%
+  overflow-wrap break-word
   position relative
   color transparent
   background-color var(--theme-bg-light)
-  text-decoration-color transparent
-  transition color .2s, background-color .2s, text-decoration-color .2s
+  text-decoration none
+  transition color .2s, background-color .2s
   &::after
     content '你知道的太多了'
     position absolute
@@ -48,9 +58,13 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
   &:hover
     color inherit
     background-color transparent
-    text-decoration-color inherit
     &::after
       opacity 1
+
+// 悬停揭示后补回作者用 ~~ 表达的删除线：遮盖块已是原子级内联，祖先 <del> 的传播线进不来，
+// 故由遮盖块自己画；仅在祖先确为删除线元素时补画，单独写 ??内容?? 的作者不会凭空多出一条线
+del .spoiler:hover, s .spoiler:hover
+  text-decoration line-through
 
 // 深色主题提示框：底色反转（与导航栏深色主题一致）
 :root[theme-mode=dark] .spoiler::after
