@@ -107,9 +107,9 @@
 // 工具箱：.toolbox 根承载展开态类 .toolbox-open（点击 / 外点 / Escape 由 document 委托接线）
 // 独立锚定 .bottom-btn 左下角，与右列共用 --btn-inset 底部基线（桌面 sticky / ≤768px fixed 同锚）；
 // .toolbox 高度 = 唯一常规子项 .toolbox-toggle（40px），故 toggle 底缘 = 基线 = #color-mode 底缘
-// 扇形几何：象限固定 0°（正右）→ 90°（正上），步长按 .toolbox-items 的实际项数均分 = --fan-span / (n − 1)；
-// 项身份只由 [data-action] 的 --fan-ordinal 决定，:nth-of-type 仅用于数数量，不参与身份判定；
-// --fan-slot 用 clamp 把 ordinal 压到 [0, n−1]，条件缺项造成 ordinal 不连续时不越出象限、不与其它项重合
+// 扇形几何：由 Toolbox.ts 的纯函数 layoutFan() 按「恒定角密度 + 半径随项数自适应」算出
+// --fan-x / --fan-y / --pull-x / --pull-y（px 化）后逐项写入内联样式，CSS 只消费不再派生
+// （象限 [0°,90°]、圆心距下限、半径公式与项数无关的旋钮全部下沉到 TS 侧）
 .bottom-btn .toolbox
   position absolute
   // 视觉左间距 = 底部基线（8px）：补偿 .bottom-btn 所处 article 的左偏移（--toolbox-shift，各断点见下）
@@ -118,10 +118,7 @@
   display flex
   flex-direction column
   align-items flex-start
-  // 扇形旋钮（子项经 .toolbox-items 逐级继承）：角度区间 / 展开半径 / 悬停外抽量 / 悬停放大倍率
-  --fan-span 90deg
-  --fan-radius 66px
-  --fan-pull 10px
+  // 悬停抽出时的放大倍率：CSS hover 规则的 scale() 是唯一消费方
   --fan-scale 1.08
 
 // --toolbox-shift = article 相对视口的左偏移（对应 flex_layout.styl 的 article margin-left）；≤768px 不补偿（.bottom-btn 为 fixed left:0，视觉已等距）
@@ -144,32 +141,12 @@
   top 0
   right 0
   z-index 2
-  // 项数感知：n ≤ 1 时取象限平分线（无项或单项不贴 toggle），n ≥ 2 走对应档位
-  --fan-last 0
-  --fan-origin calc(var(--fan-span) / 2)
-  --fan-step 0deg
-  // 档位必须按 n 升序书写，末条命中生效（累积式：新增第 6 项只需在末尾追加一条）
-  &:has(> .toolbox-item:nth-of-type(2))
-    --fan-last 1
-    --fan-origin 0deg
-    --fan-step var(--fan-span)
-  &:has(> .toolbox-item:nth-of-type(3))
-    --fan-last 2
-    --fan-step calc(var(--fan-span) / 2)
-  &:has(> .toolbox-item:nth-of-type(4))
-    --fan-last 3
-    --fan-step calc(var(--fan-span) / 3)
-  &:has(> .toolbox-item:nth-of-type(5))
-    --fan-last 4
-    --fan-step calc(var(--fan-span) / 4)
 .bottom-btn .toolbox-item
-  --fan-ordinal 0
-  --fan-slot clamp(var(--fan-ordinal), 0, var(--fan-last))
-  --fan-angle calc(var(--fan-origin) + var(--fan-slot) * var(--fan-step))
-  --fan-x calc(var(--fan-radius) * cos(var(--fan-angle)))
-  --fan-y calc(-1 * var(--fan-radius) * sin(var(--fan-angle)))
-  --pull-x calc(var(--fan-pull) * cos(var(--fan-angle)))
-  --pull-y calc(-1 * var(--fan-pull) * sin(var(--fan-angle)))
+  // 兜底：脚本未执行或容器零项时贴回 toggle 位置（不散开）；正常运行期由 JS 内联样式覆写
+  --fan-x 0px
+  --fan-y 0px
+  --pull-x 0px
+  --pull-y 0px
   position absolute
   top 0
   right 0
@@ -179,18 +156,8 @@
   pointer-events none
   transform translate(0, 0)
   transition transform .24s cubic-bezier(.2, .8, .3, 1.1), opacity .18s ease-out, visibility 0s linear .24s, background-color .2s, color .2s, box-shadow .2s
-// ordinal 映射：只声明序号，几何一律由上面推导（收紧到直接子级，避免命中 .toolbox 外的同名按钮）
-.bottom-btn .toolbox-items > [data-action=annotate]
-  --fan-ordinal 0
-.bottom-btn .toolbox-items > [data-action=share]
-  --fan-ordinal 1
-.bottom-btn .toolbox-items > [data-action=favorite]
-  --fan-ordinal 2
-.bottom-btn .toolbox-items > [data-action=screenshot]
-  --fan-ordinal 3
-.bottom-btn .toolbox-items > [data-action=bgm]
-  --fan-ordinal 4
 // 展开态：轻微投影明确层级（深浅主题通用黑系阴影，克制）；悬停抽出态略强（见下）
+// 位移直接消费 JS 写入的 px 值（--fan-x / --fan-y），hover 态再叠加同向的径向外抽量（--pull-x / --pull-y）
 .bottom-btn .toolbox-open .toolbox-item
   opacity 1
   visibility visible

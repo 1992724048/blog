@@ -977,7 +977,7 @@ Toolbox 侧职责与事件所有权冻结如下：
 
 | 模块 | 职责与唯一事件所有权 | 禁止承担的职责 |
 | --- | --- | --- |
-| `Toolbox.ts` | facade；唯一拥有 `document.click` 的 toolbox `data-action` 委托、外点判断、Escape、既有 `pjax:send/success` 重置，并公开 `toggle()/annotate()/share()/favorite()` | 标注 Range 算法、localStorage 序列化、分享/收藏业务、截图/BGM 内部状态、为纯搬运偷加 `pjax:error` |
+| `Toolbox.ts` | facade；唯一拥有 `document.click` 的 toolbox `data-action` 委托、外点判断、Escape、既有 `pjax:send/success` 重置，并公开 `toggle()/annotate()/share()/favorite()`；任务 U2 起另承担扇形布局的唯一写入（纯函数 `layoutFan()` 计算 + `syncFanLayout()` 写 `--fan-*` 内联变量 + 一个 `ResizeObserver` 观察 `.toolbox`） | 标注 Range 算法、localStorage 序列化、分享/收藏业务、截图/BGM 内部状态、为纯搬运偷加 `pjax:error`、把扇形几何塞进 CSS `:has()`/三角函数派生链 |
 | `ToolboxAnnotationController.ts` | 标注模式、选区工具栏、五色、`hl-mark` 增删/恢复及其 document `mousedown`/`selectionchange`/mark/toolbar/color click，以及 `main` scroll 收起工具栏 | localStorage key、直接注册 Pjax 或 toolbox 外点 click、分享/收藏 |
 | `ToolboxPersistence.ts` | 唯一封装 `arknights:highlights:*`、`arknights:favorites`、标注颜色的读取、校验、序列化与恢复数据 | DOM 查询、事件监听、UI timer |
 | `ToolboxShareController.ts` | `share()`、URL 复制、`.copied` 反馈及其自有一次性 timer | localStorage、全局事件监听、截图/BGM |
@@ -987,7 +987,7 @@ Toolbox 侧职责与事件所有权冻结如下：
 | `ScreenshotControl.ts` | 保持截图 lease/generation；只经 `window.screenshotControl` 接收 facade 委托 | 导入任一 Toolbox 模块或持有 toolbox 状态 |
 | `environment.d.ts` | 声明 SnapDOM、`window.screenshotControl`、`window.bgmControl` 与冻结 facade 方法类型；同步新增 `clearStatus(): void` | 运行时实现、全局可变状态或未公开 controller 类型 |
 
-依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`。同层控制器之间不得互相引用，Persistence/StatusLease 不得反向引用 facade 或业务控制器，`ScreenshotControl.ts` 与其它 Toolbox 模块之间不得新增 import；facade 只通过冻结的 `window` API 委托 screenshot/BGM。事件计数门禁必须证明初始载入和每次 `pjax:success` 后，facade 的 toolbox document click/keyup 及既有 `pjax:send/success` listener、标注 controller 的 mousedown/selectionchange/mark/toolbar/color click 与 main scroll listener、`BgmControl.ts` 既有的 `pjax:success`（`syncButton`）listener 均不增长且没有同回调重复绑定；C 批次另行证明 `BgmControl.ts` 对 `pjax:send/error/success` 各只有一个 listener。Share/Favorite/Persistence 不新增 document/window listener。
+依赖方向只能是 `Toolbox.ts -> Annotation|Share|Favorite`、`Annotation|Share|Favorite -> Persistence`、`BgmControl.ts -> ToolboxStatusLease.ts`。同层控制器之间不得互相引用，Persistence/StatusLease 不得反向引用 facade 或业务控制器，`ScreenshotControl.ts` 与其它 Toolbox 模块之间不得新增 import；facade 只通过冻结的 `window` API 委托 screenshot/BGM。事件计数门禁必须证明初始载入和每次 `pjax:success` 后，facade 的 toolbox document click/keyup 及既有 `pjax:send/success` listener、标注 controller 的 mousedown/selectionchange/mark/toolbar/color click 与 main scroll listener、`BgmControl.ts` 既有的 `pjax:success`（`syncButton`）listener 均不增长且没有同回调重复绑定；C 批次另行证明 `BgmControl.ts` 对 `pjax:send/error/success` 各只有一个 listener。Share/Favorite/Persistence 不新增 document/window listener。任务 U2 的扇形布局改由脚本计算后同样受该约束：只允许一个 `ResizeObserver`（非事件监听）与 `pjax:send/success` 既有两个钩子内的重算，`ToolboxApi` 冻结面不变。
 
 marker pipeline 模块职责如下：
 
