@@ -66,9 +66,33 @@ ol.navContent
 // ≥1024 右簇右锚：自动边距改由菜单列表右侧承担（社交块被广告拦截隐藏 / 移除后，右簇仍整体贴右；
 // 原 .topbar-social margin-left auto 在元素 display:none 后锚即失效）。
 // 须晚于上方 margin 0 生效：本文件编译序在 flex_layout.styl 之后，同文件按源码序即可
+//
+// 同一断点还负责把「图标 ↔ 名称」的两态互换整个中和掉：桌面平铺态按钮恒显图标、恒不展开名称。
+// 下方基础层的两态机制（active 名称展开 + active 图标收拢，连同各自的顺序化过渡）只服务 ≤1023px
+// 的栏下下拉，本块用两条更高特异性的规则把两态取值拉平——基础规则的声明一行不动。
 @media ( min-width 1024px )
   ol.navContent
     margin-right auto
+
+  // 中和一 · 名称恒折叠：特异性 (0,4,1) = 4 类 + 1 类型，高于基础 active 展开规则
+  // .navItem.active > .navBlock .navItemLabel 的 (0,4,0)，故与编译序无关、恒定生效。
+  // 一条规则同时命中 active 与非 active（active 项同样带 .navItem），因此六项按钮的内容宽
+  // 恒等于图标槽 --nav-icon-w，切换当前页不再有任何位移。
+  // 名称既不删除也不用 display none：仍在可访问性树内（可访问名称由 a 的 aria-label 提供，
+  // 视觉名称另有 title 悬停提示），折叠机制与移动端同源（max-width + opacity）。
+  ol.navContent .navItem > .navBlock .navItemLabel
+    max-width 0
+    margin-left 0
+    opacity 0
+
+  // 中和二 · 图标恒可见：特异性 (0,5,2) = 5 类 + 2 类型，高于基础 active 收拢规则
+  // .navItem.active > .navBlockIcon > .navItemTitle > i 的 (0,4,1)。
+  // 只回写被 active 规则改掉的两项；width / overflow / text-align 仍由基础图标槽规则承担。
+  // 两态取值相同 → 基础层的顺序化过渡在桌面恒不触发（无值变化即无过渡），
+  // 故桌面无须另关 transition，减动效清单也无需摘除那两条基础规则。
+  ol.navContent .navItem.active > .navBlockIcon > .navItemTitle > i
+    max-width var(--nav-icon-w)
+    opacity 1
 
 .navItem
   position relative
@@ -97,9 +121,11 @@ ol.navContent
     color #fff
     text-shadow none
 
-// 当前页（.active 由 Header.ts 挂载）：沿用归档 / 分类列表项的选中语言——中度对比底色 + 展开名称。
+// 当前页（.active 由 Header.ts 挂载）：沿用归档 / 分类列表项的选中语言——中度对比底色。
 // 底部不再有栏内底边（实机反馈第三轮：栏内 2.5px 蓝边与栏外 2px 凸出接成约 4.5px 的一段，偏粗），
-// 指示线只保留栏外凸出段；状态区分由「底色 + 名称展开 + 栏外凸出」承载，不靠颜色单独表达（WCAG 1.4.1）。
+// 指示线只保留栏外凸出段；状态区分不靠颜色单独表达（WCAG 1.4.1）：≤1023px 由「底色 + 名称展开 +
+// 栏外凸出」承载，桌面平铺态名称恒折叠（见本文件桌面块的「中和一」），
+// 故桌面只剩「底色 + 栏外凸出」两项。
 // 特异性 (0,3,0) 高于上方 hover 的 (0,2,0)：选中项悬停时保持选中样式，不闪蓝块 / 白字
 // 注：Stylus 的 & 嵌套在 :is() 选择器下会错插进首个参数，标题规则须平铺书写
 .navItem.active > :is(.navBlock, .navSecond)
@@ -120,6 +146,8 @@ ol.navContent
 // fa-database 0.875em，跨度 0.375em，正是「友链项更宽」的根因）。
 // .navItemTitle 为 flex 容器，图标作为弹性项可直接过渡 max-width；overflow hidden 兼作裁切与解除弹性项自动最小尺寸
 // 过渡为「顺序化」的一半（延迟 .15s）：离开当前页时名称先收起、图标随后展开（见 .navItemLabel 注释）
+// 适用断点：≤1023px 的栏下下拉。桌面平铺态由本文件桌面块内的
+// 「中和二」把两态拉平，基础声明保持原样
 .navBlockIcon > .navItemTitle > i
   width var(--nav-icon-w)
   max-width var(--nav-icon-w)
@@ -127,7 +155,7 @@ ol.navContent
   text-align center
   transition max-width .15s .15s, opacity .15s .15s
 
-// 进入当前页：图标立即收拢淡出（无延迟），为随后展开的名称让出位置
+// 进入当前页：图标立即收拢淡出（无延迟），为随后展开的名称让出位置（≤1023px；桌面由「中和二」覆盖）
 .navItem.active > .navBlockIcon > .navItemTitle > i
   max-width 0
   opacity 0
@@ -138,9 +166,8 @@ ol.navContent
 // ≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
 // 过渡同样顺序化：收起方向立即（.15s），展开方向延迟 .15s。两段合计 .3s，与原同节奏总时长一致，
 // 但图标与名称不再同时占位 → 过渡期内容宽度恒 ≤ max(图标槽, 名称)，不出现二者相加的占位峰值。
-// 已知取舍：图标槽 1.25em 小于名称 2em，故 active 项（名称态）比非 active 项（图标态）宽 0.75em，
-// 切换当前页时其后按钮与右侧簇会位移 0.75em（用户实机反馈后明确接受的取舍，不再以 min-width 掩盖）。
-// 顺序化过渡使两者不同时占位，故中途内容宽经过 0（按钮短暂退回 24px 纯内边距宽），两端点则各自恒定。
+// 适用断点：≤1023px 的栏下下拉。桌面平铺态由本文件桌面块内的
+// 「中和一」令名称恒折叠（两态同值），故下面的两态宽度差与顺序化过渡在桌面都不再发生
 .navItemLabel
   display inline-block
   max-width 0
@@ -164,8 +191,18 @@ ol.navContent
   outline 2px solid var(--theme-text-light)
   outline-offset -2px
 
+// 减动效横切块：覆盖元素集合与拆分前逐条一致（header / ol.navContent / 搜索相关 / 名称两态 /
+// 图标两态 / 桌面凸出段），只是按逻辑分组拆成四条短规则——原先挤在一行的超长逗号列表一旦被
+// 误写成嵌套规则就会编译出重复片段（ol.navContent .navContent > ...），拆分后每个选择器
+// 独立成行，风险面收敛且新增条目不必再挤进一行
 @media (prefers-reduced-motion: reduce)
-  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar, .navItemLabel, .navBlockIcon > .navItemTitle > i, .navItem.active > .navBlockIcon > .navItemTitle > i, .navItem.active > .navBlock .navItemLabel, .navContent > .navItem > :is(.navBlock, .navSecond)::after
+  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar
+    transition none
+  .navItemLabel, .navItem.active > .navBlock .navItemLabel
+    transition none
+  .navBlockIcon > .navItemTitle > i, .navItem.active > .navBlockIcon > .navItemTitle > i
+    transition none
+  .navContent > .navItem > :is(.navBlock, .navSecond)::after
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl
