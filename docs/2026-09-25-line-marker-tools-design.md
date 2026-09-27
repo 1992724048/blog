@@ -1326,7 +1326,7 @@ content/excerpt/description 契约：
 | --- | --- |
 | `INVALID_MARKER_SOURCE` | lexer 输入不是字符串或 range 不合法 |
 | `INVALID_HEADER` | 直接 parser 输入不满足精确 header |
-| `INVALID_FIELD_LINE` | 参数行不以 `[` 开头、没有同行闭合的 `]`，或 `]` 之后首个非水平空白 code unit 不是竖线分隔符 |
+| `INVALID_FIELD_LINE` | 参数行不以 `[` 开头、没有同行闭合的 `]`（此二条**仅直接 parser 输入可达**：lexer 边界判定使不以 `[` 开头的正文行终止 marker，该行不会被纳入 `physicalLines`，故真实链路不会触发；作为防御性 guard 由直接 capture fixture 覆盖），或 `]` 之后首个非水平空白 code unit 不是竖线分隔符（lexer 仍会纳入该行，真实链路可达） |
 | `INVALID_FIELD_NAME` | 命名字段不符合小写规范 |
 | `DUPLICATE_FIELD` | 同字段重复绑定 |
 | `UNKNOWN_FIELD` | handler 不接受该命名字段 |

@@ -1236,8 +1236,10 @@ function test_field_binding() {
 
   assert.equal(parse('[#]>TEST|\n[State] PASS\n').code, 'INVALID_FIELD_NAME')
   assert.equal(parse('[#]>TEST|\n[unknown] x\n').code, 'UNKNOWN_FIELD')
-  assert.equal(parse('[#]>TEST|\n[state] PASS\n').code, 'INVALID_FIELD_LINE')
-  assert.equal(parse('[#]>TEST|\n[text]\n').code, 'INVALID_FIELD_LINE')
+  // 缺分隔符的两条断言在实探针中归属 test_field_separator_contract（竖线分隔符是独立的
+  // 协议条款，含 5 种空白形态、位置形式 `[] PASS` 与旧 opening 字面量化），不放在本函数；
+  // 字段行 bracket guard 的两条子条件真实链路不可达，另由 test_direct_parser_failures
+  // 的 directCapture() 同形矩阵覆盖。重建探针时按此归属，不要把三者混回 test_field_binding。
   assert.equal(parse('[#]>TEST|\n[]| a\n[]| b\n[]| c\n[]| d\n[]| e\n').code, 'UNEXPECTED_POSITIONAL_FIELD')
   assert.equal(parse('[#]>TEST|\n[state]| PASS\n[state]| EDIT\n').code, 'DUPLICATE_FIELD')
   assert.equal(parse('[#]>TEST|\n[state]| PASS\n[]| EDIT\n').code, 'DUPLICATE_FIELD')
@@ -3621,7 +3623,7 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | --- | --- | --- | --- |
 | `INVALID_MARKER_SOURCE` | `scanMarkers(null)` / `scanMarkers({})` | `line-marker-lexer.test.js` | 是 |
 | `INVALID_HEADER` | `parseMarker` 直接传入 `raw: 'AI|'`（无 `[#]>` 前缀） | `line-marker-parser.test.js` | 是 |
-| `INVALID_FIELD_LINE` | 字段行既无 `[]` 标签也无值定位，如 `[#]>TEST|\nstate PASS\n`；`[body] value` 与只写 `[descr]` 等缺竖线分隔符写法 | `line-marker-parser.test.js` | 是 |
+| `INVALID_FIELD_LINE` | **真实链路**（`parse()`，缺竖线分隔符）：`[state] PASS` / `[state]  PASS` / `[state]\tPASS` / `[text] value` / `[] PASS` / `[text]` / `[body] $[`；**直接 parser 输入**（手写 capture，仅防御性 guard）：字段行不以 `[` 开头或无同行 `]`——探针用 `directCapture()` 由单一 content 推导出全部 offset 保证形状自洽，并以 5 例**同形**矩阵覆盖（12 code units：`[state]\|PASS` ok 排除 `INVALID_MARKER_SOURCE`、`Xstate]\|PASS` 与 `[state  PASS` 覆盖 bracket guard 两半、`[State]\|PASS` 证 guard 放行且标签诊断优先、`[text]  PASS` 覆盖分隔符分支） | `line-marker-parser.test.js` | 是 |
 | `INVALID_FIELD_NAME` | `[State]| PASS`（缺分隔符时仍优先报标签诊断） | `line-marker-parser.test.js` | 否 |
 | `DUPLICATE_FIELD` | `[state]| PASS` + `[state]| EDIT`，以及命名 + `[]` 混用同字段 | `line-marker-parser.test.js` | 否 |
 | `UNKNOWN_FIELD` | `[unknown]| x` | `line-marker-parser.test.js` | 否 |
