@@ -1498,7 +1498,7 @@ content/excerpt/description 契约：
 | light | `--theme-background: #F4F5F6` | `--theme-text: #222222` | `0.08` | `0.14` |
 | dark | `--theme-background: #141516` | `--theme-text: #C4C4C4` | `0.15` | `0.24` |
 
-`blockquote.alert` 的正文和 `strong` 标题都使用 `var(--theme-text)`；accent 只用于 4px 左边框和类型图标，不再把 accent 当标题色。这样标题与正文的门禁使用同一实际前景色，不与某个低 alpha accent 混算。
+`blockquote.alert` 的正文和 `strong` 标题都使用 `var(--theme-text)`；accent 只用于 5px 左边框和类型图标，不再把 accent 当标题色。这样标题与正文的门禁使用同一实际前景色，不与某个低 alpha accent 混算。
 
 accent 映射固定为：
 
@@ -1517,12 +1517,17 @@ accent 映射固定为：
 3. 每种类型分别定义 resting 规则与 `&:hover` 规则；**不响应 `focus-within`**（实机反馈三：提示盒内的链接聚焦不再整块提亮，避免与正文可读性抢注意力；焦点可见性由各处 `focus-visible` 焦点环承担，不受本次删除影响）。
 4. 标题（`strong`）取该类型的强调色 `--alert-title-color`；底色是同一 accent 的 alpha 合成，原 accent 落在合成底上只有 3.74–4.50:1，故按统一公式修正 15%（明色向黑、暗色向白，8-bit 四舍五入），**只改标题色**，左边框与图标仍为原 accent；正文用 `--theme-text`。
 5. resting/交互背景分别为 `rgba(<accent>, <alpha>)`，合成底色固定取上表 `--theme-background`；测试必须按 alpha 合成后计算，不允许直接拿 rgba 色值与标题色比较。
-6. 标题（`--alert-title-color`）、普通正文（`--theme-text`）对 rest/hover 实际背景的对比度均 `>= 4.5:1`；4px accent 边框对实际背景均 `>= 3:1`。以 8-bit 合成通道计算时，light 最低实测为标题 `4.80:1`、正文 `11.75:1`、边框 `3.74:1`，dark 最低实测为标题 `4.68:1`、正文 `7.08:1`、边框 `3.90:1`；任何计算低于门槛即失败。测试必须从产物 CSS 读回三个颜色再实算，不得写死表。
-7. 状态不能只靠 alpha 表达：左边框保持 4px solid accent，标题另有逐类型强调色；两种状态均不得改变 box size。
+6. 标题（`--alert-title-color`）、普通正文（`--theme-text`）对 rest/hover 实际背景的对比度均 `>= 4.5:1`；5px accent 边框对实际背景均 `>= 3:1`。以 8-bit 合成通道计算时，light 最低实测为标题 `4.80:1`、正文 `11.75:1`、边框 `3.74:1`，dark 最低实测为标题 `4.68:1`、正文 `7.08:1`、边框 `3.90:1`；任何计算低于门槛即失败。测试必须从产物 CSS 读回三个颜色再实算，不得写死表。边框粗细不参与本条计算（门槛只约束 `border-left-color` 的对比度），故 §16.1 第 12 条把边框由 4px 改为 5px 时本条数值不变。
+7. 状态不能只靠 alpha 表达：左边框保持 5px solid accent，标题另有逐类型强调色；两种状态均不得改变 box size。
 8. 新 Alerts marker 的 `.admonition` 样式不参与本修复，也不输出 `.alert`。
 9. `prefers-reduced-motion: reduce` 下取消 Alert 背景 transition；正常模式只过渡 background-color，不对 border-color 做位移动画。
 10. **图标 → 标题的可见间距**（实机反馈三）：收敛为单一契约 token `--alert-icon-gap 6px`（落在 6–8px 设计带下沿），由 `blockquote.alert strong` 的 `gap` 消费。GitHub Alert 的 `::before` 图标盒为 16×16，其 SVG 声明了 `width='16' height='16' viewBox='0 0 16 16'`，故 1:1 渲染、盒内光学留白仅 0–1.92px，可见间距落在 `6.00–7.92px`，同在设计带内。该 token 必须与 Alerts marker 的 `--ex-icon-gap` **同值**，使两套呈现口径一致。
-11. **左缘对齐**（实机反馈三）：正文内 `table`、`figure.highlight`（代码块）、`blockquote` 与 `.admonition`（= `.expand-box`，涵盖 Alerts marker 与友链区块）的盒左缘必须都等于 `#post-content` 的内容左缘，四者的横向 `margin` 必须为 `0`。`.expand-box` 原为 `margin: 1em`，额外右移 `1em`（@16px 即 16px），改为 `margin: 1em 0`；`5px` / `4px` 左边框、`padding` 与背景 alpha 合成口径均不得改动，故 §16.1 的对比度断言不受影响。
+11. **左缘对齐**（实机反馈三）：正文内 `table`、`figure.highlight`（代码块）、`blockquote` 与 `.admonition`（= `.expand-box`，涵盖 Alerts marker 与友链区块）的盒左缘必须都等于 `#post-content` 的内容左缘，四者的横向 `margin` 必须为 `0`。`.expand-box` 原为 `margin: 1em`，额外右移 `1em`（@16px 即 16px），改为 `margin: 1em 0`；`5px` 左边框、`padding` 与背景 alpha 合成口径均不得改动，故 §16.1 的对比度断言不受影响。
+12. **两套呈现的左右留白统一**（实机反馈五）：第 11 条只覆盖了 marker 版，GitHub Alert 当时仍被漏掉——本仓的通用引用块一律写成 `blockquote:not(.alert)`，`blockquote.alert` 自身**没有任何 `margin` 声明**，浏览器默认样式表的 `blockquote { margin-inline: 40px }` 于是整条生效，左右各凭空多出 `40px` 留白；而 `≤768px` 媒体查询里共用的 `.highlight, blockquote { margin: 1em 0 }` 恰好把它抹掉了，故该缺陷只在 `>=769px` 显现。口径与要求：
+    - **外盒偏移**：五类容器（`blockquote.alert`、`.expand-box`、`table`、`figure.highlight`、`blockquote:not(.alert)`）的盒左/右缘相对 `#post-content` 内容边缘的横向偏移必须**全为 `0px`**；`blockquote.alert` 必须**显式**声明 `margin: 1em 0`（纵向沿用浏览器默认原本就提供的 `1em` 节奏，横向归零），使两个断口一致。门禁须另行保证「任何以 blockquote 为主题的规则（含媒体查询内层）都不得声明非零横向外边距」，以免同类缺陷复发。
+    - **内部文字缩进**：定义 `缩进 = 外偏移 + 左边框宽 + 左内边距`。marker 版是两级内缩（标题行 `.ex-header` = `5 + 8 = 13px`、正文行 `.ex-content` = `5 + 20 = 25px`），GitHub Alert 是单级内缩，其值必须**与 marker 版标题行相等**（`13px`）且不大于其正文行，故按 `padding: 8px 8px` + `border-left-width: 5px` 取值。实测对齐后：图标盒左缘两套同为 `13px`；标题文字 GitHub Alert `35px`（`13 + 16 + 6`）vs marker `37.33px`（`13 + 18.33 + 6`）。
+    - **左边框粗细取舍**：统一为 `5px`。理由是两套呈现是同一种提示盒的两种语法，强调色竖条的粗细不应随语法而变；`4px` 只是 GitHub 自身 `.markdown-alert` 的 `0.25em` 取值，而本仓的 marker 版已定 5px，若反向把 marker 版降到 4px 则会推翻实机反馈第三轮用户已认可的结论。边框粗细不参与对比度门槛计算（第 6 条只约束 `border-left-color`），故此项统一不动任何颜色声明，20 组对比度结论不变。
+    - **对比度不受影响**：`blockquote.alert` 基础块只声明几何与 `--alert-icon-gap`，**不得**声明 `background-color` / `color`；20 组对比度的输入全部来自逐类型块（`border-left-color` + `background-color` alpha + `--alert-title-color`），因此几何改动与对比度口径结构上互不耦合。
 
 ### 16.2 桌面导航
 

@@ -239,8 +239,19 @@ blockquote:not(.alert)
 // 交互态只有 hover（不再响应 focus-within）：提示盒内的链接聚焦不再整块提亮，避免与正文可读性抢注意力
 // 通用引用块的底色 / 边框 / hover 见 base.styl 的 blockquote:not(.alert)，两层互不参与
 blockquote.alert
-  padding 8px 12px
-  border-left-width 4px
+  // 横向 margin 必须显式归零：本仓没有裸 blockquote 的复位（base.styl 与本文件的通用引用块
+  // 都写成 blockquote:not(.alert)），故这条选择器在任何规则块里都没有 margin 声明，
+  // 浏览器默认样式表的 blockquote { margin-inline: 40px } 整条生效——左右各凭空多出 40px 留白，
+  // 而正文表格（border-collapse + border 0 + 无 margin）、代码块（.highlight margin 1em 0）、
+  // marker 版提示盒（.expand-box margin 1em 0）的盒左/右缘都等于 #post-content 内容边缘。
+  // 纵向 1em 沿用浏览器默认原本就提供的纵向节奏，本轮只收敛横向。
+  margin 1em 0
+  // 左边框与 marker 版提示盒（.expand-box）统一为 5px：两套呈现是同一种提示盒的两种语法，
+  // 强调色竖条的粗细不该随语法而变。配合 8px 内边距，内部文字缩进 = 5 + 8 = 13px，
+  // 与 marker 版标题行（5 + .ex-header 的 8px）完全相同，并比其正文行
+  // （5 + .ex-content 的 20px = 25px）小 12px，故不存在「外盒贴齐 + 内缩过大」的双重内缩。
+  padding 8px 8px
+  border-left-width 5px
   border-left-style solid
   border-radius 0
   // 类型图标与标题之间的可见间距（设计带 6–8px）。图标盒 16×16 与五个 SVG 的 16×16 视图
