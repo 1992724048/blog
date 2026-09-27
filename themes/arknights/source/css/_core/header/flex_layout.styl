@@ -68,19 +68,48 @@
   .navContent > .navItem
     height 100%
 
-  // 一级导航固定 72x36（border-box，与顶栏 36px 外高一致）：active 项收起图标、名称展开时
-  // 按钮宽度不变，消除后续按钮与右侧簇的横向位移；图标项与文字项的内部布局保持一致
+  // 一级导航为自适应宽度（border-box，高度 36px 与顶栏 36px 外高一致）：宽度随内容走，
+  // 图标项与文字项用同一组左右内边距取得一致的横向留白；宽度不再固定，故 active 项收起图标 /
+  // 展开名称时按钮宽度随内容变化，后续按钮与右侧簇随之移动
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
-    width 72px
-    min-width 72px
+    width auto
+    min-width 0
     height 36px
     display flex
     align-items center
     justify-content center
-    padding 0
+    padding 0 12px
 
   // 标题占满按钮可用宽度并水平居中：名称的展开 / 收起不改变图标与名称的相对位置
   .navContent > .navItem > :is(.navBlock, .navSecond) > .navItemTitle
     flex 1
     justify-content center
+
+  // 底部凸出指示（仅桌面平铺态）：伪元素绝对定位、不参与布局，因此不改动按钮几何、
+  // 不改动 nav 的对齐，也不加剧既有 1px 下沿溢出。锚点是 .navBlock 的 padding box 下沿
+  // （y = 36 − 2.5 = 33.5，.navBlock 的 position: relative 定位上下文）；向下让出既有
+  // 2.5px 底边后，伪元素总高 = 顶栏底边厚度 + 凸出量，故顶边恒为 y 35（顶栏外缘 y 36 的上沿），
+  // 与既有蓝条在最后一像素带重叠 → 无接缝；下沿 y 36 + 凸出量。
+  .navContent > .navItem > :is(.navBlock, .navSecond)::after
+    content ''
+    position absolute
+    left 0
+    right 0
+    z-index 1
+    bottom calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop)))
+    height calc(var(--topbar-border-w) + var(--nav-tab-drop))
+    background-color transparent
+    pointer-events none
+    transition background-color .3s, height var(--nav-tab-ease), bottom var(--nav-tab-ease)
+
+  .navContent > .navItem > :is(.navBlock, .navSecond):is(:hover, :focus-visible)::after
+    bottom calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop-hover)))
+    height calc(var(--topbar-border-w) + var(--nav-tab-drop-hover))
+    background-color var(--nav-tab-color)
+
+  // active 必须带 .navContent > .navItem 前缀才与上一条同为 (0,4,1)；
+  // 靠源码序（active 在后）让当前页在悬停 / 聚焦时保持 3px 凸出，不被 hover 的 2px 压过。
+  // active 只改色，几何由 base 单点承担（杜绝双源）
+  .navContent > .navItem.active > :is(.navBlock, .navSecond)::after
+    background-color var(--nav-tab-color)

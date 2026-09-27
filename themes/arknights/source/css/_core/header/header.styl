@@ -1,7 +1,16 @@
 :root
   // 顶栏高度：全断点统一 36px（border-box，含 1px 底边，内容区 35px）；--search-row-h 为移动端栏下整行搜索框高度（1px 上边框 + 栏高内容）
   --topbar-h 36px
+  // 顶栏底边厚度：header 的 border-bottom 与导航凸出段共用，避免两处字面量漂移
+  --topbar-border-w 1px
   --search-row-h calc(var(--topbar-h) + 1px)
+  // 桌面一级导航（≥1024px）底部凸出指示：既有 2.5px 底边提为 token 供凸出段锚点复用；
+  // active 凸出 3px、hover/focus-visible 凸出 2px（差 1px 作非颜色状态区分）
+  --nav-block-border-b 2.5px
+  --nav-tab-drop 3px
+  --nav-tab-drop-hover 2px
+  --nav-tab-color var(--theme-highlight)
+  --nav-tab-ease .2s
 
 header
   position sticky
@@ -19,7 +28,7 @@ header
   -webkit-backdrop-filter blur(8px)
   backdrop-filter blur(8px)
   // 顶栏底边：与首页文章列表条目边框同色（--theme-unimportant 两主题 #767676 / #898989），随主题自动适配
-  border-bottom 1px solid var(--theme-unimportant)
+  border-bottom var(--topbar-border-w) solid var(--theme-unimportant)
 
 // 毛玻璃底色：仅覆盖顶栏（取 --theme-bg-trans0 原色值降 alpha），弹层 / 下拉仍用 --theme-bg-trans0
 :root[theme-mode=light] header
@@ -64,7 +73,7 @@ ol.navContent
   position relative
   display block
   color var(--theme-text-light)
-  border-bottom 2.5px solid transparent
+  border-bottom var(--nav-block-border-b) solid transparent
   transition background-color .3s, color .3s
 
 .navItemTitle
@@ -113,8 +122,8 @@ ol.navContent
   opacity 0
 
 // 名称（active 项显示）：默认收起（0 宽 + 透明），随 active 平滑展开；类名避开 Header.ts 识别集合
-// 桌面一级项宽度固定（flex_layout.styl 的 72px），margin-left 归零使名称在按钮内居中；
-// ≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
+// 桌面一级项为自适应宽度（flex_layout.styl），margin-left 归零配合 .navItemTitle 的 flex 1 + 居中，
+// 使名称在按钮内居中；≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
 .navItemLabel
   display inline-block
   max-width 0
@@ -138,7 +147,7 @@ ol.navContent
   outline-offset -2px
 
 @media (prefers-reduced-motion: reduce)
-  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar, .navItemLabel, .navBlockIcon > .navItemTitle > i
+  header, ol.navContent, #search-header, .search-popup, .navBtnIconBar, .navItemLabel, .navBlockIcon > .navItemTitle > i, .navContent > .navItem > :is(.navBlock, .navSecond)::after
     transition none
 
 // 注：≥1024px 桌面顶栏平铺布局与 ≤1023px 栏下下拉布局见 flex_layout.styl

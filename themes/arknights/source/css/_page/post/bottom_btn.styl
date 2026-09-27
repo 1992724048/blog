@@ -198,7 +198,27 @@
   transition-delay 0s
   transform translate(var(--fan-x), var(--fan-y))
   box-shadow 0 2px 8px rgba(0, 0, 0, .25)
+// 状态提示进入动画：纯 CSS，由 lease 既有的 hidden = false 写入天然触发
+// （节点从 display:none 变为渲染态时该动画被创建；不新增任何属性 / 类切换面）
+// 关键约束：静止态不得声明 opacity 0 —— 否则减动效 animation:none 会让提示永久不可见
+@keyframes arknights-status-enter
+  0%
+    opacity 0
+    transform translateX(calc(-1 * (100% + var(--status-slide-gap)))) scale(var(--status-scale))
+  45%
+    opacity 1
+  100%
+    opacity 1
+    transform translateX(0) scale(1)
 .bottom-btn .toolbox-status
+  --status-slide-gap 12px
+  --status-scale .96
+  --status-enter-dur 260ms
+  --status-enter-ease cubic-bezier(.22, 1, .36, 1)
+  // 以下三项只被退场的 TS 侧镜像常量消费（CSS 不使用），保留是为了两侧数值同表可审
+  --status-exit-dur 180ms
+  --status-exit-ease cubic-bezier(.4, 0, 1, 1)
+  --status-exit-fade .6
   position absolute
   left 0
   bottom calc(100% + 8px)
@@ -212,6 +232,10 @@
   line-height 1.4
   white-space normal
   pointer-events none
+  // 缩放轴心取锚定的左下角：进入时盒子贴住锚点向右生长，不会先右移再左移
+  transform-origin 0 100%
+.bottom-btn .toolbox-status:not([hidden])
+  animation arknights-status-enter var(--status-enter-dur) var(--status-enter-ease) 1
 .bottom-btn .toolbox-status[hidden]
   display none
 @media ( min-width 769px )
@@ -240,8 +264,10 @@
 .bottom-btn .toolbox-favorite.saved .i-star
   fill currentColor
 
-// 减少动效偏好：关闭本组全部过渡 / 动画（扇形展开、悬停抽出、图标旋转、目录条变形、工具栏淡入）
+// 减少动效偏好：关闭本组全部过渡 / 动画（扇形展开、悬停抽出、图标旋转、目录条变形、工具栏淡入、状态提示滑入）
 // 横切块：选择器同时覆盖本文件的工具箱与 annotate_toolbar.styl 的标注工具栏，整块留在本文件末尾以保证覆盖顺序
+// 状态提示必须带 :not([hidden]) 前缀：进入动画规则是 (0,3,0)，只写 .bottom-btn .toolbox-status 的 (0,2,0) 压不住它
 @media (prefers-reduced-motion: reduce)
-  .bottom-btn a, .bottom-btn button, .bottom-btn .toolbox-item, .bottom-btn .i-icon, .bottom-btn .tocBtnIconBar, #annotate-toolbar, #annotate-toolbar .at-colors
+  .bottom-btn a, .bottom-btn button, .bottom-btn .toolbox-item, .bottom-btn .i-icon, .bottom-btn .tocBtnIconBar, .bottom-btn .toolbox-status:not([hidden]), #annotate-toolbar, #annotate-toolbar .at-colors
     transition none
+    animation none

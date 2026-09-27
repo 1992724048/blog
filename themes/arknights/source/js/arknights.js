@@ -3,8 +3,18 @@
 // 全站 .toolbox-status 的唯一写入口：写入、delay 自动清除与「其它 owner 接管」失效都收敛在此。
 // 观察者挂在共享节点上，任何其它控制器的写入（哪怕文本逐字相同）都会产生 mutation record
 // 并使本 lease 失效，因此持有者之外的任何人都不可能依赖本模块的 timer 去清空别人的文案。
+// 进入动效由 CSS 承担（.toolbox-status:not([hidden]) 上的 @keyframes，由 hidden 的 false 写入天然触发）；
+// 退场必须发生在 hidden = true 之前，故本模块用 WAJ + generation 守卫 timer 收尾，退场常量镜像 CSS token。
 let statusGeneration = 0;
 let statusLease = null;
+let exitAnimation = null;
+let exitTimer = null;
+const STATUS_SLIDE_GAP_PX = 12;
+const STATUS_SCALE = 0.96;
+const STATUS_EXIT_MS = 180;
+const STATUS_EXIT_EASING = 'cubic-bezier(.4, 0, 1, 1)';
+const STATUS_EXIT_FADE = 0.6;
+const STATUS_REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 const releaseStatusLease = (lease) => {
     if (lease.timer !== null) {
         window.clearTimeout(lease.timer);
@@ -18,10 +28,38 @@ const releaseStatusLease = (lease) => {
 function currentStatusLease() {
     return statusLease;
 }
-// 规格 16.3 的 claimStatus：递增 generation → 释放旧 lease 但不清空旧 node → 建 observer 并 observe
-// → 写 node → takeRecords 丢弃本次自有写入 → delay > 0 时为该 lease 建唯一 timer
+// 撤销在飞的退场：新文案接管时必须立刻恢复静止态，否则旧退场动画会继续把新文案淡出
+function cancelStatusExit() {
+    if (exitTimer !== null) {
+        window.clearTimeout(exitTimer);
+        exitTimer = null;
+    }
+    if (exitAnimation !== null) {
+        exitAnimation.cancel();
+        exitAnimation = null;
+    }
+}
+// 返回 false 表示本次不播退场（减动效偏好或环境缺 WAJ），调用方须走同步清空回退路径
+function startStatusExit(node) {
+    if (typeof node.animate !== 'function' || window.matchMedia(STATUS_REDUCED_MOTION).matches) {
+        return false;
+    }
+    const view = window.getComputedStyle(node);
+    const fromTransform = view.transform === '' ? 'none' : view.transform;
+    const fromOpacity = view.opacity === '' ? '1' : view.opacity;
+    const offset = -1 * (node.getBoundingClientRect().width + STATUS_SLIDE_GAP_PX);
+    exitAnimation = node.animate([
+        { opacity: fromOpacity, transform: fromTransform, offset: 0 },
+        { opacity: '0', offset: STATUS_EXIT_FADE },
+        { opacity: '0', transform: `translateX(${offset}px) scale(${STATUS_SCALE})`, offset: 1 }
+    ], { duration: STATUS_EXIT_MS, easing: STATUS_EXIT_EASING, fill: 'forwards' });
+    return true;
+}
+// 规格 16.3 的 claimStatus：递增 generation → 撤销在飞的退场 → 释放旧 lease 但不清空旧 node
+// → 建 observer 并 observe → 写 node → takeRecords 丢弃本次自有写入 → delay > 0 时为该 lease 建唯一 timer
 function claimStatus(message, options) {
     statusGeneration += 1;
+    cancelStatusExit();
     if (statusLease !== null) {
         releaseStatusLease(statusLease);
         statusLease = null;
@@ -84,13 +122,32 @@ function invalidateStatusLease() {
     statusLease = null;
     return owned ? lease.node : null;
 }
+// 清空：持 lease 时先播 180ms 退场再落 hidden（退场必须先于 hidden，否则纯 CSS 无从过渡）；
+// 无 lease（他人已接管）时直接返回，不启动退场、不写节点、不建 timer。
+// 退场在飞时被新 claimStatus 接管：generation 已再推进一步，终结写入被守卫作废，退场同时被 cancel。
 function clearStatus() {
     const ownedNode = invalidateStatusLease();
     if (ownedNode === null) {
         return;
     }
-    ownedNode.textContent = '';
-    ownedNode.hidden = true;
+    if (startStatusExit(ownedNode) === false) {
+        ownedNode.textContent = '';
+        ownedNode.hidden = true;
+        return;
+    }
+    const generation = statusGeneration;
+    exitTimer = window.setTimeout(() => {
+        exitTimer = null;
+        if (statusGeneration !== generation || ownedNode.isConnected === false) {
+            return;
+        }
+        ownedNode.textContent = '';
+        ownedNode.hidden = true;
+        if (exitAnimation !== null) {
+            exitAnimation.cancel();
+            exitAnimation = null;
+        }
+    }, STATUS_EXIT_MS);
 }
 // 播放 / 暂停终态的提示停留时长；failed 的提示不自动清除
 const BGM_STATUS_DELAY = 2500;

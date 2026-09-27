@@ -1512,11 +1512,11 @@ accent 映射固定为：
 
 1. 普通引用只使用 `blockquote:not(.alert)` 的通用背景、边框和 hover 规则。
 2. GitHub Alert 只使用 `blockquote.alert.alert-<type>`；`.alert-<type>` 不得作为独立可命中选择器污染普通 blockquote。
-3. 每种类型分别定义 resting 规则，并在一个逗号分隔规则中同时写 `&:hover, &:focus-within`；两个交互态使用完全相同的 accent、背景 alpha、边框和图标。
-4. focus-within 通过内部链接、按钮或可聚焦代码元素触发，不改变尺寸、间距或布局。
+3. 每种类型分别定义 resting 规则与 `&:hover` 规则；**不响应 `focus-within`**（实机反馈三：提示盒内的链接聚焦不再整块提亮，避免与正文可读性抢注意力；焦点可见性由各处 `focus-visible` 焦点环承担，不受本次删除影响）。
+4. 标题（`strong`）取该类型的强调色 `--alert-title-color`；底色是同一 accent 的 alpha 合成，原 accent 落在合成底上只有 3.74–4.50:1，故按统一公式修正 15%（明色向黑、暗色向白，8-bit 四舍五入），**只改标题色**，左边框与图标仍为原 accent；正文用 `--theme-text`。
 5. resting/交互背景分别为 `rgba(<accent>, <alpha>)`，合成底色固定取上表 `--theme-background`；测试必须按 alpha 合成后计算，不允许直接拿 rgba 色值与标题色比较。
-6. 标题和普通正文对 rest/hover/focus 实际背景的对比度均 `>= 4.5:1`；4px accent 边框及 focus-within 边框对实际背景均 `>= 3:1`。以 8-bit 合成通道计算时，light 最低预期约为正文 `11.74:1`、边框 `3.73:1`，dark 最低预期约为正文 `7.08:1`、边框 `3.89:1`；任何计算低于门槛即失败。
-7. 状态不能只靠 alpha 表达：左边框保持 4px solid accent，focus-within 可在内侧增加同色 1px 轮廓，但不得改变 box size。
+6. 标题（`--alert-title-color`）、普通正文（`--theme-text`）对 rest/hover 实际背景的对比度均 `>= 4.5:1`；4px accent 边框对实际背景均 `>= 3:1`。以 8-bit 合成通道计算时，light 最低实测为标题 `4.80:1`、正文 `11.75:1`、边框 `3.74:1`，dark 最低实测为标题 `4.68:1`、正文 `7.08:1`、边框 `3.90:1`；任何计算低于门槛即失败。测试必须从产物 CSS 读回三个颜色再实算，不得写死表。
+7. 状态不能只靠 alpha 表达：左边框保持 4px solid accent，标题另有逐类型强调色；两种状态均不得改变 box size。
 8. 新 Alerts marker 的 `.admonition` 样式不参与本修复，也不输出 `.alert`。
 9. `prefers-reduced-motion: reduce` 下取消 Alert 背景 transition；正常模式只过渡 background-color，不对 border-color 做位移动画。
 
@@ -1524,11 +1524,12 @@ accent 映射固定为：
 
 断点保持 `1024px`：
 
-1. `>=1024px` 所有一级 `.navBlock` 使用同一 `72px` 宽度、`72px` min-width、`36px` 高度和 `border-box`，与全断点顶栏的 36px 外高一致；搜索输入仍按顶栏内容区契约使用 35px，按钮本身不得改成 35px。
+1. `>=1024px` 所有一级 `.navBlock` 为**自适应宽度**：`width: auto`、`min-width: 0`、`36px` 高度、`border-box` 与 `padding: 0 12px`（实机反馈一：固定 `72px` 宽度过宽已回退；水平留白改由内边距承担，图标项与文字项仍取得一致留白）。搜索输入仍按顶栏内容区契约使用 35px，按钮本身不得改成 35px。
 2. 一级按钮统一 `justify-content: center`；图标项与文字项的内部布局一致。
 3. `.navItemTitle` 在桌面一级项中占满按钮可用宽度并水平居中。
-4. active 项收起 icon 时，active `.navItemLabel` 的 `margin-left` 归零，名称在固定宽度内居中。
-5. 图标 `max-width` 动画可以保留，但不得改变父按钮固有宽度、后续按钮位置或右侧簇位置。
+4. active 项收起 icon 时，active `.navItemLabel` 的 `margin-left` 归零，名称在按钮内居中。
+5. 图标 `max-width` 动画可以保留；按钮宽度随内容变化属既定取舍（后续按钮与右侧簇随之移动），凸出指示不得反过来改变按钮几何。
+5a. **底边凸出指示**（实机反馈五）：`.navContent > .navItem > :is(.navBlock, .navSecond)::after` 伪元素，绝对定位、不参与布局、非常驻、直角无投影、`pointer-events: none`，仅 `>=1024px` 生效（`<=1023px` 零规则）。active 凸出 `--nav-tab-drop 3px`、hover/focus-visible 凸出 `--nav-tab-drop-hover 2px`（差 1px 作非颜色状态区分），颜色 `--nav-tab-color`（`var(--theme-highlight)`）。锚点为 `.navBlock` 的 padding box 下沿（`y = 36 − 2.5 = 33.5`），`bottom: calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop)))` 与 `height: calc(var(--topbar-border-w) + var(--nav-tab-drop))` 两式联立使顶边恒为 `y 35`、下沿为 `y 36 + 凸出量`；顶栏外缘恒为 `y 36`（36px border-box，底边是否存在都不改变外缘），故两态都与顶栏末像素带重叠 ≥0（无接缝）而栏外凸出恰为 3px / 2px。`--topbar-border-w` 与 `--nav-block-border-b` 分别为顶栏底边与既有 2.5px 底边的单一事实源。
 6. `<=1023px` 覆盖为 `width:100%`、`min-width:0`、`justify-content:flex-start`；整行左对齐。
 7. 移动端 active 名称继续与图标组成一组，保留 6px 间距。
 8. 二级菜单现有展开行为、tooltip、hover、focus-visible 和 Pjax active 重绑不变。
