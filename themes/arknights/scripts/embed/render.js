@@ -6,9 +6,14 @@ const { isSafeUrl } = require('../markers/handlers/shared/url')
 
 // 只匹配「段落里唯一子元素是一个 <a>」的形态；段落内有其它内容则不匹配，
 // 围栏内联代码渲染出的 <p><code><a …></a></code></p> 同样命不中。空白文本节点不算子元素。
-const SOLE_ANCHOR_PARAGRAPH = /<p>\s*<a\s([^>]*)>([\s\S]*?)<\/a>\s*<\/p>/g
+// 锚点内容必须一个标签都不含（(?:(?!<)[\s\S])*）：惰性的 [\s\S]*? 会在「同一段落里有两个及以上
+// 锚点」时为凑上结尾的 </p> 而吞掉后一个锚点的 </a>，于是后一个链接连同其可见文字被整段删除。
+// 行内标签与换行都不含 <，普通独占行链接（marked 会把软换行留在 <a> 内）照常命中。
+const SOLE_ANCHOR_PARAGRAPH = /<p>\s*<a\s([^>]*)>((?:(?!<)[\s\S])*)<\/a>\s*<\/p>/g
 // 属性名前必须是行首或空白，否则 data-href 会被当成 href 读走。
-const HREF_ATTR_RE = /(?:^|\s)href="([^"]*)"/i
+// 三种引号形态都要覆盖（双引号 / 单引号 / 无引号），否则同一种作者意图会因引号不同
+// 而得到「被摘除」与「原样放行」两种结局；无引号值按 HTML 规则读到空白或 > 为止。
+const HREF_ATTR_RE = /(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))/i
 
 const GITHUB_ICON = 'fab fa-github'
 const BILIBILI_ICON = 'fab fa-bilibili'
@@ -22,7 +27,8 @@ const esc = (value) => {
 
 const extractHref = (attrs) => {
   const m = HREF_ATTR_RE.exec(attrs || '')
-  return m ? m[1] : null
+  if (!m) return null
+  return m[1] ?? m[2] ?? m[3] ?? null
 }
 
 // 按 extractHref 读到的同一位置摘属性，位置同源故不会误伤同名属性。

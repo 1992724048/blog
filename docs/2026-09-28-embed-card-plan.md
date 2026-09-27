@@ -1078,14 +1078,16 @@ git commit -m "feat(embed): 新增构建期元数据抓取编排"
 - Consumes: Task 1 `formatCountEn` / `formatCountZh`；Task 2 `getLive`；`themes/arknights/scripts/markers/handlers/shared/html.js` 的 `escapeHtmlText`；`themes/arknights/scripts/markers/handlers/shared/url.js` 的 `isSafeUrl`
 - Produces:
   ```js
-  SOLE_ANCHOR_PARAGRAPH = /<p>\s*<a\s([^>]*)>([\s\S]*?)<\/a>\s*<\/p>/g
+  SOLE_ANCHOR_PARAGRAPH = /<p>\s*<a\s([^>]*)>((?:(?!<)[\s\S])*)<\/a>\s*<\/p>/g
   extractHref(attrs) -> string | null
-  buildGithubCard(entry) -> string
-  buildBilibiliCard(entry) -> string
-  buildPlainCard(sourceUrl, platform) -> string
+  buildGithubCard(key, data) -> string
+  buildBilibiliCard(key, data) -> string
+  buildPlainCard(key, sourceUrl) -> string
   renderEmbeds(html, lookup) -> { html, rendered, plain, skipped }
   ```
   `lookup(key) -> entry | undefined`
+
+  三个构建器与 `extractHref` 均为**模块内部件**，对外契约只有 `renderEmbeds`（Task 7 只消费它）。构建器收 `(key, data)` 而非 `(entry)`，是为了让调用方把已经算好的复合键原样传下去——否则每个构建器都要自己重新推导 `platform.js` 的键逻辑，那份逻辑便有了第二个事实来源。
 
 - [ ] **Step 1: 写核查脚本 `.temp/embed-render-check.js`（先失败）**
 
