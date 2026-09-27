@@ -1524,12 +1524,13 @@ accent 映射固定为：
 
 断点保持 `1024px`：
 
-1. `>=1024px` 所有一级 `.navBlock` 为**自适应宽度**：`width: auto`、`min-width: 0`、`36px` 高度、`border-box` 与 `padding: 0 12px`（实机反馈一：固定 `72px` 宽度过宽已回退；水平留白改由内边距承担，图标项与文字项仍取得一致留白）。搜索输入仍按顶栏内容区契约使用 35px，按钮本身不得改成 35px。
+1. `>=1024px` 所有一级 `.navBlock` 为**统一宽度**：`width: auto` + `min-width: var(--nav-item-min-w)`、`36px` 高度、`border-box` 与 `padding: 0 12px`。`--nav-item-min-w` 的取值必须由当前配置推导而非拍脑袋：`24px` 左右内边距 + 最宽菜单名宽度（`menu` 中最长标签的全角字数 × 1em；当前配置 6 项均为 2 字 → `2em`）+ `4px` 余量 = `3.5em + 0.25em = 3.75em`（@16px 字号即 `60px`），并留出「菜单项增多 / 标签变长」时的 `width: auto` 兜底。字号前提是桌面导航路径不覆盖 `font-size`（全站无根字号覆盖，默认 `16px`），故用 `em` 随页面缩放同步（WCAG 1.4.4）而非写死 `px`。搜索输入仍按顶栏内容区契约使用 35px，按钮本身不得改成 35px。
 2. 一级按钮统一 `justify-content: center`；图标项与文字项的内部布局一致。
 3. `.navItemTitle` 在桌面一级项中占满按钮可用宽度并水平居中。
-4. active 项收起 icon 时，active `.navItemLabel` 的 `margin-left` 归零，名称在按钮内居中。
-5. 图标 `max-width` 动画可以保留；按钮宽度随内容变化属既定取舍（后续按钮与右侧簇随之移动），凸出指示不得反过来改变按钮几何。
-5a. **底边凸出指示**（实机反馈五）：`.navContent > .navItem > :is(.navBlock, .navSecond)::after` 伪元素，绝对定位、不参与布局、非常驻、直角无投影、`pointer-events: none`，仅 `>=1024px` 生效（`<=1023px` 零规则）。active 凸出 `--nav-tab-drop 3px`、hover/focus-visible 凸出 `--nav-tab-drop-hover 2px`（差 1px 作非颜色状态区分），颜色 `--nav-tab-color`（`var(--theme-highlight)`）。锚点为 `.navBlock` 的 padding box 下沿（`y = 36 − 2.5 = 33.5`），`bottom: calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop)))` 与 `height: calc(var(--topbar-border-w) + var(--nav-tab-drop))` 两式联立使顶边恒为 `y 35`、下沿为 `y 36 + 凸出量`；顶栏外缘恒为 `y 36`（36px border-box，底边是否存在都不改变外缘），故两态都与顶栏末像素带重叠 ≥0（无接缝）而栏外凸出恰为 3px / 2px。`--topbar-border-w` 与 `--nav-block-border-b` 分别为顶栏底边与既有 2.5px 底边的单一事实源。
+4. active 项收起 icon 时，active `.navItemLabel` 的 `margin-left` 归零，名称在按钮内居中；**名称与图标的尺寸过渡必须顺序化**（各半 `.15s`）：进入 active 时图标立即收拢、名称延迟 `.15s` 展开，离开 active 时名称立即收起、图标延迟 `.15s` 展开。两段合计仍为 `.3s`，但两者不再同时占位，过渡期内容宽度上界由「图标 + 名称」的 `3.5em`（`1.5em` 图标上限 + `2em` 名称 = 56px，连内边距即 80px，比被否决的 72px 还宽）降为 `max(图标, 名称)`（当前配置 `2em` = 32px，连内边距 56px），因此切换当前页时按钮宽度零跳变、后续按钮与右侧簇零位移。
+5. 图标 `max-width` 动画可以保留（上限 `1.5em`）；按钮宽度不再随内容变化（统一由 `--nav-item-min-w` 承担），凸出指示不得反过来改变按钮几何。
+5a. **底边凸出指示**（实机反馈五）：`.navContent > .navItem > :is(.navBlock, .navSecond)::after` 伪元素，绝对定位、不参与布局、非常驻、直角无投影、`pointer-events: none`，仅 `>=1024px` 生效（`<=1023px` 零规则）。**凸出量收敛为单一 token `--nav-tab-drop 2px`**（实机反馈第二轮：active 凸出 3px 比 hover / focus-visible 的 2px 过大，已统一为 2px；`--nav-tab-drop-hover` 删除），颜色 `--nav-tab-color`（`var(--theme-highlight)`）。几何只有 base 一处来源：hover / focus-visible 与 active 同为 `(0,4,1)`，因此两者的上色**必须合成同一条规则**（`background-color: var(--nav-tab-color)`），不得各写一份。锚点为 `.navBlock` 的 padding box 下沿（`y = 36 − 2.5 = 33.5`），`bottom: calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop)))` 与 `height: calc(var(--topbar-border-w) + var(--nav-tab-drop))` 两式联立使顶边恒为 `y 35`、下沿为 `y 36 + 凸出量`；顶栏外缘恒为 `y 36`（36px border-box，底边是否存在都不改变外缘），故两态都与顶栏末像素带重叠 ≥0（无接缝）而栏外凸出同为 2px，过渡时底边与高度均不变（`transition` 只保留 `background-color`，`--nav-tab-ease` 删除）。`--topbar-border-w` 与 `--nav-block-border-b` 分别为顶栏底边与既有 2.5px 底边的单一事实源。
+5b. **非颜色状态区分的承载者**（凸出尺寸统一后的替代通道，WCAG 1.4.1）：active 靠「按钮本体」区分——中度对比底色 `--theme-bg-soft-hover` + 自身 `2.5px` 底边取 `--nav-tab-color`（与凸出段首尾相接、读作一条连续指示）+ 名称展开；hover / focus-visible 靠「主题蓝块 `--theme-highlight` + 白字」；`focus-visible` 另有 2px 内缩焦点环。因此不再为 active 保留额外的非尺寸线索，凸出段在两态下逐像素相同。
 6. `<=1023px` 覆盖为 `width:100%`、`min-width:0`、`justify-content:flex-start`；整行左对齐。
 7. 移动端 active 名称继续与图标组成一组，保留 6px 间距。
 8. 二级菜单现有展开行为、tooltip、hover、focus-visible 和 Pjax active 重绑不变。

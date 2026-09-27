@@ -47,7 +47,7 @@
     flex 1
     font-size 15px
 
-  // 移动端 active 名称继续与图标成组（6px 间距）；桌面固定宽度下由 header.styl 归零居中
+  // 移动端 active 名称继续与图标成组（6px 间距）；桌面统一宽度下由 header.styl 归零居中
   // 选择器带 ol.navContent 前缀：特异性高于 header.styl 的同名规则（该文件编译序在后）
   ol.navContent .navItem.active > .navBlock .navItemLabel
     margin-left 6px
@@ -68,13 +68,15 @@
   .navContent > .navItem
     height 100%
 
-  // 一级导航为自适应宽度（border-box，高度 36px 与顶栏 36px 外高一致）：宽度随内容走，
-  // 图标项与文字项用同一组左右内边距取得一致的横向留白；宽度不再固定，故 active 项收起图标 /
-  // 展开名称时按钮宽度随内容变化，后续按钮与右侧簇随之移动
+  // 一级导航为统一宽度（border-box，高度 36px 与顶栏 36px 外高一致）：min-width 取当前配置下最宽项
+  // 所需宽度（--nav-item-min-w = 左右内边距 24px + 最宽名称 2em + 4px 余量 = 3.75em @16px 字号），
+  // width auto 兜住更长的配置；图标项与文字项用同一组左右内边距取得一致的横向留白
+  // 配合 header.styl 的顺序化过渡（图标先收拢 / 名称后展开，两向皆然），过渡期内容宽度恒 ≤ max(图标, 名称)
+  // ≤ 该 min-width，故切换当前页时按钮宽度零跳变、后续按钮与右侧簇零位移
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
     width auto
-    min-width 0
+    min-width var(--nav-item-min-w)
     height 36px
     display flex
     align-items center
@@ -91,6 +93,7 @@
   // （y = 36 − 2.5 = 33.5，.navBlock 的 position: relative 定位上下文）；向下让出既有
   // 2.5px 底边后，伪元素总高 = 顶栏底边厚度 + 凸出量，故顶边恒为 y 35（顶栏外缘 y 36 的上沿），
   // 与既有蓝条在最后一像素带重叠 → 无接缝；下沿 y 36 + 凸出量。
+  // 凸出量由单一 --nav-tab-drop 决定，base 即最终几何（无第二处几何来源）
   .navContent > .navItem > :is(.navBlock, .navSecond)::after
     content ''
     position absolute
@@ -101,15 +104,11 @@
     height calc(var(--topbar-border-w) + var(--nav-tab-drop))
     background-color transparent
     pointer-events none
-    transition background-color .3s, height var(--nav-tab-ease), bottom var(--nav-tab-ease)
+    transition background-color .3s
 
-  .navContent > .navItem > :is(.navBlock, .navSecond):is(:hover, :focus-visible)::after
-    bottom calc(-1 * (var(--nav-block-border-b) + var(--nav-tab-drop-hover)))
-    height calc(var(--topbar-border-w) + var(--nav-tab-drop-hover))
-    background-color var(--nav-tab-color)
-
-  // active 必须带 .navContent > .navItem 前缀才与上一条同为 (0,4,1)；
-  // 靠源码序（active 在后）让当前页在悬停 / 聚焦时保持 3px 凸出，不被 hover 的 2px 压过。
-  // active 只改色，几何由 base 单点承担（杜绝双源）
+  // active 与 hover / focus-visible 共用同一凸出几何与同一上色（同特异性 (0,4,1)），
+  // 故合成一条规则以杜绝双源；状态区分改由按钮本体承担，不靠凸出尺寸：
+  // active = 中度对比底色 + 2.5px 主题蓝底边 + 名称展开；hover = 主题蓝块 + 白字；焦点另由焦点环承担
+  .navContent > .navItem > :is(.navBlock, .navSecond):is(:hover, :focus-visible)::after,
   .navContent > .navItem.active > :is(.navBlock, .navSecond)::after
     background-color var(--nav-tab-color)
