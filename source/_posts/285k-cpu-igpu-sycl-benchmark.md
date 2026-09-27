@@ -7,8 +7,8 @@ description: 在 Core Ultra 9 285K 上对比 CPU 与 iGPU 的 SYCL 性能：GEMM
 ---
 
 [#]>AI|
-[state] EDIT
-[text] 测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改
+[state]| EDIT
+[text]| 测试代码由AI辅助生成, 文章由AI辅助生成并经过人工修改
 
 ## 测试结果
 

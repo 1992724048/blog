@@ -2,7 +2,9 @@
 
 const HEADER_PATTERN = /^\[#\]>([A-Z][A-Za-z0-9_-]*)\|$/
 const FIELD_NAME_PATTERN = /^[a-z][a-z0-9_-]*$/
-const MULTILINE_OPEN_PATTERN = /^[ \t]*\|[ \t]*\$\[$/
+const FIELD_SEPARATOR_PATTERN = /^[ \t]*\|[ \t]*/
+const MULTILINE_TRIGGER_PATTERN = /^[ \t]*\$/
+const MULTILINE_OPEN_PATTERN = /^[ \t]*\$\[$/
 const BLANK_LINE_PATTERN = /^[ \t]*$/
 const LEADING_HORIZONTAL_PATTERN = /^[ \t]*/
 const INTEGER_PATTERN = /^-?(?:0|[1-9][0-9]*)$/
@@ -13,13 +15,13 @@ const VALID_TERMINATORS = new Set(['', '\n', '\r', '\r\n'])
 const REASONS = Object.freeze({
   INVALID_MARKER_SOURCE: 'marker capture shape or range is invalid',
   INVALID_HEADER: 'header does not match the required form',
-  INVALID_FIELD_LINE: 'line does not contain a bracketed field label',
+  INVALID_FIELD_LINE: 'field line lacks a bracketed label or the pipe separator',
   INVALID_FIELD_NAME: 'field label is not a valid lowercase field name',
   UNKNOWN_FIELD: 'field name is not defined by the schema',
   UNEXPECTED_POSITIONAL_FIELD: 'no positional field slot remains',
   DUPLICATE_FIELD: 'field is already bound',
   MISSING_REQUIRED_FIELD: 'no required schema field is bound',
-  MULTILINE_INVALID_OPEN: 'multiline opener is not exactly |$[',
+  MULTILINE_INVALID_OPEN: 'multiline opener is not exactly $[',
   MULTILINE_NOT_ALLOWED: 'schema does not allow multiline values for this field',
   MULTILINE_UNEXPECTED_END: 'multiline body contains a malformed closing line',
   MULTILINE_UNCLOSED: 'multiline body has no closing line',
@@ -277,14 +279,6 @@ function resolveFieldName(label, context, positionalCount) {
   return { ok: true, fieldName: resolved.fieldName, positional: true }
 }
 
-function firstNonHorizontalCharacter(text) {
-  let index = 0
-  while (index < text.length && (text[index] === ' ' || text[index] === '\t')) {
-    index += 1
-  }
-  return index < text.length ? text[index] : null
-}
-
 function consumeMultilineBody(lines, openingIndex) {
   const contents = []
   let cursor = openingIndex + 1
@@ -302,8 +296,8 @@ function consumeMultilineBody(lines, openingIndex) {
   return failure('MULTILINE_UNCLOSED')
 }
 
-function parseMultilineField(lines, openingIndex, tail, schema) {
-  if (!MULTILINE_OPEN_PATTERN.test(tail)) {
+function parseMultilineField(lines, openingIndex, value, schema) {
+  if (!MULTILINE_OPEN_PATTERN.test(value)) {
     return failure('MULTILINE_INVALID_OPEN')
   }
   if (schema === null || typeof schema !== 'object' || schema.allowMultiline !== true) {
@@ -334,7 +328,6 @@ function parseFieldLine(lines, index, context, fields, positionalCount) {
   }
   const labelEnd = content.indexOf(']')
   const label = content.slice(1, labelEnd)
-  const tail = content.slice(labelEnd + 1)
 
   const resolved = resolveFieldName(label, context, positionalCount)
   if (!resolved.ok) {
@@ -344,9 +337,17 @@ function parseFieldLine(lines, index, context, fields, positionalCount) {
     return failure('DUPLICATE_FIELD')
   }
 
+  // 分隔符取标签 `]` 之后首个非水平空白处的竖线，其后的竖线一律是值内字面量
+  const tail = content.slice(labelEnd + 1)
+  const separator = FIELD_SEPARATOR_PATTERN.exec(tail)
+  if (separator === null) {
+    return failure('INVALID_FIELD_LINE')
+  }
+  const value = tail.slice(separator[0].length)
+
   const schema = context.fields[resolved.fieldName]
-  if (firstNonHorizontalCharacter(tail) === '|') {
-    const multiline = parseMultilineField(lines, index, tail, schema)
+  if (MULTILINE_TRIGGER_PATTERN.test(value)) {
+    const multiline = parseMultilineField(lines, index, value, schema)
     if (!multiline.ok) {
       return multiline
     }
@@ -359,7 +360,7 @@ function parseFieldLine(lines, index, context, fields, positionalCount) {
     }
   }
 
-  const token = tokenizeOrdinaryValue(tail)
+  const token = tokenizeOrdinaryValue(value)
   const coerced = coerce(token, schema)
   if (!coerced.ok) {
     return failure('INVALID_VALUE')

@@ -52,7 +52,7 @@
 
 - “marker”指从精确 header 行开始，到首个非参数行或空行之前结束的整块源文本。
 - “普通值”指不含物理换行的单行参数值。
-- “多行值”指使用精确 opening `|$[` 与独立 closing `]$` 分隔的值。
+- “多行值”指使用精确 opening `$[` 与独立 closing `]$` 分隔的值。
 - “位置字段”指 `[]` 行，按 handler 声明的位置顺序绑定。
 - “命名字段”指 `[name]` 行，按区分大小写的字段名绑定。
 - “捕获层”指 lexer 对原始 Markdown 字段的逐字切片结果，含 `raw`、`physicalLines[].raw|terminator` 与 `sourceRange`；捕获层永远保留原始终止符、Tab 与相对缩进。
@@ -89,17 +89,18 @@ Name               = UpperAlpha, { UpperAlpha / Digit / "_" / "-" } ;
 UpperAlpha         = %x41-5A ;
 Digit              = %x30-39 ;
 FieldLine          = OrdinaryFieldLine / MultilineFieldLine ;
-OrdinaryFieldLine  = FieldLabel, FieldTail, PhysicalLineEnd ;
-MultilineFieldLine = FieldLabel, MultilineOpening, { BodyLine }, MultilineClosing ;
+OrdinaryFieldLine  = FieldLabel, FieldSeparator, FieldValue, PhysicalLineEnd ;
+MultilineFieldLine = FieldLabel, FieldSeparator, MultilineOpening, { BodyLine }, MultilineClosing ;
 FieldLabel         = "[", [ RawFieldName ], "]" ;
 LineCodeUnit       = ?U+0000..U+FFFF 中不等于 U+000A 或 U+000D 的任一 UTF-16 code unit? ;
 RawFieldName       = ?由 LineCodeUnit 组成且不含 U+005D 的序列? ;
-FieldTail          = { LineCodeUnit } ;
+FieldSeparator     = HorizontalSpace, "|", HorizontalSpace ;
+FieldValue         = { LineCodeUnit } ;
 SP                 = %x20 ;
 HTAB               = %x09 ;
 WSP                = 1*( SP / HTAB ) ;
 HorizontalSpace    = *WSP ;
-MultilineOpening   = *HorizontalSpace, "|", *HorizontalSpace, "$[", PhysicalLineEnd ;
+MultilineOpening   = "$[", PhysicalLineEnd ;
 BodyLine           = BodyContent, PhysicalLineEnd ;
 BodyContent        = ?由 LineCodeUnit 组成、且该物理行水平 trim 后不等于 "]$" 的序列? ;
 MultilineClosing   = "]$", PhysicalLineEnd ;
@@ -111,14 +112,14 @@ PhysicalLineEnd    = CRLF / LF / CR / EndOfSource ;
 EndBoundary        = ?首个空行、不满足 FieldLine 的物理行，或当前位置为 EndOfSource 的零宽前瞻? ;
 ```
 
-`LineCodeUnit` 明确排除 U+000A/U+000D，因此 `FieldLabel`、`FieldTail` 和 `BodyContent` 都不能跨物理行；CRLF 只能由 `PhysicalLineEnd` 的 `CRLF` 分支消费。`EndOfSource` 是零宽标记，不消费任何 source code unit。`Marker` 是可结束于 source 内部边界行的前缀 grammar，因此末尾不再重复声明 `EOF`；若最后一行由 `EndOfSource` 结束，零宽断言只用于证明已到 source 末尾。`PhysicalLineEnd` 只有 `CRLF`、`LF` 或 `CR` 分支会消费一个实际物理终止符。物理终止符可以被 lexer 消费以完成行扫描，但是否进入 marker 的 `raw`/`sourceRange` 由下一条统一公式决定。`EndBoundary` 同样只是零宽前瞻，不消费边界行；边界行仍完整留在 suffix 中。
+`LineCodeUnit` 明确排除 U+000A/U+000D，因此 `FieldLabel`、`FieldValue` 和 `BodyContent` 都不能跨物理行；CRLF 只能由 `PhysicalLineEnd` 的 `CRLF` 分支消费。`EndOfSource` 是零宽标记，不消费任何 source code unit。`Marker` 是可结束于 source 内部边界行的前缀 grammar，因此末尾不再重复声明 `EOF`；若最后一行由 `EndOfSource` 结束，零宽断言只用于证明已到 source 末尾。`PhysicalLineEnd` 只有 `CRLF`、`LF` 或 `CR` 分支会消费一个实际物理终止符。物理终止符可以被 lexer 消费以完成行扫描，但是否进入 marker 的 `raw`/`sourceRange` 由下一条统一公式决定。`EndBoundary` 同样只是零宽前瞻，不消费边界行；边界行仍完整留在 suffix 中。
 
-`FieldLine` 是 lexer 的词法边界，不是宽松的 handler schema：非空物理行必须从 `[` 开始，并在同一行存在立即闭合的 `]`；parser 随后才检查位置/命名字段名、值和 handler schema。`FieldTail` 保留该物理行内容中的全部 UTF-16 code unit（含中文），物理终止符由 `PhysicalLineEnd` 单独记录；raw field name 含非 ASCII 时虽可被捕获，但必然在 `INVALID_FIELD_NAME` 阶段失败。实现先检查 `FieldLabel` 右侧首个非水平空白是否为 `|`：精确时只能走 `MultilineFieldLine`；不精确时产生 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。多行状态中的 `BodyLine` 由 `MultilineClosing` 优先截断，精确 `]$` 与近似 closing 均不会作为普通 body 成功解析。
+`FieldLine` 是 lexer 的词法边界，不是宽松的 handler schema：非空物理行必须从 `[` 开始，并在同一行存在立即闭合的 `]`；parser 随后才检查位置/命名字段名、字段分隔符、值和 handler schema。`FieldValue` 保留分隔符之后该物理行内容中的全部 UTF-16 code unit（含中文），物理终止符由 `PhysicalLineEnd` 单独记录；raw field name 含非 ASCII 时虽可被捕获，但必然在 `INVALID_FIELD_NAME` 阶段失败。**`FieldSeparator` 必需**：`]` 之后首个非水平空白 code unit 必须是 `|`，否则整枚 marker 以 `INVALID_FIELD_LINE` 失败；标签与 `|` 之间、`|` 之后均可有任意多个 SP/HTAB。分隔符只取这一个 `|`，其后的 `|` 一律是 `FieldValue` 内的字面量，因此 `[x]|a|b` 的值是 `a|b`；值内的 `\|` 仍按第 4.4 节解码为单个 `|`。零分隔符写法（如只写 `[descr]`）不再是合法字段行。分隔符之后的值若首个非水平空白 code unit 是 `$`，该行即进入 opening 判定，并且值必须精确匹配 `MultilineOpening`：精确时只能走 `MultilineFieldLine`；不精确时产生 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。多行状态中的 `BodyLine` 由 `MultilineClosing` 优先截断，精确 `]$` 与近似 closing 均不会作为普通 body 成功解析。
 
 强制边界：
 
 1. `[#]>` 必须位于物理行第一个 UTF-16 code unit；前导空格、Tab、BOM 或普通文字都不会签发 occurrence。
-2. header 的 `|` 必须是 header 物理行的最后一个内容 code unit；尾随空格、注释和其它内容均不合法。仅 `EndOfSource` 可直接终止 header 行。
+2. header 的 `|` 必须是 header 物理行的最后一个内容 code unit；尾随空格、注释和其它内容均不合法。仅 `EndOfSource` 可直接终止 header 行。header 的 `|` 与 `FieldSeparator` 的 `|` 是两个不同位置的 token，作用域不重叠。
 3. `Name` 区分大小写。生产 registry 只能命中 `AI`、`Project`、`Alerts`、`Editor`、`LinkCard`。
 4. `TEST` 只作为 parser 与 synthetic registry 测试示例，默认 registry 不注册它。
 5. header 后可以没有参数行；已知 handler 会因缺少必填字段失败，未知名称仍按 `UNKNOWN_MARKER` 失败。
@@ -127,25 +128,26 @@ EndBoundary        = ?首个空行、不满足 FieldLine 的物理行，或当�
 8. `sourceRange` 永远不得用于 after 9 的 HTML 切片。after 9 只能使用第 12.3 节由真实 placeholder DOM 得到的 `renderedPlaceholderRange`。
 9. 所有 marker 均为 block-only。行中 marker、标题中的 marker、链接或图片字段中的 marker 均不进入 registry。
 10. 旧 `[#]<NAME>{...}`、旧 `[&]NAME|...|` 及其它前缀均不属于新协议，不得被兼容读取。
+11. 字段行必须带 `FieldSeparator` 竖线。`[name] value`、只写 `[descr]` 等缺分隔符写法都不是合法字段行：lexer 仍按第 4.1 节外形把它们纳入 marker，parser 随后返回 `INVALID_FIELD_LINE`，handler 原子失败并按恢复层输出 escaped 原文，不存在缺分隔符的兼容分支。
 
 ### 4.2 合法总览
 
 ```text
 [#]>AI|
-[state] PASS
-[text] 本文由AI辅助生成
+[state]| PASS
+[text]| 本文由AI辅助生成
 
 [#]>Project|
-[name] C++ 包管理工具
-[link] https://github.com/1992724048/cpp-pack-tool
-[image] /images/projects/cpp_pack.png
+[name]| C++ 包管理工具
+[link]| https://github.com/1992724048/cpp-pack-tool
+[image]| /images/projects/cpp_pack.png
 
 [#]>Alerts|
-[type] IMPORTANT
-[open] true
-[title] 协议提示
-[color] 8B5CF6
-[body] |$[
+[type]| IMPORTANT
+[open]| true
+[title]| 协议提示
+[color]| 8B5CF6
+[body]|$[
 正文支持 **Markdown**。
 
 - 列表
@@ -153,25 +155,25 @@ EndBoundary        = ?首个空行、不满足 FieldLine 的物理行，或当�
 |$
 
 [#]>Editor|
-[language] javascript
-[number] 1
-[theme] vs-dark
-[body] |$[
+[language]| javascript
+[number]| 1
+[theme]| vs-dark
+[body]|$[
 const answer = 42;
 |$
 
 [#]>LinkCard|
-[avatar] 示例站点
-[link] https://example.com/
-[img] /images/link-card.png
-[descr] 纯文本说明
-[style] --card-bg: #123456; --card-border: #abcdef;
+[avatar]| 示例站点
+[link]| https://example.com/
+[img]| /images/link-card.png
+[descr]| 纯文本说明
+[style]| --card-bg: #123456; --card-border: #abcdef;
 
 [#]>TEST|
-[value] parser example
+[value]| parser example
 ```
 
-`TEST` 示例在生产构建中返回 `UNKNOWN_MARKER` 并恢复原文。
+`TEST` 示例在生产构建中返回 `UNKNOWN_MARKER` 并恢复原文。分隔符两侧的 SP/HTAB 宽容：`[name]|值`、`[name]| 值` 与 `[name] |值` 等价；`[descr]|`（空值）与 `[descr]|   `（纯水平空白）都得到空串。
 
 ### 4.3 无效边界示例
 
@@ -182,42 +184,46 @@ const answer = 42;
 [#]>ai|
 [#]>AI| trailing
 [#]>AI|
-[State] PASS
-[unknown] value
-[state] EDIT
-[body] |$[
+[State]| PASS
+[state] PASS
+[unknown]| value
+[state]| EDIT
+[body]|$[
 unclosed
 [#]>Project|
-[name] 示例
-[link] javascript:alert(1)
-[image] /images/example.png
+[name]| 示例
+[link]| javascript:alert(1)
+[image]| /images/example.png
 ```
+
+上列形式的失败码依次为：header 非行首与 `INVALID_HEADER`（小写名称）、`INVALID_HEADER`（尾随内容）、`MISSING_REQUIRED_FIELD`（无字段行）、`INVALID_FIELD_NAME`（`State`）、`INVALID_FIELD_LINE`（`[state] PASS` 缺分隔符）、`UNKNOWN_FIELD`（`unknown`）、`AI_INVALID_STATE`（`EDIT` 非四态）、`MULTILINE_UNCLOSED`、`PROJECT_INVALID_URL`。
 
 ### 4.4 普通值、trim 与注释
 
-普通值的解析顺序固定为“先去尾注释，再分类，再按 schema 消费”，不得先按 handler 猜类型：
+普通值的解析顺序固定为“先剥分隔符，再去尾注释，再分类，最后按 schema 消费”，不得先按 handler 猜类型：
 
-1. 保留字段标签右侧原始字符，并删除值两端 U+0020 与 U+0009。
+1. 按第 4.1 节取走 `FieldSeparator`：`]` 之后首个非水平空白 code unit 必须是 `|`，其后的整段原始字符是值，并删除值两端 U+0020 与 U+0009。缺该竖线时本字段行整体失败（`INVALID_FIELD_LINE`），不进入本节后续步骤。
 2. 在 trim 后的值中查找最左侧的 `//` 候选。仅当其前面至少有一个 U+0020/U+0009 时才作为尾注释；截断该位置后再次 trim。
 3. 值首个非空白位置的 `//`、`[A-Za-z][A-Za-z0-9+.-]*://` 中的 `://` 以及不含前置空白的 `//` 均不得被步骤 2 截断。parser 不判断 scheme 是否被具体 handler 接受。
-4. 在未转义的 `\|` 处解码为单个 `|`；除 `\|` 外反斜杠是普通字符。
+4. 分隔符之后的所有 `|` 都是值内字面量，不具备分隔含义；值内的 `\|` 序列解码为单个 `|`，解码后该位置不再保留反斜杠；除 `\|` 外反斜杠是普通字符。
 5. 对最终规范形只做一次第 4.5 节的词法分类，产出不可变的 `{ kind, value, raw }`。
 6. handler schema 只能消费该 token，不得对原始值重新 trim、再次删注释或把专用 scalar 宽松转换为字符串。
 
 尾注释的正反 fixture：
 
-| 原始普通值 | 词法 token | 结果 |
+| 完整字段行 | 词法 token | 结果 |
 | --- | --- | --- |
-| `  示例名称  ` | `string` | `示例名称` |
-| `A \| B` | `string` | `A \| B` |
-| `PASS // 状态` | `string` | `PASS` |
-| `https://example.com/a//b` | `string` | 原字符串保留 |
-| `//cdn.example.com/a.js` | `string` | 协议相对文本保留，后续由 URL handler 决定 |
-| `custom://value // note` | `string` | `custom://value` |
-| `foo//not-a-comment` | `string` | 原字符串保留 |
-| `42 // 数量` | `integer` | `42` |
-| `0x8B5CF6 // color` | `hex` | 不透明 hex 字符串 |
-| `null // absent` | `null` | `null` |
+| `[title]\|  示例名称  ` | `string` | `示例名称` |
+| `[title]\| A \| B` | `string` | `A \| B` |
+| `[title]\| a\|b` | `string` | `a\|b`（分隔符后的竖线是字面量） |
+| `[state]\| PASS // 状态` | `string` | `PASS` |
+| `[link]\| https://example.com/a//b` | `string` | 原字符串保留 |
+| `[link]\| //cdn.example.com/a.js` | `string` | 协议相对文本保留，后续由 URL handler 决定 |
+| `[link]\| custom://value // note` | `string` | `custom://value` |
+| `[text]\| foo//not-a-comment` | `string` | 原字符串保留 |
+| `[number]\| 42 // 数量` | `integer` | `42` |
+| `[color]\| 0x8B5CF6 // color` | `hex` | 不透明 hex 字符串 |
+| `[title]\| null // absent` | `null` | `null` |
 
 多行值不执行步骤 2 或步骤 4 的 pipe 解码；其换行、缩进、`https://`、协议相对 URL 和普通 `//` 全部原样保留。
 
@@ -231,7 +237,7 @@ parser 只产生以下词法类型；大小写敏感，不提供 JSON、CSS 或 
 | `boolean` | 精确小写 `true` 或 `false` | `true` 或 `false` |
 | `hex` | `0x` 加 6 位或 8 位十六进制数字 | 去掉 `0x`、统一为大写的 hex 字符串 |
 | `integer` | `-?(0\|[1-9][0-9]*)` 且绝对值不超过 `Number.MAX_SAFE_INTEGER` | JavaScript number |
-| `string` | 其它普通值 | trim、删尾注释、解码 `\|` 后的字符串 |
+| `string` | 其它普通值 | 剥分隔符、trim、删尾注释、解码 `\|` 后的字符串 |
 | `multiline-string` | 第 4.6 节形式 | 去共同缩进后的 LF 字符串 |
 
 `0X`、3/4/5/7 位 prefixed hex、带前导 `+`/零的整数、浮点数、指数、NaN 和 Infinity 均归为 `string`，再由 handler 校验。裸 6/8 位 RRGGBB/AARRGGBB 也是 `string`；Alerts `color` 的业务类型只接受该字符串形态，因此 `8B5CF6` 可作为颜色。`0x8B5CF6` 是专用 `hex` token，不能被 color 的 string schema 消费并返回 `INVALID_VALUE`；`#8B5CF6` 是 string，但业务形状非法并返回 `ALERTS_INVALID_COLOR`。
@@ -249,9 +255,9 @@ schema 的 `coerce(token, schema)` 是唯一消费入口：
 
 ### 4.6 多行值、去缩进与结束
 
-多行字段使用第 4.1 节正式 grammar 中的 `MultilineFieldLine = FieldLabel, MultilineOpening, { BodyLine }, MultilineClosing`；字段标签既可为命名形式，也可为 `[]`。第 4.1 节的 `BodyContent` 只表示可成功消费的非 closing 物理行，精确 `]$` 优先由 `MultilineClosing` 消费，近似 closing 则进入失败路径而不会被当作正文。
+多行字段使用第 4.1 节正式 grammar 中的 `MultilineFieldLine = FieldLabel, FieldSeparator, MultilineOpening, { BodyLine }, MultilineClosing`；字段标签既可为命名形式，也可为 `[]`。第 4.1 节的 `BodyContent` 只表示可成功消费的非 closing 物理行，精确 `]$` 优先由 `MultilineClosing` 消费，近似 closing 则进入失败路径而不会被当作正文。
 
-opening 在普通值尾注释处理之前识别。对字段标签右侧原始 `FieldTail` 只跳过前导水平空白以查看首 code unit，不得先删除尾随水平空白；若首个非水平空白 code unit 是 `|`，该行即进入 opening 判定，并且从字段标签 `]` 之后的 suffix 到物理行末必须精确匹配 `MultilineOpening`。因此 `[body]|$[` 与 `[body] |$[` 都合法，标签与 `|` 之间及 `|` 后均可有任意多个 SP/HTAB；但 `$` 与 `[` 必须相邻，`[` 后必须直接遇到物理行终止符或 `EndOfSource`，不得有尾随空白、尾注释或其它内容。为避免同一输入在普通值与多行状态间含糊，首 code unit 为 `|` 的任何不精确形式都返回 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。精确 opening 只允许出现在 schema 声明 `allowMultiline: true` 的字段；其它字段返回 `MULTILINE_NOT_ALLOWED`。
+opening 在普通值尾注释处理之前识别，且以竖线分隔符已取走为前提：分隔符之后的原始 `FieldValue` 只跳过前导水平空白以查看首 code unit，不得先删除尾随水平空白；若首个非水平空白 code unit 是 `$`，该行即进入 opening 判定，并且该值必须从首个非水平空白 code unit 起精确匹配 `MultilineOpening`。因此 `[body]|$[` 与 `[body]| $[` 都合法，分隔符后可跟任意多个 SP/HTAB；但 `$` 与 `[` 必须相邻，`[` 后必须直接遇到物理行终止符或 `EndOfSource`，不得有尾随空白、尾注释或其它内容。为避免同一输入在普通值与多行状态间含糊，首 code unit 为 `$` 的任何不精确形式都返回 `MULTILINE_INVALID_OPEN`，不得降级为普通字符串。旧协议的 `|$[` opening token 作废：`|` 现在只作分隔符，值内不再有以 `|` 开头的多行语义，`[body]| |$[` 只是普通字符串 `|$[`。精确 opening 只允许出现在 schema 声明 `allowMultiline: true` 的字段；其它字段返回 `MULTILINE_NOT_ALLOWED`。
 
 closing 与 `EndOfSource` 规则如下：
 
@@ -276,7 +282,7 @@ closing 与 `EndOfSource` 规则如下：
 opening、closing 与字段级 `sourceRange` 规则：
 
 ```text
-[body] |$[
+[body]|$[
     第一行
       缩进内容
 
@@ -303,12 +309,12 @@ opening、closing 与字段级 `sourceRange` 规则：
 
 | 场景 | 完整 source（JavaScript 转义表示） | 期望 `start` | 期望 `end` | 期望 raw（JavaScript 转义表示） | SUFFIX |
 | --- | --- | ---: | ---: | --- | --- |
-| 多行 closing + LF | `"PREFIX[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$\n"` | `6` | `source.length - 1` | `"[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$"` | `"\n"` |
-| 多行 closing + CRLF | `"PREFIX[#]>Alerts\|\r\n[type] NOTE\r\n[body] \|$[\r\nbody\r\n]$\r\n"` | `6` | `source.length - 2` | `"[#]>Alerts\|\r\n[type] NOTE\r\n[body] \|$[\r\nbody\r\n]$"` | `"\r\n"` |
-| 多行 closing + CR | `"PREFIX[#]>Alerts\|\r[type] NOTE\r[body] \|$[\rbody\r]$\r"` | `6` | `source.length - 1` | `"[#]>Alerts\|\r[type] NOTE\r[body] \|$[\rbody\r]$"` | `"\r"` |
-| 多行 closing 无终止符 | `"PREFIX[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$"` | `6` | `source.length` | `"[#]>Alerts\|\n[type] NOTE\n[body] \|$[\nbody\n]$"` | `""` |
-| 普通字段 + LF | `"PREFIX[#]>TEST\|\n[value] done\n"` | `6` | `source.length - 1` | `"[#]>TEST\|\n[value] done"` | `"\n"` |
-| 普通字段无终止符 | `"PREFIX[#]>TEST\|\n[value] done"` | `6` | `source.length` | `"[#]>TEST\|\n[value] done"` | `""` |
+| 多行 closing + LF | `"PREFIX[#]>Alerts\|\n[type]| NOTE\n[body]|$[\nbody\n]$\n"` | `6` | `source.length - 1` | `"[#]>Alerts\|\n[type]| NOTE\n[body]|$[\nbody\n]$"` | `"\n"` |
+| 多行 closing + CRLF | `"PREFIX[#]>Alerts\|\r\n[type]| NOTE\r\n[body]|$[\r\nbody\r\n]$\r\n"` | `6` | `source.length - 2` | `"[#]>Alerts\|\r\n[type]| NOTE\r\n[body]|$[\r\nbody\r\n]$"` | `"\r\n"` |
+| 多行 closing + CR | `"PREFIX[#]>Alerts\|\r[type]| NOTE\r[body]|$[\rbody\r]$\r"` | `6` | `source.length - 1` | `"[#]>Alerts\|\r[type]| NOTE\r[body]|$[\rbody\r]$"` | `"\r"` |
+| 多行 closing 无终止符 | `"PREFIX[#]>Alerts\|\n[type]| NOTE\n[body]|$[\nbody\n]$"` | `6` | `source.length` | `"[#]>Alerts\|\n[type]| NOTE\n[body]|$[\nbody\n]$"` | `""` |
+| 普通字段 + LF | `"PREFIX[#]>TEST\|\n[value]| done\n"` | `6` | `source.length - 1` | `"[#]>TEST\|\n[value]| done"` | `"\n"` |
+| 普通字段无终止符 | `"PREFIX[#]>TEST\|\n[value]| done"` | `6` | `source.length` | `"[#]>TEST\|\n[value]| done"` | `""` |
 
 多行三行与普通字段两行都包含 header/opening/body 等非最终物理行的原始终止符；唯一允许排除的是实际最后物理行自己的终止符。`EndBoundary`/`EndOfSource` 不把边界行或额外 code unit 纳入范围。边界 fixture 在最后物理行后追加 `// boundary` 时，`source.slice(end)` 必须先保留该行自己的物理终止符，再完整保留 `// boundary`；不得把 boundary 纳入 `raw`。多行未闭合 fixture 还必须分别覆盖“body 行有 LF/CRLF/CR 终止符”和“body 行由 `EndOfSource` 结束”，并断言前者排除最后终止符、后者 `end === source.length`。
 
@@ -316,20 +322,23 @@ opening、closing 与字段级 `sourceRange` 规则：
 
 | 输入尾部 | 错误码 | 说明 |
 | --- | --- | --- |
-| `[body]\|$[\ntext\n]$` | 无 | 命名 body 的无空白 opening 合法 |
-| `[body] \|$[\ntext\n]$` | 无 | 标签与 U+007C 之间允许水平空白 |
-| `[body]\t\|\t$[\ntext\n]$` | 无 | U+007C 前后均可使用 Tab，且 `$[` 必须相邻 |
-| `[] \|$[\ntext\n]$` | 无 | 按 handler 位置映射到 Alerts 第五位或 Editor 第四位 body |
-| `[body] \|$[ // note` | `MULTILINE_INVALID_OPEN` | opening 尾注释不合法 |
-| `[body] \|$[  ` | `MULTILINE_INVALID_OPEN` | `$[` 后不得有尾随水平空白 |
-| `[body] \| $ [` | `MULTILINE_INVALID_OPEN` | `$` 与 `[` 之间不得有空白 |
-| `[body] \|$` | `MULTILINE_INVALID_OPEN` | 缺少精确 `$[` |
-| `[body] \| value` | `MULTILINE_INVALID_OPEN` | 首 code unit 为 U+007C 时不得降级为普通字符串 |
-| `[title] \|$[\ntext\n]$` | `MULTILINE_NOT_ALLOWED` | title 不允许多行 |
-| `[body] \|$[\n]$` | 无 parser 错误；随后 `ALERTS_EMPTY_BODY` 或 `EDITOR_EMPTY_BODY` | 精确 `]$` 合法关闭空 body，handler 再执行非空校验 |
-| `[body] \|$[\ntext\n ]$` | `MULTILINE_UNEXPECTED_END` | 意外缩进 closing 不得被 trim 后接受 |
-| `[body] \|$[\ntext\n]$ // note` | `MULTILINE_UNEXPECTED_END` | 意外尾内容 closing 立即失败 |
-| `[body] \|$[\ntext` + EOF | `MULTILINE_UNCLOSED` | 精确 closing 缺失，范围到 EOF |
+| `[body]\|$[\ntext\n]$` | 无 | 命名 body 的无空白分隔符与 opening 合法 |
+| `[body] \| \$[\ntext\n]$` | 无 | 标签与分隔符、opening 之间均允许水平空白 |
+| `[body]\t\|\t\$[\ntext\n]$` | 无 | 分隔符前后均可使用 Tab，且 `$[` 必须相邻 |
+| `[]\|\$[\ntext\n]$` | 无 | 按 handler 位置映射到 Alerts 第五位或 Editor 第四位 body |
+| `[body]\|\$[ // note` | `MULTILINE_INVALID_OPEN` | opening 尾注释不合法 |
+| `[body]\|\$[  ` | `MULTILINE_INVALID_OPEN` | `$[` 后不得有尾随水平空白 |
+| `[body]\| \$ [` | `MULTILINE_INVALID_OPEN` | `$` 与 `[` 之间不得有空白 |
+| `[body]\|\$` | `MULTILINE_INVALID_OPEN` | 缺少精确 `$[` |
+| `[body]\|\$ value` | `MULTILINE_INVALID_OPEN` | 首 code unit 为 U+0024 时不得降级为普通字符串 |
+| `[body]\|\|\$[` | 无 | 旧 opening token 作废：值是字面量 `\|$[` |
+| `[body] \$[` | `INVALID_FIELD_LINE` | 缺竖线分隔符 |
+| `[body]` | `INVALID_FIELD_LINE` | 零分隔符写法作废 |
+| `[title]\|\$[\ntext\n]$` | `MULTILINE_NOT_ALLOWED` | title 不允许多行 |
+| `[body]\|\$[\n]$\n` | 无 parser 错误；随后 `ALERTS_EMPTY_BODY` 或 `EDITOR_EMPTY_BODY` | 精确 `]$` 合法关闭空 body，handler 再执行非空校验 |
+| `[body]\|\$[\ntext\n ]$\n` | `MULTILINE_UNEXPECTED_END` | 意外缩进 closing 不得被 trim 后接受 |
+| `[body]\|\$[\ntext\n]$ // note\n` | `MULTILINE_UNEXPECTED_END` | 意外尾内容 closing 立即失败 |
+| `[body]\|\$[\ntext` + EOF | `MULTILINE_UNCLOSED` | 精确 closing 缺失，范围到 EOF |
 | 普通正文 + `\n]$` | 无 | opening 外不触发 closing |
 
 ### 4.7 字段绑定
@@ -466,7 +475,7 @@ handler 的受控接口固定为：
 | `Editor` | `language`, `number`, `theme`, `body` | `body` | `language="plaintext"`；`number=1`；`theme="vs-dark"`；四项均不接受 `null` |
 | `LinkCard` | `avatar`, `link`, `img`, `descr`, `style` | `avatar`, `link` | `img/style` 缺省或显式 `null` 为 `null`；`descr` 的 schema 为 `string`、`required:false`、`nullable:false`、`defaultValue:null`，缺省所得有效值为 `null`，显式 `null` 非法、显式空串合法；其余不接受 `null` |
 
-所有 handler 同时接受对应的位置名和命名字段。例如 AI 的第一位置既可写 `[] PASS`，也可写 `[state] PASS`。
+所有 handler 同时接受对应的位置名和命名字段。例如 AI 的第一位置既可写 `[]| PASS`，也可写 `[state]| PASS`。
 
 ## 7. AI handler
 
@@ -702,7 +711,7 @@ Alerts marker 复用旧可展开提示样式，不复用 GitHub Alert 类。IMPO
 
 这里的 `avatar` 明确表示卡片显示名称，不表示头像图片 URL。`img` 是卡片背景图；本协议不增加第二个头像 URL 字段。`descr` 的 schema kind 始终是 `string`，不是可消费 `string | null` 的 nullable 字段；`string | null` 只描述应用 `defaultValue:null` 后的有效值。
 
-LinkCard 使用第 8.1 节相同 URL 策略。协议相对 URL 虽可被 parser 保留，但 LinkCard handler 必须拒绝。`descr` 的缺省与显式空串是两个不同状态：缺省按 schema 默认得到有效值 `null` 并省略节点；`[descr]` 或 `[descr]   ` 经普通值 trim 后得到 `""`，必须输出空 `.link-descr` 节点。显式 `[descr] null` 在 schema 阶段返回 `INVALID_VALUE`，不得归一为缺省。
+LinkCard 使用第 8.1 节相同 URL 策略。协议相对 URL 虽可被 parser 保留，但 LinkCard handler 必须拒绝。`descr` 的缺省与显式空串是两个不同状态：缺省按 schema 默认得到有效值 `null` 并省略节点；`[descr]|` 或 `[descr]|   ` 经普通值 trim 后得到 `""`，必须输出空 `.link-descr` 节点（零分隔符写法 `[descr]` 已不合法）。显式 `[descr]| null` 在 schema 阶段返回 `INVALID_VALUE`，不得归一为缺省。
 
 ### 11.2 输出
 
@@ -1317,14 +1326,14 @@ content/excerpt/description 契约：
 | --- | --- |
 | `INVALID_MARKER_SOURCE` | lexer 输入不是字符串或 range 不合法 |
 | `INVALID_HEADER` | 直接 parser 输入不满足精确 header |
-| `INVALID_FIELD_LINE` | 参数行缺少字段分隔或值无法定位 |
+| `INVALID_FIELD_LINE` | 参数行不以 `[` 开头、没有同行闭合的 `]`，或 `]` 之后首个非水平空白 code unit 不是竖线分隔符 |
 | `INVALID_FIELD_NAME` | 命名字段不符合小写规范 |
 | `DUPLICATE_FIELD` | 同字段重复绑定 |
 | `UNKNOWN_FIELD` | handler 不接受该命名字段 |
 | `UNEXPECTED_POSITIONAL_FIELD` | `[]` 数量超过位置字段数量 |
 | `MISSING_REQUIRED_FIELD` | 缺少 handler 必填字段 |
 | `INVALID_VALUE` | 词法 token 不能被 handler schema 消费，或非 nullable 字段收到 `null` |
-| `MULTILINE_INVALID_OPEN` | 字段尾首个非水平空白 code unit 为 U+007C，但整行不精确匹配允许 SP/HTAB 的 `\|$[` opening |
+| `MULTILINE_INVALID_OPEN` | 竖线分隔符之后值的首个非水平空白 code unit 为 U+0024，但该值不精确匹配允许 SP/HTAB 的 `$[` opening |
 | `MULTILINE_NOT_ALLOWED` | schema 未声明 `allowMultiline` 的字段收到精确 opening |
 | `MULTILINE_UNCLOSED` | 多行 opening 后到 `EndOfSource` 都没有独立 `]$` |
 | `MULTILINE_UNEXPECTED_END` | opening 状态下出现 trim 后近似 `]$`、但不是独立 `]$` 的行 |
@@ -1705,16 +1714,18 @@ timer callback / clearStatus()
 
 | 用例 | 必须断言的输入/输出 |
 | --- | --- |
-| EBNF/header | 仅物理行首 `[#]>Name\|` 命中；`FieldLine` 必须按正式 grammar 选择普通值或 `MultilineOpening`→`{BodyLine}`→`MultilineClosing`；`UpperAlpha`/`Digit`/`CRLF` 均已定义，`LineCodeUnit` 只含非 CR/LF code unit，`EndOfSource` 只作为零宽行尾且 `Marker` 不重复声明 EOF；名称与尾 pipe 精确；断言 `EndBoundary` 不消费边界行 |
+| EBNF/header | 仅物理行首 `[#]>Name\|` 命中；`FieldLine` 必须按正式 grammar 选择 `FieldSeparator` 后的普通值或 `MultilineOpening`→`{BodyLine}`→`MultilineClosing`；`UpperAlpha`/`Digit`/`CRLF` 均已定义，`LineCodeUnit` 只含非 CR/LF code unit，`EndOfSource` 只作为零宽行尾且 `Marker` 不重复声明 EOF；名称与尾 pipe 精确；断言 `EndBoundary` 不消费边界行 |
 | 名称/block-only | 五类生产名称命中，`TEST` 只进 synthetic registry；行中/标题/link/image 内 header 零 dispatch |
 | 边界 | 空行、`// comment`、普通行、其它 header、`EndOfSource` 终止 marker；边界行不吞入；普通字段与多行 closing 的有/无终止符 fixture 均断言“有终止符则排除、无终止符则 `end===source.length`” |
+| 字段分隔符 | `[state]\|PASS`、`[state]\| PASS`、`[state]  \|  PASS`、`[state]\t\|\tPASS` 等价且值相同；`[name] value`、只写 `[descr]`、缺 `]` 均 `INVALID_FIELD_LINE`；label 诊断优先（`[State] PASS` 仍 `INVALID_FIELD_NAME`）；handler 侧断言整枚原子失败并按恢复层输出 escaped 原文 |
+| 值内竖线 | `[x]\|a\|b` 与 `[x]\|a\\\|b` 都得到 `a\|b`；分隔符之后的 `\|` 不再具备分隔含义，旧 `\|$[` opening token 只能作为字面字符串出现 |
 | 字段 | `[]`、命名、混用、顺序、未知、重复、越界、缺必填与 field-level `sourceRange` 全部覆盖 |
 | 注释顺序 | `PASS // 状态` 先删注释再分类；`https://a//b`、`//cdn/a`、`foo//x`、未知 `custom://` 保留；`42 // x` 分类为 integer |
 | pipe/trim | 只 trim 普通值两端水平空白；值内的「反斜杠 + U+007C」序列解码为单个 U+007C（竖线），解码后该位置不再保留反斜杠；除该序列外的反斜杠是普通字符，原样保留，与第 4.4 节第 4 条一致。本行刻意不写竖线字面量：GFM 表格内用反斜杠转义竖线会把它渲染成竖线，因而无法在同一行里区分「解码前」与「解码后」 |
 | 词法类型 | `null`、boolean、`0x` 6/8 hex、安全整数、string、multiline-string；`0X`、前导零整数、浮点和裸 `0x` 归 string |
-| schema 消费 | `[text] 42/0x2A/true/null` 对单行 string 字段均失败；多行 `[body] \|$[\n42\n]$` 可得到字面文本；`color=8B5CF6` 合法而 `0x8B5CF6/#8B5CF6` 失败；LinkCard `[descr]`/`[descr]   ` 合法为空串，`[descr] null` 为 `INVALID_VALUE` |
+| schema 消费 | `[text]\| 42/0x2A/true/null` 对单行 string 字段均失败；多行 `[body]\|\$[\n42\n]$` 可得到字面文本；`color=8B5CF6` 合法而 `0x8B5CF6/#8B5CF6` 失败；LinkCard `[descr]\|`/`[descr]\|   ` 合法为空串，`[descr]\| null` 为 `INVALID_VALUE` |
 | Alerts open | 缺省为 true；显式 true/false 合法；显式 null 稳定 `INVALID_VALUE`，不得套用默认 |
-| 多行 opening | `[body]\|$[` 与 `[body] \|$[` 合法，pipe 后可跟 SP/HTAB 且 `$[` 必须相邻；`$[` 后尾随空白/注释及其它首个非水平空白 code unit 为 U+007C 的形式均为 `MULTILINE_INVALID_OPEN`；title 为 `MULTILINE_NOT_ALLOWED` |
+| 多行 opening | `[body]\|\$[` 与 `[body]\| \$[` 合法，分隔符后可跟 SP/HTAB 且 `$[` 必须相邻；`$[` 后尾随空白/注释及其它首个非水平空白 code unit 为 U+0024 的形式均为 `MULTILINE_INVALID_OPEN`；title 为 `MULTILINE_NOT_ALLOWED` |
 | 多行 closing/EndOfSource | 独立 `]$` 关闭；立即关闭产生空 body 并由 handler 报错；缩进/尾内容触发 `MULTILINE_UNEXPECTED_END` 且在该行停止；opening 外的 `]$` 为正文；`EndOfSource` 前无 closing 为 `MULTILINE_UNCLOSED`，有/无最后终止符均遵守统一 range 公式 |
 | 多行物理行 | 捕获层断言 header/opening/body 的内部终止符逐字保留在 raw，最后物理行有终止符时排除、无终止符时到 `source.length`；恢复层字段值把 CRLF/CR 规范为 LF，最后一个内容换行不进入值但更早空行保留 |
 | 捕获层/恢复层 | 同一 marker 分别以 LF/CRLF/CR 三种物理终止符构造：捕获层断言 `raw`、`physicalLines[].terminator` 与 `sourceRange` 逐字等于原文切片；恢复层断言 `markerFailureHtml`/`markerFailureProjection` 精确基于 `normalizeLineEndings(raw)`，`fieldFallbackHtml`/`fieldFallbackProjection` 精确基于 `normalizeLineEndings(originalField)`，显式 excerpt 与所有 handler 字段/投影也先 LF 化，最终 `data.content`/`data.excerpt` 与所有投影均不含 U+000D；Tab 与相对缩进两层都不变。门禁必须把两层分开命名和断言，禁止拿含 CR/CRLF 的捕获 `raw` 直接比较恢复层/projection，禁止「恢复层保留 CRLF/CR」断言 |
@@ -1754,35 +1765,35 @@ timer callback / clearStatus()
 
 ```text
 [#]>Alerts|
-[type] NOTE
-[title] 协议提示
-[body] |$[
+[type]| NOTE
+[title]| 协议提示
+[body]|$[
 正文包含 **Markdown** 与 [链接](https://example.com/)。
 [#]>AI|
 ]$
 
 [#]>Editor|
-[language] javascript
-[number] 1
-[body] |$[
+[language]| javascript
+[number]| 1
+[body]|$[
 const marker = "[#]>Project|";
 ]$
 
 [#]>LinkCard|
-[avatar] 示例站点
-[link] https://example.com/
-[img] /images/link-card.png
-[descr] 纯文本说明
-[style] --card-title: #fff; --card-bg: #123456;
+[avatar]| 示例站点
+[link]| https://example.com/
+[img]| /images/link-card.png
+[descr]| 纯文本说明
+[style]| --card-title: #fff; --card-bg: #123456;
 
 [#]>LinkCard|
-[avatar] 简单站点
-[link] /projects/
+[avatar]| 简单站点
+[link]| /projects/
 
 [#]>LinkCard|
-[avatar] 空说明站点
-[link] /empty-descr/
-[descr]
+[avatar]| 空说明站点
+[link]| /empty-descr/
+[descr]|
 ```
 
 该 fixture 的硬断言：
@@ -1792,7 +1803,7 @@ const marker = "[#]>Project|";
 3. Editor 恰有 `pre.monaco-editor-source[hidden][aria-hidden="true"]`，其 `textContent` 与 body 逐字相同；body 中 `[#]>Project|` 只是 Monaco 文本。
 4. 第一张 LinkCard 有 scoped style、`.link-main`、background、title、descr；第二张无 img/descr，精确使用 `.link-main.link-simple` 且省略 `.link-descr`；第三张的显式空 descr 输出精确空节点 `<div class="link-descr"></div>`，使用 `.link-main` 而非 `.link-simple`。三张 projection 分别为 `示例站点 纯文本说明`、`简单站点`、`空说明站点`，第三张无尾随空格。
 5. Alerts Markdown link 只允许 `https:`；把 fixture 改为 `javascript:` 的负例必须得到 escaped marker source 和 `HANDLER_SERVICE_ERROR`，最终无危险 href。
-6. LinkCard 负例分别证明 `[descr] null` 返回 `INVALID_VALUE`，而 `[descr]`/`[descr]   ` 走空串成功路径；不得把二者都归一为缺省。
+6. LinkCard 负例分别证明 `[descr]| null` 返回 `INVALID_VALUE`，而 `[descr]|`/`[descr]|   ` 走空串成功路径；不得把二者都归一为缺省。零分隔符写法 `[descr]` 本身已不合法，必须得到 `INVALID_FIELD_LINE` 与 escaped 原文。
 
 #### fixture ownership receipt 协议
 
@@ -2050,7 +2061,7 @@ probe 与门禁/artifact 的映射固定如下；命令块已逐项实际调用�
 | Probe | 必验契约 | public/artifact 对应 |
 | --- | --- | --- |
 | `line-marker-lexer.test.js` | sourceRange 三种终止符、opening 边界、保护区 | 无；source/unit |
-| `line-marker-parser.test.js` | `\|$[` 正反 fixture、closing/EndOfSource、字段/schema、descr null/空串 | 无；source/unit |
+| `line-marker-parser.test.js` | 竖线分隔符必需/宽容、`$[` opening 正反 fixture、旧 opening 字面量化、值内竖线、closing/EndOfSource、字段/schema、descr null/空串 | 无；source/unit |
 | `line-marker-carrier.test.js` | bridge、descriptor、原子回滚 | 无；source/unit |
 | `line-marker-marked.test.js` | block token、placeholder、metadata、symbol 清理 | 无；source/unit |
 | `line-marker-registry.test.js` | 五 handler 注册与受控接口 | 无；source/unit |

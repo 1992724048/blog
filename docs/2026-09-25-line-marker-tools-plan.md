@@ -1090,10 +1090,10 @@ function test_normalize_line_endings() {
 }
 
 function test_failure_serialization() {
-  const raw = '[#]>Alerts|\r\n[body] |$[\r\nx\r\n]$'
+  const raw = '[#]>Alerts|\r\n[body]|$[\r\nx\r\n]$'
   assert.equal(markerFailureHtml(raw),
-    '<pre class="arknights-marker-source">[#]&gt;Alerts|\n[body] |$[\nx\n]$</pre>')
-  assert.equal(markerFailureProjection(raw), '[#]>Alerts|\n[body] |$[\nx\n]$')
+    '<pre class="arknights-marker-source">[#]&gt;Alerts|\n[body]|$[\nx\n]$</pre>')
+  assert.equal(markerFailureProjection(raw), '[#]>Alerts|\n[body]|$[\nx\n]$')
   assert.equal(escapeMarkerHtml('&<>"'), '&amp;&lt;&gt;"')
   assert.equal(fieldFallbackHtml('a\r\nb'), '<pre class="arknights-marker-source">a\nb</pre>')
   assert.equal(fieldFallbackProjection('a\r\nb'), 'a\nb')
@@ -1125,12 +1125,12 @@ const PREFIX = 'PREFIX'
 assert.equal(PREFIX.length, 6)
 
 const RANGE_CASES = [
-  { name: 'multiline closing + LF', source: `${PREFIX}[#]>Alerts|\n[type] NOTE\n[body] |$[\nbody\n]$\n`, markerName: 'Alerts', raw: '[#]>Alerts|\n[type] NOTE\n[body] |$[\nbody\n]$', tail: 1, suffix: '\n' },
-  { name: 'multiline closing + CRLF', source: `${PREFIX}[#]>Alerts|\r\n[type] NOTE\r\n[body] |$[\r\nbody\r\n]$\r\n`, markerName: 'Alerts', raw: '[#]>Alerts|\r\n[type] NOTE\r\n[body] |$[\r\nbody\r\n]$', tail: 2, suffix: '\r\n' },
-  { name: 'multiline closing + CR', source: `${PREFIX}[#]>Alerts|\r[type] NOTE\r[body] |$[\rbody\r]$\r`, markerName: 'Alerts', raw: '[#]>Alerts|\r[type] NOTE\r[body] |$[\rbody\r]$', tail: 1, suffix: '\r' },
-  { name: 'multiline closing no terminator', source: `${PREFIX}[#]>Alerts|\n[type] NOTE\n[body] |$[\nbody\n]$`, markerName: 'Alerts', raw: '[#]>Alerts|\n[type] NOTE\n[body] |$[\nbody\n]$', tail: 0, suffix: '' },
-  { name: 'ordinary field + LF', source: `${PREFIX}[#]>TEST|\n[value] done\n`, markerName: 'TEST', raw: '[#]>TEST|\n[value] done', tail: 1, suffix: '\n' },
-  { name: 'ordinary field no terminator', source: `${PREFIX}[#]>TEST|\n[value] done`, markerName: 'TEST', raw: '[#]>TEST|\n[value] done', tail: 0, suffix: '' }
+  { name: 'multiline closing + LF', source: `${PREFIX}[#]>Alerts|\n[type]| NOTE\n[body]|$[\nbody\n]$\n`, markerName: 'Alerts', raw: '[#]>Alerts|\n[type]| NOTE\n[body]|$[\nbody\n]$', tail: 1, suffix: '\n' },
+  { name: 'multiline closing + CRLF', source: `${PREFIX}[#]>Alerts|\r\n[type]| NOTE\r\n[body]|$[\r\nbody\r\n]$\r\n`, markerName: 'Alerts', raw: '[#]>Alerts|\r\n[type]| NOTE\r\n[body]|$[\r\nbody\r\n]$', tail: 2, suffix: '\r\n' },
+  { name: 'multiline closing + CR', source: `${PREFIX}[#]>Alerts|\r[type]| NOTE\r[body]|$[\rbody\r]$\r`, markerName: 'Alerts', raw: '[#]>Alerts|\r[type]| NOTE\r[body]|$[\rbody\r]$', tail: 1, suffix: '\r' },
+  { name: 'multiline closing no terminator', source: `${PREFIX}[#]>Alerts|\n[type]| NOTE\n[body]|$[\nbody\n]$`, markerName: 'Alerts', raw: '[#]>Alerts|\n[type]| NOTE\n[body]|$[\nbody\n]$', tail: 0, suffix: '' },
+  { name: 'ordinary field + LF', source: `${PREFIX}[#]>TEST|\n[value]| done\n`, markerName: 'TEST', raw: '[#]>TEST|\n[value]| done', tail: 1, suffix: '\n' },
+  { name: 'ordinary field no terminator', source: `${PREFIX}[#]>TEST|\n[value]| done`, markerName: 'TEST', raw: '[#]>TEST|\n[value]| done', tail: 0, suffix: '' }
 ]
 
 function test_source_range_formula() {
@@ -1156,7 +1156,7 @@ function test_source_range_formula() {
 }
 
 function test_end_boundary_is_not_consumed() {
-  const source = `${PREFIX}[#]>TEST|\n[value] done\n// boundary`
+  const source = `${PREFIX}[#]>TEST|\n[value]| done\n// boundary`
   const marker = scanMarkers(source).markers[0]
   assert.equal(marker.sourceRange.end, 28)
   assert.equal(source.slice(marker.sourceRange.end), '\n// boundary')
@@ -1164,15 +1164,15 @@ function test_end_boundary_is_not_consumed() {
 }
 
 function test_block_only_and_protection() {
-  assert.equal(scanMarkers('text [#]>AI|\n[state] PASS\n').markers.length, 0, 'inline header is not a marker')
-  assert.equal(scanMarkers('# title [#]>AI|\n[state] PASS\n').markers.length, 0, 'heading header is not a marker')
-  assert.equal(scanMarkers('```\n[#]>AI|\n[state] PASS\n```\n').markers.length, 0, 'fenced code is protected')
-  assert.equal(scanMarkers('    [#]>AI|\n    [state] PASS\n').markers.length, 0, 'indented code is protected')
+  assert.equal(scanMarkers('text [#]>AI|\n[state]| PASS\n').markers.length, 0, 'inline header is not a marker')
+  assert.equal(scanMarkers('# title [#]>AI|\n[state]| PASS\n').markers.length, 0, 'heading header is not a marker')
+  assert.equal(scanMarkers('```\n[#]>AI|\n[state]| PASS\n```\n').markers.length, 0, 'fenced code is protected')
+  assert.equal(scanMarkers('    [#]>AI|\n    [state]| PASS\n').markers.length, 0, 'indented code is protected')
   assert.equal(scanMarkers('`[#]>AI|`\n').markers.length, 0, 'inline code is protected')
   assert.equal(scanMarkers('<!-- [#]>AI| -->\n').markers.length, 0, 'html comment is protected')
   assert.equal(scanMarkers('<div title="[#]>AI|">x</div>\n').markers.length, 0, 'html attribute is protected')
   assert.equal(scanMarkers('<script>\n[#]>AI|\n</script>\n').markers.length, 0, 'raw text is protected')
-  assert.equal(scanMarkers('[#]>TEST|\n[body] |$[\n[#]>AI|\n]$\n').markers.length, 1, 'multiline body does not recurse')
+  assert.equal(scanMarkers('[#]>TEST|\n[body]|$[\n[#]>AI|\n]$\n').markers.length, 1, 'multiline body does not recurse')
   assert.equal(scanMarkers('[#]<AI>{PASS, "x"}\n').markers.length, 0, 'legacy syntax is not read')
 }
 
@@ -1186,7 +1186,7 @@ console.log('ok line-marker-lexer')
 
 **55 码闭合不受影响**：上列代码块覆盖的是本探针在 §13.2 覆盖表里的**首段**（range 公式 / 边界不吞 / block-only 与保护区）。**余下 fixture 随 A2-4 的实现逐段追加到同一文件**——本探针承接的唯一错误码 `INVALID_MARKER_SOURCE`（`scanMarkers(null)` / `scanMarkers({})`）的 fixture 在追加段内，`INVALID_HEADER` / `INVALID_FIELD_LINE` 两条 parser 码则由 `.temp/line-marker-parser.test.js`（A2-5）承载。实施时不得以「首段已 GREEN」为由跳过这三个 fixture，否则 §13.2 的 55 码闭合一即缺三。
 
-- [ ] **A2-4 重写 `lexer.js`**：`scanMarkers(source)` 先做保护区扫描（≤3 空格缩进的 backtick/tilde fenced code、4 空格或 1 Tab 的 indented code、跨行 backtick inline span、HTML comment/declaration/processing instruction、完整 start/end tag 与 attribute、`script`/`style`/`pre`/`textarea`/`xmp`/`iframe`/`noembed`/`noframes` raw-text、link/image destination 与 continuation），再在安全位置按物理行匹配 `[#]>Name|`，消费 `FieldLine`（普通值或 `|[$` opening → `{BodyLine}` → `]$` closing），遇 `EndBoundary` 停止且不消费边界行，按 `finalLine.terminator === "" ? source.length : finalLine.contentEnd` 计算 `sourceRange`。**多行未闭合时 lexer 仍签发整枚 block marker**：`[body] |$[` 已精确命中 opening 后，lexer 继续把直到 `EndOfSource` 的物理行全部纳入 `physicalLines`，`sourceRange` 按同一统一公式（最后物理行有终止符则排除、无终止符则 `end === source.length`）计算，把「未闭合」判定交给 parser 返回 `MULTILINE_UNCLOSED`；lexer 不吞掉 marker、也不把未闭合内容当普通正文，失败回退的 `<pre>` 因此能显示完整原文。多行 opening 的**语法**判定（`MULTILINE_INVALID_OPEN`）由 parser 负责，lexer 只区分普通值首 code unit 是否为 U+007C。删除 `createAutolinkBoundaryProjection` / `collectAutolinkStarts` / `findMarkerMode`（inline 与 masked projection 路径整体删除）。运行 → GREEN。
+- [ ] **A2-4 重写 `lexer.js`**：`scanMarkers(source)` 先做保护区扫描（≤3 空格缩进的 backtick/tilde fenced code、4 空格或 1 Tab 的 indented code、跨行 backtick inline span、HTML comment/declaration/processing instruction、完整 start/end tag 与 attribute、`script`/`style`/`pre`/`textarea`/`xmp`/`iframe`/`noembed`/`noframes` raw-text、link/image destination 与 continuation），再在安全位置按物理行匹配 `[#]>Name|`，消费 `FieldLine`（竖线分隔符后取普通值或 `$[` opening → `{BodyLine}` → `]$` closing），遇 `EndBoundary` 停止且不消费边界行，按 `finalLine.terminator === "" ? source.length : finalLine.contentEnd` 计算 `sourceRange`。**多行未闭合时 lexer 仍签发整枚 block marker**：`[body]|$[` 已精确命中 opening 后，lexer 继续把直到 `EndOfSource` 的物理行全部纳入 `physicalLines`，`sourceRange` 按同一统一公式（最后物理行有终止符则排除、无终止符则 `end === source.length`）计算，把「未闭合」判定交给 parser 返回 `MULTILINE_UNCLOSED`；lexer 不吞掉 marker、也不把未闭合内容当普通正文，失败回退的 `<pre>` 因此能显示完整原文。多行 opening 的**语法**判定（`MULTILINE_INVALID_OPEN`）由 parser 负责，lexer 只区分竖线分隔符之后的值是否精确为 `$[`。删除 `createAutolinkBoundaryProjection` / `collectAutolinkStarts` / `findMarkerMode`（inline 与 masked projection 路径整体删除）。运行 → GREEN。
 
 - [ ] **A2-5 写 `parser.js` 的 RED 探针段**（追加到 `.temp/line-marker-parser.test.js`）：
 
@@ -1225,21 +1225,23 @@ const TEST_SCHEMA_CONTEXT = Object.freeze({
 })
 
 function test_field_binding() {
-  const positional = parse('[#]>TEST|\n[] PASS\n[] hello\n')
+  const positional = parse('[#]>TEST|\n[]| PASS\n[]| hello\n')
   assert.equal(positional.ok, true)
   assert.equal(positional.marker.positionalCount, 2)
   assert.equal(positional.marker.fields.state.token.value, 'PASS')
 
-  const named = parse('[#]>TEST|\n[state] PASS\n[text] hello\n')
+  const named = parse('[#]>TEST|\n[state]| PASS\n[text]| hello\n')
   assert.equal(named.ok, true)
   assert.equal(named.marker.fields.state.token.value, 'PASS')
 
   assert.equal(parse('[#]>TEST|\n[State] PASS\n').code, 'INVALID_FIELD_NAME')
   assert.equal(parse('[#]>TEST|\n[unknown] x\n').code, 'UNKNOWN_FIELD')
-  assert.equal(parse('[#]>TEST|\n[] a\n[] b\n[] c\n[] d\n[] e\n').code, 'UNEXPECTED_POSITIONAL_FIELD')
-  assert.equal(parse('[#]>TEST|\n[state] PASS\n[state] EDIT\n').code, 'DUPLICATE_FIELD')
-  assert.equal(parse('[#]>TEST|\n[state] PASS\n[] EDIT\n').code, 'DUPLICATE_FIELD')
-  assert.equal(parse('[#]>TEST|\n[text] hi\n').code, 'MISSING_REQUIRED_FIELD')
+  assert.equal(parse('[#]>TEST|\n[state] PASS\n').code, 'INVALID_FIELD_LINE')
+  assert.equal(parse('[#]>TEST|\n[text]\n').code, 'INVALID_FIELD_LINE')
+  assert.equal(parse('[#]>TEST|\n[]| a\n[]| b\n[]| c\n[]| d\n[]| e\n').code, 'UNEXPECTED_POSITIONAL_FIELD')
+  assert.equal(parse('[#]>TEST|\n[state]| PASS\n[state]| EDIT\n').code, 'DUPLICATE_FIELD')
+  assert.equal(parse('[#]>TEST|\n[state]| PASS\n[]| EDIT\n').code, 'DUPLICATE_FIELD')
+  assert.equal(parse('[#]>TEST|\n[text]| hi\n').code, 'MISSING_REQUIRED_FIELD')
 }
 
 function test_ordinary_value_tokenization() {
@@ -1275,19 +1277,20 @@ function test_coerce_rules() {
 }
 
 function test_multiline_open_and_close() {
-  const ok = parse('[#]>TEST|\n[body] |$[\n  a\n    b\n\n  c\n]$\n')
+  const ok = parse('[#]>TEST|\n[body]|$[\n  a\n    b\n\n  c\n]$\n')
   assert.equal(ok.ok, true)
   assert.equal(ok.marker.fields.body.token.value, 'a\n  b\n\n  c')
 
-  assert.equal(parse('[#]>TEST|\n[body] |$[ // note\n').code, 'MULTILINE_INVALID_OPEN')
-  assert.equal(parse('[#]>TEST|\n[body] |$[  \n').code, 'MULTILINE_INVALID_OPEN')
-  assert.equal(parse('[#]>TEST|\n[body] | $ [\n').code, 'MULTILINE_INVALID_OPEN')
-  assert.equal(parse('[#]>TEST|\n[body] |$\n').code, 'MULTILINE_INVALID_OPEN')
-  assert.equal(parse('[#]>TEST|\n[body] | value\n').code, 'MULTILINE_INVALID_OPEN')
-  assert.equal(parse('[#]>TEST|\n[title] |$[\nx\n]$\n').code, 'MULTILINE_NOT_ALLOWED')
-  assert.equal(parse('[#]>TEST|\n[body] |$[\ntext\n ]$\n').code, 'MULTILINE_UNEXPECTED_END')
-  assert.equal(parse('[#]>TEST|\n[body] |$[\ntext\n]$ // note\n').code, 'MULTILINE_UNEXPECTED_END')
-  assert.equal(parse('[#]>TEST|\n[body] |$[\ntext').code, 'MULTILINE_UNCLOSED')
+  assert.equal(parse('[#]>TEST|\n[body]|$[ // note\n').code, 'MULTILINE_INVALID_OPEN')
+  assert.equal(parse('[#]>TEST|\n[body]|$[  \n').code, 'MULTILINE_INVALID_OPEN')
+  assert.equal(parse('[#]>TEST|\n[body]| $ [\n').code, 'MULTILINE_INVALID_OPEN')
+  assert.equal(parse('[#]>TEST|\n[body]| $\n').code, 'MULTILINE_INVALID_OPEN')
+  assert.equal(parse('[#]>TEST|\n[body]| $ value\n').code, 'MULTILINE_INVALID_OPEN')
+  assert.equal(parse('[#]>TEST|\n[body] value\n').code, 'INVALID_FIELD_LINE')
+  assert.equal(parse('[#]>TEST|\n[title]|$[\nx\n]$\n').code, 'MULTILINE_NOT_ALLOWED')
+  assert.equal(parse('[#]>TEST|\n[body]|$[\ntext\n ]$\n').code, 'MULTILINE_UNEXPECTED_END')
+  assert.equal(parse('[#]>TEST|\n[body]|$[\ntext\n]$ // note\n').code, 'MULTILINE_UNEXPECTED_END')
+  assert.equal(parse('[#]>TEST|\n[body]|$[\ntext').code, 'MULTILINE_UNCLOSED')
 }
 
 test_field_binding()
@@ -1375,7 +1378,7 @@ function test_duplicate_pipeline_binding() {
 
 function test_production_pipeline_reads_registered_hexo_config() {
   const makeContext = encrypt => ({ config: { encrypt }, extend: { filter: { register: () => {} } } })
-  const publicData = { content: '[#]>TEST|\n[state] PASS\n', path: 'probe.md', type: 'post' }
+  const publicData = { content: '[#]>TEST|\n[state]| PASS\n', path: 'probe.md', type: 'post' }
   const publicBinding = registerMarkerFilters(makeContext({}), defaultPipeline)
   assert.doesNotThrow(() => publicBinding.pipeline.beforePostRender(publicData),
     'a public binding must read its own hexo.config.encrypt and proceed to tokenization')
@@ -1745,11 +1748,11 @@ function runPostRender(pipeline, marked, source, extra = {}) {
 }
 
 function test_failure_and_projection_are_lf_only() {
-  const failure = runPostRender(pipeline, marked, 'prefix\r\n[#]>TEST|\r\n[state] a\r\n')
+  const failure = runPostRender(pipeline, marked, 'prefix\r\n[#]>TEST|\r\n[state]| a\r\n')
   assert.ok(failure.content.includes('<pre class="arknights-marker-source">'),
     'an unregistered name must produce the escaped marker source pre')
   const success = runPostRender(pipeline, marked,
-    '[#]>Alerts|\r\n[type] NOTE\r\n[body] |$[\r\nline1\r\nline2\r\n]$\r\n')
+    '[#]>Alerts|\r\n[type]| NOTE\r\n[body]|$[\r\nline1\r\nline2\r\n]$\r\n')
   assert.ok(success.content.includes('adm-note'), 'Alerts must materialize through the real renderer')
   assert.ok(success.content.includes('line1\nline2'), 'handler field value must be LF folded')
   for (const data of [failure, success]) {
@@ -1763,8 +1766,8 @@ function test_failure_and_projection_are_lf_only() {
 }
 
 function test_project_grid_adjacency() {
-  const first = '[#]>Project|\n[name] A\n[link] https://a.example.com/\n[image] /images/a.png\n'
-  const second = '[#]>Project|\n[name] B\n[link] https://b.example.com/\n[image] /images/b.png\n'
+  const first = '[#]>Project|\n[name]| A\n[link]| https://a.example.com/\n[image]| /images/a.png\n'
+  const second = '[#]>Project|\n[name]| B\n[link]| https://b.example.com/\n[image]| /images/b.png\n'
   const adjacent = first + second
   const spaced = first + '\n' + second
   const run = source => runPostRender(pipeline, marked, source, { path: 'projects/index.md', type: 'projects' }).content
@@ -1852,8 +1855,8 @@ installMarkedExtension(marked.use.bind(marked))
 | `ENCRYPTION_STATE_AMBIGUOUS` | before 4 的 `inspectSearchEncryption` 三态判定的 `ambiguous` 分支 |
 | `PROJECT_INVALID_PAGE` | Project marker 出现在非 `type: 'projects'` 的 data |
 | `PROJECT_INVALID_FIELD` | `[name]` 缺失或 `[image]` 为非 string |
-| `PROJECT_INVALID_URL` | `[link] javascript:alert(1)` |
-| `LINK_CARD_INVALID_URL` | LinkCard `[link] javascript:` / `[img] data:` |
+| `PROJECT_INVALID_URL` | `[link]| javascript:alert(1)` |
+| `LINK_CARD_INVALID_URL` | LinkCard `[link]| javascript:` / `[img]| data:` |
 
 上列代码块给出的是首段骨架（子模块规模与依赖门禁、LF 恢复、Project 分组、before 源字段 NUL、sanitizer 五组）；`PIPELINE_AUDIT_FAILED` / `PLACEHOLDER_AUDIT_FAILED` / `ENCRYPTION_STATE_AMBIGUOUS` 与四条 Project/LinkCard handler 码的 fixture 随 A2-18 实现逐段追加到同一文件。
 
@@ -1881,52 +1884,52 @@ node .temp/search-projection-lifecycle.test.js
 // 不伪造 AI 或 Project occurrence，也不读写 source/ 或 public/。
 const MEMORY_SOURCE = [
   '[#]>Alerts|',
-  '[type] NOTE',
-  '[title] 协议提示',
-  '[body] |$[',
+  '[type]| NOTE',
+  '[title]| 协议提示',
+  '[body]|$[',
   '正文包含 **Markdown** 与 [链接](https://example.com/)。',
   '[#]>AI|',
   ']$',
   '',
   '[#]>Editor|',
-  '[language] javascript',
-  '[number] 1',
-  '[body] |$[',
+  '[language]| javascript',
+  '[number]| 1',
+  '[body]|$[',
   'const marker = "[#]>Project|";',
   ']$',
   '',
   '[#]>LinkCard|',
-  '[avatar] 示例站点',
-  '[link] https://example.com/',
-  '[img] /images/link-card.png',
-  '[descr] 纯文本说明',
-  '[style] --card-title: #fff; --card-bg: #123456;',
+  '[avatar]| 示例站点',
+  '[link]| https://example.com/',
+  '[img]| /images/link-card.png',
+  '[descr]| 纯文本说明',
+  '[style]| --card-title: #fff; --card-bg: #123456;',
   '',
   '[#]>LinkCard|',
-  '[avatar] 简单站点',
-  '[link] /projects/',
+  '[avatar]| 简单站点',
+  '[link]| /projects/',
   '',
   '[#]>LinkCard|',
-  '[avatar] 空说明站点',
-  '[link] /empty-descr/',
-  '[descr]',
+  '[avatar]| 空说明站点',
+  '[link]| /empty-descr/',
+  '[descr]|',
   ''
 ].join('\n')
 
 // 规格 18.2 第 5 条负例：Alerts body 的 link destination 换成 javascript:
 const MEMORY_JAVASCRIPT_LINK = MEMORY_SOURCE.replace('[链接](https://example.com/)', '[链接](javascript:alert(1))')
 // 规格 18.2 第 6 条负例：显式 null 与显式空串必须走两条不同路径
-const MEMORY_DESCR_NULL = MEMORY_SOURCE.replace('[descr] 纯文本说明', '[descr] null')
-const MEMORY_DESCR_WHITESPACE = MEMORY_SOURCE.replace('[descr] 纯文本说明', '[descr]   ')
+const MEMORY_DESCR_NULL = MEMORY_SOURCE.replace('[descr]| 纯文本说明', '[descr]| null')
+const MEMORY_DESCR_WHITESPACE = MEMORY_SOURCE.replace('[descr]| 纯文本说明', '[descr]|   ')
 
 // 规格 18.2「handler 生成 NUL」门禁：render 输出 NUL 与 projection 输出 NUL 分开断言
 const NUL = String.fromCharCode(0)
-const MEMORY_RENDER_NUL = MEMORY_SOURCE.replace('[title] 协议提示', `[title] 提示${NUL}`)
+const MEMORY_RENDER_NUL = MEMORY_SOURCE.replace('[title]| 协议提示', `[title]| 提示${NUL}`)
 const MEMORY_PROJECTION_NUL = MEMORY_SOURCE.replace('正文包含 **Markdown**', `正文${NUL}包含 **Markdown**`)
 
-// 规格 17.1 安全转义矩阵。每一项都是**完整的带标签字段行**（`[标签] 恶意值`），
+// 规格 17.1 安全转义矩阵。每一项都是**完整的带标签字段行**（`[标签]| 恶意值`），
 // 探针的 replace 目标也必须是 MEMORY_SOURCE 里同形态的完整行，
-// 这样既不会漏掉标签、也不会拼出双 `[style]` 前缀。
+// 这样既不会漏掉标签、也不会拼出双 `[style]|` 前缀。
 // monaco 上下文的载体是 MEMORY_ESCAPE_MONACO（替换 Editor body 内的原文），
 // 它不由 handler 的单行字段直接消费，因此矩阵内没有对应的行内字段项。
 // Markdown 上下文**不在本矩阵内**：规格 17.1 的 Markdown 规则只约束「把 Alerts body 交给
@@ -1934,10 +1937,10 @@ const MEMORY_PROJECTION_NUL = MEMORY_SOURCE.replace('正文包含 **Markdown**',
 // 负例已由 MEMORY_JAVASCRIPT_LINK 覆盖（javascript: link -> HANDLER_SERVICE_ERROR
 // + escaped marker source，见 A2-22 的 6 条硬断言第 5 条）。
 const MEMORY_ESCAPE_MATRIX = Object.freeze({
-  htmlText: '[title] <script>alert(1)</script> & "\' 尾注',
-  htmlAttribute: '[descr] " onmouseover="alert(1)',
-  url: '[link] javascript:alert(1)',
-  css: '[style] --card-title: url(javascript:alert(1)); --card-bg: #123456;'
+  htmlText: '[title]| <script>alert(1)</script> & "\' 尾注',
+  htmlAttribute: '[descr]| " onmouseover="alert(1)',
+  url: '[link]| javascript:alert(1)',
+  css: '[style]| --card-title: url(javascript:alert(1)); --card-bg: #123456;'
 })
 const MEMORY_ESCAPE_MONACO = MEMORY_SOURCE.replace('const marker = "[#]>Project|";',
   'const marker = "<script>alert(1)</script>";')
@@ -1959,9 +1962,9 @@ U+0000 在本模块中一律由 `String.fromCharCode(0)` 构造并注入，不�
 
 **两条 NUL fixture 的可观测性依赖 §2.3 的 service 不对称契约**：`renderMarkdown` 在返回前移除输出中的 U+0000，`markdownToPlainText` 原样保留 source 的 U+0000。因此——`MEMORY_RENDER_NUL` 把 NUL 注入 **`title`**（非 body 字段），render 侧 NUL 门禁可达、`toPlainText` 恒不被调用（`render=1 / toPlainText=0`）；`MEMORY_PROJECTION_NUL` 把 NUL 注入 **Alerts body**，body 内 NUL 不会经 `renderMarkdown` 泄漏到 HTML，但会原样进入 `markdownToPlainText` 的结果，故 `render=1 / toPlainText=1`。若把 `renderMarkdown` 也改成保留 NUL，前者会与 `MEMORY_PROJECTION_NUL` 混成同一路径、`render=1 / toPlainText=0` 的分叉断言失去意义；若把 `markdownToPlainText` 改成清洗 NUL，后者恒不成立。A2-12 的 `ALERTS_MARKDOWN_ERROR` 同理只由 `title` 这类非 body 字段触发。
 
-- [ ] **A2-22 写 `.temp/line-marker-handlers.test.js`**：`require('./line-marker-memory-fixture')` 引入共享 fixture，经真实 `Hexo#post.render` 断言规格第 18.2 节的 6 条硬断言（五个 occurrence 全 `consumed`、无 placeholder/token/NUL；Alerts 为 `.admonition.adm-note.open` 且投影 `NOTE 协议提示\n正文包含 Markdown 与 链接。`；Editor 的 `pre.monaco-editor-source[hidden][aria-hidden="true"]` 的 `textContent` 与 body 逐字相同；三张 LinkCard 的 DOM/`.link-simple`/空 `.link-descr` 与三条投影；`javascript:` 负例得到 escaped marker source 与 `HANDLER_SERVICE_ERROR`；`[descr] null` 为 `INVALID_VALUE`，而 `[descr]` 缺省（`null`）与 `[descr]` 纯空白（`MEMORY_DESCR_WHITESPACE`）**都走空串成功路径**）。随后追加三段：Expands 重绑幂等与 Enter / Space 键盘契约（N=3 轮 `pjax:success` / `hexo-blog-decrypt` 后每个 `.ex-header` 恰 1 组 click + keypress，且单次 Enter 与单次 Space 各只把 `.open/.fold` 与 `aria-expanded` 切换恰好一次）、handler 生成 NUL、规格第 17.1 安全转义矩阵。
+- [ ] **A2-22 写 `.temp/line-marker-handlers.test.js`**：`require('./line-marker-memory-fixture')` 引入共享 fixture，经真实 `Hexo#post.render` 断言规格第 18.2 节的 6 条硬断言（五个 occurrence 全 `consumed`、无 placeholder/token/NUL；Alerts 为 `.admonition.adm-note.open` 且投影 `NOTE 协议提示\n正文包含 Markdown 与 链接。`；Editor 的 `pre.monaco-editor-source[hidden][aria-hidden="true"]` 的 `textContent` 与 body 逐字相同；三张 LinkCard 的 DOM/`.link-simple`/空 `.link-descr` 与三条投影；`javascript:` 负例得到 escaped marker source 与 `HANDLER_SERVICE_ERROR`；`[descr]| null` 为 `INVALID_VALUE`，而 `[descr]|` 空值与 `[descr]|   ` 纯空白（`MEMORY_DESCR_WHITESPACE`）**都走空串成功路径**）。随后追加三段：Expands 重绑幂等与 Enter / Space 键盘契约（N=3 轮 `pjax:success` / `hexo-blog-decrypt` 后每个 `.ex-header` 恰 1 组 click + keypress，且单次 Enter 与单次 Space 各只把 `.open/.fold` 与 `aria-expanded` 切换恰好一次）、handler 生成 NUL、规格第 17.1 安全转义矩阵。
 
-**`MEMORY_DESCR_WHITESPACE` 的成功路径断言（P2-9，与 `MEMORY_DESCR_NULL` 的 `INVALID_VALUE` 严格分叉）**：`[descr]   `（trim 后为空串）不是 `null`，不得与显式 `null` 走同一条路径，也不得被当成「字段缺失」。断言须在真实 `Post#render` 之后逐条检查该 LinkCard：`a.link-card` 命中 `link-simple`（无说明时的简化形态），其 `.link-descr` 元素存在且 `textContent === ''`，投影为仅含 `avatar` 的单段（`toPlainText` 的三分支中 `descr === ''` 与 `descr === null` 同归第一支，但两条路径由**不同的输入形态**进入），`occurrences` 中该 occurrence 状态为 `consumed`、最终 DOM 与投影均无 NUL / token / escaped marker source。缺了这条断言时，trim 与 `null` 混同造成的「空串字段被静默丢弃」缺陷不会被门禁拦住。
+**`MEMORY_DESCR_WHITESPACE` 的成功路径断言（P2-9，与 `MEMORY_DESCR_NULL` 的 `INVALID_VALUE` 严格分叉）**：`[descr]|   `（trim 后为空串）不是 `null`，不得与显式 `null` 走同一条路径，也不得被当成「字段缺失」。断言须在真实 `Post#render` 之后逐条检查该 LinkCard：`a.link-card` 命中 `link-simple`（无说明时的简化形态），其 `.link-descr` 元素存在且 `textContent === ''`，投影为仅含 `avatar` 的单段（`toPlainText` 的三分支中 `descr === ''` 与 `descr === null` 同归第一支，但两条路径由**不同的输入形态**进入），`occurrences` 中该 occurrence 状态为 `consumed`、最终 DOM 与投影均无 NUL / token / escaped marker source。缺了这条断言时，trim 与 `null` 混同造成的「空串字段被静默丢弃」缺陷不会被门禁拦住。
 
 ```js
 const assert = require('node:assert/strict')
@@ -2238,11 +2241,11 @@ function assertPayloadOnlyInMarkerSource(html, payload, name) {
 
 async function test_security_escaping_matrix() {
   const cases = [
-    { name: 'htmlText', source: MEMORY_SOURCE.replace('[title] 协议提示', MEMORY_ESCAPE_MATRIX.htmlText), forbid: ['<script>alert(1)</script>'] },
-    { name: 'htmlAttribute', source: MEMORY_SOURCE.replace('[descr] 纯文本说明', MEMORY_ESCAPE_MATRIX.htmlAttribute), forbid: ['onmouseover="alert(1)"'] },
-    { name: 'url', source: MEMORY_SOURCE.replace('[link] https://example.com/', MEMORY_ESCAPE_MATRIX.url), forbid: ['href="javascript:'] },
+    { name: 'htmlText', source: MEMORY_SOURCE.replace('[title]| 协议提示', MEMORY_ESCAPE_MATRIX.htmlText), forbid: ['<script>alert(1)</script>'] },
+    { name: 'htmlAttribute', source: MEMORY_SOURCE.replace('[descr]| 纯文本说明', MEMORY_ESCAPE_MATRIX.htmlAttribute), forbid: ['onmouseover="alert(1)"'] },
+    { name: 'url', source: MEMORY_SOURCE.replace('[link]| https://example.com/', MEMORY_ESCAPE_MATRIX.url), forbid: ['href="javascript:'] },
     // css 的 forbid 留空：payload 合法地出现在 escaped marker source 内，判据见本函数末尾两行
-    { name: 'css', source: MEMORY_SOURCE.replace('[style] --card-title: #fff; --card-bg: #123456;', MEMORY_ESCAPE_MATRIX.css), forbid: [] },
+    { name: 'css', source: MEMORY_SOURCE.replace('[style]| --card-title: #fff; --card-bg: #123456;', MEMORY_ESCAPE_MATRIX.css), forbid: [] },
     { name: 'monaco', source: MEMORY_ESCAPE_MONACO, forbid: ['<script>'] }
   ]
   for (const item of cases) {
@@ -2440,8 +2443,8 @@ node .temp/search-projection-lifecycle.test.js
 
 ```markdown
 [#]>AI|
-[state] PASS
-[text] 本内容由AI辅助生成
+[state]| PASS
+[text]| 本内容由AI辅助生成
 ```
 
 `xorstr-string-encryption.md` 同形（`PASS`），`285k-cpu-igpu-sycl-benchmark.md` 用 `EDIT` 与其原有说明文本。迁移必须用 `Edit` 工具做逐处查找/替换，不得整文件重写。
@@ -2449,9 +2452,9 @@ node .temp/search-projection-lifecycle.test.js
 
 ```markdown
 [#]>Project|
-[name] C++ 包管理工具
-[link] https://github.com/1992724048/cpp-pack-tool
-[image] /images/projects/cpp_pack.png
+[name]| C++ 包管理工具
+[link]| https://github.com/1992724048/cpp-pack-tool
+[image]| /images/projects/cpp_pack.png
 ```
 
 - [ ] **A3-3 断言零旧语法残留**：
@@ -3507,9 +3510,26 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | 批次 | commit | 门禁结果 | 真实有头浏览器验收 |
 | --- | --- | --- | --- |
 | A | `6cc23d4` / `67543a7` / `b0d1f79` / `69af105` / `75a86af` / A3（激活与同步，hash 见 `git log --oneline -6`） | 全绿：12 个现存探针退出码全 0；全部改动 JS `node --check` 通过；`npm --prefix themes/arknights run build` 产物与仓库内 `arknights.js` 逐字节一致；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 U+0000 零命中；`public/search.json` 形态合规。**但 21 个旧门禁探针源码永久丢失、不重建，因此本批没有旧协议回归网** | 未完成（GC10）：AI tooltip、项目悬停、告警盒展开/折叠、真实截图 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与站内 Pjax 重绑仍须真实有头浏览器人工验收 |
+| P | 待填 | 待填 | 不涉及（纯构建期协议，不改 CSS/TS 产物，不递增 `cssVersion`/`jsVersion`） |
 | B | 待填 | 待填 | 待填 |
 | C | 待填 | 待填 | 待填 |
 | D | 待填 | 待填 | 待填 |
+
+### 12.1 P 协议修订裁决记录（插在批次 A 与 B 之间）
+
+用户新决策的破坏性协议变更，插在 B 批之前单独成批。规格第 13.1 节 `INVALID_FIELD_LINE` 早已定义但实现从未落地，本批补齐。
+
+| 项 | 内容 |
+| --- | --- |
+| 变更 1 字段分隔符 | `[字段名] 值` 改为 `[字段名]\|值`；竖线两侧 SP/HTAB 宽容。分隔符取 `]` 之后首个非水平空白处的 `|`，缺失即 `INVALID_FIELD_LINE` |
+| 变更 2 多行包裹 | opening 由 `\|$[` 改为 `$[`（closing 仍为 `]$`）；`$` 与 `[` 必须相邻；首个非水平空白 code unit 为 `$` 的不精确形式一律 `MULTILINE_INVALID_OPEN`，不降级为普通字符串 |
+| 变更 3 值内竖线 | 分隔符只取一个 `\|`，其后的 `\|` 一律是值内字面量（`[x]\|a\|b` → `a\|b`）；`\\\|` 仍解码为单个 `\|` |
+| 变更 4 零分隔符作废 | `[descr]` 这类只写标签的写法不再是合法字段行，全部出现处补竖线 |
+| 影响面 | 运行时代码只有 `markers/parser.js` 与 `markers/lexer.js`；`handlers/**`、`pipeline.js`、`pipeline/**`、`carrier.js`、`token.js`、`marked-extension.js`、`registry.js`、`register.js`、filters、generator、TypeScript、Stylus、三语 README 与旧协议历史文档零改动 |
+| 内容迁移 | 4 文件 13 行：`source/projects/index.md` 三行 + 三篇 AI 文章各两行。`source/data/index.md` 与 `source/projects/index.md` 的 GitHub Alert 不是 marker，保持不动 |
+| 诊断次序 | 标签诊断优先于分隔符：`[State] PASS` 仍 `INVALID_FIELD_NAME`，`[state] PASS` 才是 `INVALID_FIELD_LINE`。lexer 外形不要求分隔符，缺分隔符的行仍进 marker，由 parser 报错后整枚原子失败并按恢复层输出 escaped 原文 |
+| 零兼容 | 旧 opening token `\|$[` 不再是 token：作为值出现时只解析为普通字符串（`[body]\|\|\$[` → 字面量 `\|$[`）；无任何兼容读取分支 |
+| 门禁 | 7 个现存探针约 136 行断言改写，新增 5 组断言（缺分隔符 + handler 原子失败、分隔符空白宽容、旧 opening 字面量化、值内竖线与 `\\|` 等价、`[descr]\|` 空值），并同步 A3 内容与 `AGENTS.md` 活文档 |
 
 ---
 
@@ -3526,12 +3546,12 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | §2.1 纳入范围 | §1 文件清单全表 |
 | §2.2 不纳入范围 | Global Constraints 2/3/4/8/10/18；C1 第 8 条（`.admonition` 不参与 Alert 修复）；§2.5 裁决记录的三处显式残留自判 filter |
 | §3 术语 | §2.1–§2.4 契约；A2-3 物理行与范围；A2-6 恢复层 |
-| §4.1 物理行与 header | A2-3、A2-4 |
+| §4.1 物理行与 header（含 `FieldSeparator` 必需、`FieldValue` 值内竖线） | A2-3、A2-4、P（`test_field_separator_contract` 与 lexer 的旧 opening 字面量断言） |
 | §4.2 合法总览 | A2-5、A2-10..A2-14 |
-| §4.3 无效边界示例 | A2-4（无前导空白/大小写/尾随内容、未闭合多行仍签发 marker）、A2-5（`[State]`、`[unknown]`、重复字段） |
-| §4.4 普通值、trim 与注释 | A2-5 `test_ordinary_value_tokenization`（含 `A \| B -> A | B`）、A2-6；规格 §18.1 同行已按 S4 勘误 |
+| §4.3 无效边界示例 | A2-4（无前导空白/大小写/尾随内容、未闭合多行仍签发 marker）、A2-5（`[State]| PASS`、`[unknown]| value`、重复字段）、P（`[state] PASS` 缺分隔符） |
+| §4.4 普通值、trim 与注释 | A2-5 `test_ordinary_value_tokenization`（含 `A \| B -> A | B`）、A2-6；P（`[x]|a|b` 与 `[x]|a\|b` 等价）；规格 §18.1 同行已按 S4 勘误 |
 | §4.5 值类型与 schema 消费 | A2-5 `test_coerce_rules`、A2-6、A2-11（`descr` 三态） |
-| §4.6 多行值、去缩进与结束 | A2-5 `test_multiline_open_and_close`、A2-6 |
+| §4.6 多行值、去缩进与结束 | A2-5 `test_multiline_open_and_close`、A2-6、P（`$[` opening 与不精确形式） |
 | §4.7 字段绑定 | A2-5 `test_field_binding`、A2-6 |
 | §4.8 保护区 | A2-4 |
 | §5.1 parser 输入输出 | §2.2、A2-6 |
@@ -3601,17 +3621,17 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | --- | --- | --- | --- |
 | `INVALID_MARKER_SOURCE` | `scanMarkers(null)` / `scanMarkers({})` | `line-marker-lexer.test.js` | 是 |
 | `INVALID_HEADER` | `parseMarker` 直接传入 `raw: 'AI|'`（无 `[#]>` 前缀） | `line-marker-parser.test.js` | 是 |
-| `INVALID_FIELD_LINE` | 字段行既无 `[]` 标签也无值定位，如 `[#]>TEST|\nstate PASS\n` | `line-marker-parser.test.js` | 是 |
-| `INVALID_FIELD_NAME` | `[State] PASS` | `line-marker-parser.test.js` | 否 |
-| `DUPLICATE_FIELD` | `[state] PASS` + `[state] EDIT`，以及命名 + `[]` 混用同字段 | `line-marker-parser.test.js` | 否 |
-| `UNKNOWN_FIELD` | `[unknown] x` | `line-marker-parser.test.js` | 否 |
+| `INVALID_FIELD_LINE` | 字段行既无 `[]` 标签也无值定位，如 `[#]>TEST|\nstate PASS\n`；`[body] value` 与只写 `[descr]` 等缺竖线分隔符写法 | `line-marker-parser.test.js` | 是 |
+| `INVALID_FIELD_NAME` | `[State]| PASS`（缺分隔符时仍优先报标签诊断） | `line-marker-parser.test.js` | 否 |
+| `DUPLICATE_FIELD` | `[state]| PASS` + `[state]| EDIT`，以及命名 + `[]` 混用同字段 | `line-marker-parser.test.js` | 否 |
+| `UNKNOWN_FIELD` | `[unknown]| x` | `line-marker-parser.test.js` | 否 |
 | `UNEXPECTED_POSITIONAL_FIELD` | 六个 `[]` 行（positions 只有四个） | `line-marker-parser.test.js` | 否 |
-| `MISSING_REQUIRED_FIELD` | 只给 `[text] hi`，缺必填 `state` | `line-marker-parser.test.js` | 否 |
-| `INVALID_VALUE` | `coerce` 收到 `null`/`boolean`/`integer`/`multiline-string`；`[descr] null` | `line-marker-parser.test.js`、`line-marker-handlers.test.js` | 否 |
-| `MULTILINE_INVALID_OPEN` | `\|$[ // note`、`\|$[  `、`\| $ [`、`\|$` 后跟尾内容 | `line-marker-parser.test.js` | 否 |
-| `MULTILINE_NOT_ALLOWED` | `[title] \|$[\nx\n]$` | `line-marker-parser.test.js` | 否 |
-| `MULTILINE_UNCLOSED` | `[body] \|$[\ntext` 直到 `EndOfSource` | `line-marker-parser.test.js` | 否 |
-| `MULTILINE_UNEXPECTED_END` | `[body] \|$[\ntext\n ]$`、`]$ // note` | `line-marker-parser.test.js` | 否 |
+| `MISSING_REQUIRED_FIELD` | 只给 `[text]| hi`，缺必填 `state` | `line-marker-parser.test.js` | 否 |
+| `INVALID_VALUE` | `coerce` 收到 `null`/`boolean`/`integer`/`multiline-string`；`[descr]| null` | `line-marker-parser.test.js`、`line-marker-handlers.test.js` | 否 |
+| `MULTILINE_INVALID_OPEN` | `$[ // note`、`$[  `、`$ [`、`$` 后跟尾内容 | `line-marker-parser.test.js` | 否 |
+| `MULTILINE_NOT_ALLOWED` | `[title]|$[\nx\n]$` | `line-marker-parser.test.js` | 否 |
+| `MULTILINE_UNCLOSED` | `[body]|$[\ntext` 直到 `EndOfSource` | `line-marker-parser.test.js` | 否 |
+| `MULTILINE_UNEXPECTED_END` | `[body]|$[\ntext\n ]$`、`]$ // note` | `line-marker-parser.test.js` | 否 |
 | `UNKNOWN_MARKER` | `[#]>TEST|`（生产 registry 未注册） | `line-marker-registry.test.js`、`line-marker-pipeline.test.js` | 否 |
 | `INVALID_HANDLER` | 注册 `mode: 'inline'` 或 `null` handler | `line-marker-registry.test.js` | 否 |
 | `DUPLICATE_HANDLER` | 同一 handler 注册两次 | `line-marker-registry.test.js` | 否 |
@@ -3642,23 +3662,23 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 
 | 错误码 | 触发 fixture | 探针 | 本轮新增 |
 | --- | --- | --- | --- |
-| `AI_INVALID_STATE` | `[state] PASSED`（非四态） | `line-marker-handlers.test.js` | 否 |
+| `AI_INVALID_STATE` | `[state]| PASSED`（非四态） | `line-marker-handlers.test.js` | 否 |
 | `AI_INVALID_TEXT` | `[text]` 显式空值，或超过 40 UTF-16 code unit | `line-marker-handlers.test.js` | 否 |
 | `PROJECT_INVALID_PAGE` | Project marker 出现在非 `type: projects` 的 data | `line-marker-pipeline.test.js` | 否 |
 | `PROJECT_INVALID_FIELD` | `[name]` 缺失或 `[image]` 为非 string | `line-marker-pipeline.test.js` | 否 |
-| `PROJECT_INVALID_URL` | `[link] javascript:alert(1)` | `line-marker-pipeline.test.js` | 否 |
-| `ALERTS_INVALID_TYPE` | `[type] INFO`（不在五类集合） | `line-marker-handlers.test.js` | 否 |
-| `ALERTS_INVALID_OPEN` | `[open] maybe` | `line-marker-handlers.test.js` | 否 |
+| `PROJECT_INVALID_URL` | `[link]| javascript:alert(1)` | `line-marker-pipeline.test.js` | 否 |
+| `ALERTS_INVALID_TYPE` | `[type]| INFO`（不在五类集合） | `line-marker-handlers.test.js` | 否 |
+| `ALERTS_INVALID_OPEN` | `[open]| maybe` | `line-marker-handlers.test.js` | 否 |
 | `ALERTS_INVALID_TITLE` | `[title]` 显式空文本 | `line-marker-handlers.test.js` | 否 |
-| `ALERTS_INVALID_COLOR` | `[color] #8B5CF6`（带井号）或 3 位 hex | `line-marker-handlers.test.js` | 否 |
-| `ALERTS_EMPTY_BODY` | `[body] \|$[` 后立即 `]$` 关闭，产生空 body | `line-marker-handlers.test.js` | 否 |
+| `ALERTS_INVALID_COLOR` | `[color]| #8B5CF6`（带井号）或 3 位 hex | `line-marker-handlers.test.js` | 否 |
+| `ALERTS_EMPTY_BODY` | `[body]|$[` 后立即 `]$` 关闭，产生空 body | `line-marker-handlers.test.js` | 否 |
 | `ALERTS_MARKDOWN_ERROR` | `services.renderMarkdown` 返回串含内部 token / NUL / 残留危险 URL | `line-marker-handlers.test.js` | 否 |
 | `EDITOR_INVALID_LANGUAGE` | `[language]` 为空、超过 64 字符或含控制字符 | `line-marker-handlers.test.js` | 否 |
-| `EDITOR_INVALID_NUMBER` | `[number] 0` 或 `[number] 2147483648` | `line-marker-handlers.test.js` | 否 |
-| `EDITOR_INVALID_THEME` | `[theme] vs dark`（含空格，不匹配白名单格式） | `line-marker-handlers.test.js` | 否 |
+| `EDITOR_INVALID_NUMBER` | `[number]| 0` 或 `[number]| 2147483648` | `line-marker-handlers.test.js` | 否 |
+| `EDITOR_INVALID_THEME` | `[theme]| vs dark`（含空格，不匹配白名单格式） | `line-marker-handlers.test.js` | 否 |
 | `EDITOR_EMPTY_BODY` | Editor body 为空 | `line-marker-handlers.test.js` | 否 |
 | `LINK_CARD_INVALID_NAME` | `[avatar]` 为空或超长 | `line-marker-handlers.test.js` | 否 |
-| `LINK_CARD_INVALID_URL` | `[link] javascript:` / `[img] data:` | `line-marker-handlers.test.js`、`line-marker-pipeline.test.js` | 否 |
+| `LINK_CARD_INVALID_URL` | `[link]| javascript:` / `[img]| data:` | `line-marker-handlers.test.js`、`line-marker-pipeline.test.js` | 否 |
 | `LINK_CARD_INVALID_STYLE` | `[style]` 非 declaration list 或属性不在白名单 | `line-marker-handlers.test.js` | 否 |
 | `LINK_CARD_STYLE_RESOURCE` | `[style]` 含未授权 URL / 资源函数，或 RootUrl 一次 percent-decode 审计失败 | `line-marker-handlers.test.js` | 否 |
 
@@ -3670,7 +3690,7 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | 裁决 | 以第 4.4 节第 4 条为权威：解码前保留「反斜杠 + U+007C」，解码后该位置只剩单个 U+007C；除该序列外的反斜杠原样保留 |
 | 规格改动 | 第 18.1 节该行改为不含竖线字面量的表述，并显式说明理由：GFM 表格内用反斜杠转义竖线会把它渲染成竖线，无法在同一行内区分「解码前」与「解码后」 |
 | 计划的落点 | A2-5 的 `test_ordinary_value_tokenization` 表格项 `{ raw: 'A \\| B', kind: 'string', value: 'A | B' }`（写在代码块内，不受表格转义影响）与 A2-6 的「一次解码、其它反斜杠是普通字符」实现步骤 |
-| 同类表述残留 | 第 4.4 节尾注表内的 `A \| B` 行有同一 GFM 转义歧义（其「原始普通值」列渲染后同样显示为竖线）。该表在本次授权范围内未改动；其「结果」列与第 4.4 节第 4 条一致，探针以代码块内的显式 fixture 为准 |
+| 同类表述残留 | 第 4.4 节尾注表内的 `A \| B` 行有同一 GFM 转义歧义（其字段行与结果列渲染后同样显示为竖线）。任务 P 已把该表首列改为完整字段行 `[title]\| …` 以体现竖线分隔符，但 `A \| B` 的字面量歧义按 S4 裁决保留；探针以代码块内的显式 fixture 为准 |
 
 ### 13.3 占位扫描
 

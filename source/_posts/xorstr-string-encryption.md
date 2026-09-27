@@ -7,8 +7,8 @@ description: 解析 C++20 编译期 XOR 字符串加密 stdpp::xorstr：哈夫�
 ---
 
 [#]>AI|
-[state] PASS
-[text] 本文由AI辅助生成
+[state]| PASS
+[text]| 本文由AI辅助生成
 
 ## 为什么需要字符串加密
 

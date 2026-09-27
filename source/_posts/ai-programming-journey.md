@@ -7,8 +7,8 @@ description: 从 ChatGPT 到 DeepSeek R1 再到 Agent 时代，回顾 AI 对开�
 ---
 
 [#]>AI|
-[state] PASS
-[text] 本文由AI辅助生成
+[state]| PASS
+[text]| 本文由AI辅助生成
 
 ## 2023：初识与落差
 

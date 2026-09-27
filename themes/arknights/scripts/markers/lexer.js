@@ -5,7 +5,8 @@ const { Lexer } = require('marked')
 const HEADER_PREFIX = '[#]>'
 const NAME_START_PATTERN = /[A-Z]/
 const NAME_PART_PATTERN = /[A-Za-z0-9_-]/
-const MULTILINE_OPEN_PATTERN = /^\|[ \t]*\$\[$/
+const FIELD_SEPARATOR_PATTERN = /^[ \t]*\|[ \t]*/
+const MULTILINE_OPENING_PATTERN = /^[ \t]*\$\[$/
 const RAW_TEXT_HTML_TAGS = new Set([
   'script',
   'style',
@@ -372,17 +373,15 @@ function classifyBodyLine(content) {
   return 'body'
 }
 
-function readMultilineFieldTail(content) {
+// 字段行进入多行状态只看「竖线分隔符之后的值是否精确为 `$[`」；不精确形式由 parser 报 MULTILINE_INVALID_OPEN
+function opensMultilineField(content) {
   const labelEnd = content.indexOf(']', 1)
   const tail = content.slice(labelEnd + 1)
-  let cursor = 0
-  while (cursor < tail.length && (tail[cursor] === ' ' || tail[cursor] === '\t')) {
-    cursor += 1
+  const separator = FIELD_SEPARATOR_PATTERN.exec(tail)
+  if (separator === null) {
+    return false
   }
-  if (tail[cursor] !== '|') {
-    return { opening: false, exact: false }
-  }
-  return { opening: true, exact: MULTILINE_OPEN_PATTERN.test(tail.slice(cursor)) }
+  return MULTILINE_OPENING_PATTERN.test(tail.slice(separator[0].length))
 }
 
 function readMarker(source, start) {
@@ -419,11 +418,10 @@ function readMarker(source, start) {
       break
     }
 
-    const tail = readMultilineFieldTail(content)
     physicalLines.push(line)
     finalLine = line
     lineStart = line.end
-    if (tail.opening && tail.exact) {
+    if (opensMultilineField(content)) {
       multiline = true
     }
   }
