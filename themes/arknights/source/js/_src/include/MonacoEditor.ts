@@ -19,36 +19,43 @@ class MonacoEditor {
     }
   }
 
-  private createEditor = (container: HTMLElement, lang: string, theme: string, readOnly: boolean, height: string, options: any) => {
+  private readSource = (container: HTMLElement): string | null => {
+    const matches: HTMLPreElement[] = []
+    for (const child of Array.from(container.children)) {
+      if (child.matches('pre.monaco-editor-source[hidden][aria-hidden="true"]')) {
+        matches.push(child as HTMLPreElement)
+      }
+    }
+    if (matches.length !== 1) {
+      console.error(`MonacoEditor: expected exactly one direct child pre.monaco-editor-source[hidden][aria-hidden="true"], found ${matches.length}`);
+      return null;
+    }
+    return matches[0].textContent ?? '';
+  }
+
+  private createEditor = (container: HTMLElement, lang: string, theme: string) => {
     if (container.getAttribute('data-initialized') === 'true') return;
+    const mon = (window as any).monaco || (monaco as any);
+    if (!mon || !mon.editor || !mon.editor.create) {
+      console.error('MonacoEditor: monaco not available when trying to create editor');
+      return;
+    }
+    // 必须在 monaco.editor.create 之前读取：Monaco 会往容器内追加节点
+    const source = this.readSource(container);
+    if (source === null) return;
+    // 命中恰 1 且 monaco 可用之后才写标记：失败时允许后续 Pjax 切入重试
     container.setAttribute('data-initialized', 'true');
 
-    container.style.height = height;
+    const editor = mon.editor.create(container, {
+      value: source,
+      language: lang,
+      theme: theme,
+      readOnly: true,
+      automaticLayout: true
+    });
 
-    try {
-      const mon = (window as any).monaco || (monaco as any);
-      if (!mon || !mon.editor || !mon.editor.create) {
-        console.error('MonacoEditor: monaco not available when trying to create editor');
-        return;
-      }
-
-      // prefer the <pre> source textContent to avoid HTML-escaped entities
-      const pre = container.querySelector('pre');
-      const source = pre?.textContent || '';
-
-      const editor = mon.editor.create(container, {
-        value: source,
-        language: lang,
-        theme: theme,
-        readOnly: readOnly,
-        ...options,
-      });
-
-      // store editor instance to avoid garbage collection
-      this.editors.set(container, editor);
-    } catch (e) {
-      console.error('MonacoEditor: failed to create editor', e);
-    }
+    // store editor instance to avoid garbage collection
+    this.editors.set(container, editor);
   }
 
   private findEditor = () => {
@@ -56,26 +63,7 @@ class MonacoEditor {
     editors.forEach((editor) => {
       const lang = editor.getAttribute('data-lang') || 'plaintext';
       const theme = editor.getAttribute('data-theme') || 'vs-dark';
-      const readOnly = editor.getAttribute('data-readonly') || 'false';
-      const height = editor.getAttribute('data-height') || '300px';
-
-      const rawOptions = editor.getAttribute('data-options') || '{}';
-      let options: any = {};
-      try {
-        // decode HTML entities (e.g. &quot;) produced by server-side escaping
-        const decoded = new DOMParser().parseFromString(rawOptions, 'text/html').documentElement.textContent || rawOptions;
-        options = JSON.parse(decoded || '{}');
-      } catch (e) {
-        try {
-          // fallback: maybe server used encodeURIComponent
-          options = JSON.parse(decodeURIComponent(rawOptions));
-        } catch (e2) {
-          console.warn('MonacoEditor: failed to parse data-options, using empty options', rawOptions, e2);
-          options = {};
-        }
-      }
-
-      this.createEditor(editor as HTMLElement, lang, theme, Boolean(readOnly), height, options);
+      this.createEditor(editor as HTMLElement, lang, theme);
     });
     this.updateEditorLayout();
   }

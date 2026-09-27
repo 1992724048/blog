@@ -1,4 +1,40 @@
+"use strict";
 'use strict';
+// A 阶段最小实现：只记录 generation 与 owner，不建 timer、不挂 MutationObserver
+let statusGeneration = 0;
+let statusLease = null;
+function claimStatus(message, options) {
+    statusGeneration += 1;
+    statusLease = null;
+    const node = document.querySelector('.toolbox-status');
+    if (node === null) {
+        return;
+    }
+    node.textContent = message;
+    node.hidden = false;
+    statusLease = {
+        token: statusGeneration,
+        node,
+        message,
+        owner: options.owner,
+        observer: null,
+        timer: null
+    };
+}
+function invalidateStatusLease() {
+    statusGeneration += 1;
+    const lease = statusLease;
+    statusLease = null;
+    return lease === null ? null : lease.node;
+}
+function clearStatus() {
+    const ownedNode = invalidateStatusLease();
+    if (ownedNode === null) {
+        return;
+    }
+    ownedNode.textContent = '';
+    ownedNode.hidden = true;
+}
 class BgmControl {
     audio;
     mediaFailed = false;
@@ -91,6 +127,9 @@ class BgmControl {
             ? button.dataset.labelPausedStatus || ''
             : button.dataset.labelPlayingStatus || '');
     };
+    clearStatus = () => {
+        clearStatus();
+    };
     constructor() {
         this.audio = document.getElementById('bgm');
         if (this.audio !== null) {
@@ -143,26 +182,39 @@ function format(format, ...args) {
 }
 /// <reference path="common/base.ts" />
 class expands {
+    bound = new WeakSet();
     reverse = (item, s0, s1) => {
         const block = getParent(item);
+        let expanded = true;
         if (block.classList.contains(s0)) {
             block.classList.remove(s0);
             block.classList.add(s1);
+            expanded = false;
         }
         else {
             block.classList.remove(s1);
             block.classList.add(s0);
+            expanded = true;
         }
+        item.setAttribute('aria-expanded', String(expanded));
     };
     addEvent = (header) => {
+        if (this.bound.has(header))
+            return;
+        this.bound.add(header);
         header.addEventListener('click', (click) => {
             if (click.target.tagName !== 'BUTTON' &&
                 click.target.tagName !== 'A') {
                 this.reverse(header, 'open', 'fold');
             }
         });
-        header.addEventListener('keypress', (key) => {
-            if (key.key === 'Enter') {
+        header.addEventListener('keypress', (event) => {
+            const isEnter = event.key === 'Enter';
+            // 'Spacebar' 是旧浏览器的 key 别名，必须与 ' ' 等价处理
+            const isSpace = event.key === ' ' || event.key === 'Spacebar';
+            if (isEnter || isSpace) {
+                // Space 必须阻止默认页面滚动；Enter 无滚动语义，同路径阻止不改变其行为
+                event.preventDefault();
                 this.reverse(header, 'open', 'fold');
             }
         });
@@ -1612,59 +1664,49 @@ class MonacoEditor {
             catch (e) { /* ignore */ }
         }
     };
-    createEditor = (container, lang, theme, readOnly, height, options) => {
+    readSource = (container) => {
+        const matches = [];
+        for (const child of Array.from(container.children)) {
+            if (child.matches('pre.monaco-editor-source[hidden][aria-hidden="true"]')) {
+                matches.push(child);
+            }
+        }
+        if (matches.length !== 1) {
+            console.error(`MonacoEditor: expected exactly one direct child pre.monaco-editor-source[hidden][aria-hidden="true"], found ${matches.length}`);
+            return null;
+        }
+        return matches[0].textContent ?? '';
+    };
+    createEditor = (container, lang, theme) => {
         if (container.getAttribute('data-initialized') === 'true')
             return;
+        const mon = window.monaco || monaco;
+        if (!mon || !mon.editor || !mon.editor.create) {
+            console.error('MonacoEditor: monaco not available when trying to create editor');
+            return;
+        }
+        // 必须在 monaco.editor.create 之前读取：Monaco 会往容器内追加节点
+        const source = this.readSource(container);
+        if (source === null)
+            return;
+        // 命中恰 1 且 monaco 可用之后才写标记：失败时允许后续 Pjax 切入重试
         container.setAttribute('data-initialized', 'true');
-        container.style.height = height;
-        try {
-            const mon = window.monaco || monaco;
-            if (!mon || !mon.editor || !mon.editor.create) {
-                console.error('MonacoEditor: monaco not available when trying to create editor');
-                return;
-            }
-            // prefer the <pre> source textContent to avoid HTML-escaped entities
-            const pre = container.querySelector('pre');
-            const source = pre?.textContent || '';
-            const editor = mon.editor.create(container, {
-                value: source,
-                language: lang,
-                theme: theme,
-                readOnly: readOnly,
-                ...options,
-            });
-            // store editor instance to avoid garbage collection
-            this.editors.set(container, editor);
-        }
-        catch (e) {
-            console.error('MonacoEditor: failed to create editor', e);
-        }
+        const editor = mon.editor.create(container, {
+            value: source,
+            language: lang,
+            theme: theme,
+            readOnly: true,
+            automaticLayout: true
+        });
+        // store editor instance to avoid garbage collection
+        this.editors.set(container, editor);
     };
     findEditor = () => {
         const editors = document.querySelectorAll('.monaco-editor-code');
         editors.forEach((editor) => {
             const lang = editor.getAttribute('data-lang') || 'plaintext';
             const theme = editor.getAttribute('data-theme') || 'vs-dark';
-            const readOnly = editor.getAttribute('data-readonly') || 'false';
-            const height = editor.getAttribute('data-height') || '300px';
-            const rawOptions = editor.getAttribute('data-options') || '{}';
-            let options = {};
-            try {
-                // decode HTML entities (e.g. &quot;) produced by server-side escaping
-                const decoded = new DOMParser().parseFromString(rawOptions, 'text/html').documentElement.textContent || rawOptions;
-                options = JSON.parse(decoded || '{}');
-            }
-            catch (e) {
-                try {
-                    // fallback: maybe server used encodeURIComponent
-                    options = JSON.parse(decodeURIComponent(rawOptions));
-                }
-                catch (e2) {
-                    console.warn('MonacoEditor: failed to parse data-options, using empty options', rawOptions, e2);
-                    options = {};
-                }
-            }
-            this.createEditor(editor, lang, theme, Boolean(readOnly), height, options);
+            this.createEditor(editor, lang, theme);
         });
         this.updateEditorLayout();
     };
@@ -2263,61 +2305,23 @@ class TocControl {
     };
 }
 var tocControl = new TocControl();
-// 标注序列化：以正文文本节点的累计字符偏移（start + length）记录——<mark> 包裹不改变文本总量，
-// 增删标注后同一偏移仍指向同一段文字；文章文本变化导致偏移漂移时按边界校验静默丢弃
-class Toolbox {
-    static EXCLUDED_SELECTOR = '.bottom-btn, #annotate-toolbar, #post-footer, #post-info, #reward, #comments, #paginator, script, style';
-    static HIGHLIGHT_KEY_PREFIX = 'arknights:highlights:';
-    static FAVORITES_KEY = 'arknights:favorites';
-    static ANNOTATE_COLOR_KEY = 'arknights:annotate-color';
-    static ANNOTATE_COLORS = ['yellow', 'green', 'blue', 'pink', 'orange'];
-    static COPIED_DELAY = 1200;
-    pendingRange = null;
-    get toolbox() {
-        return document.querySelector('.toolbox');
-    }
-    get toggleButton() {
-        return document.querySelector('#to-toolbox');
-    }
-    get shareButton() {
-        return document.querySelector('.toolbox-share');
-    }
-    get favoriteButton() {
-        return document.querySelector('.toolbox-favorite');
-    }
-    get article() {
-        return document.querySelector('article');
-    }
-    get annotateToolbar() {
-        return document.querySelector('#annotate-toolbar');
-    }
-    get annotateButton() {
-        return document.querySelector('.toolbox-annotate');
-    }
-    get colorButton() {
-        return document.querySelector('#annotate-toolbar .at-color');
-    }
-    get colorPanel() {
-        return document.querySelector('#annotate-toolbar .at-colors');
-    }
-    get copyButton() {
-        return document.querySelector('#annotate-toolbar .at-copy');
-    }
-    get toolbarAnnotateButton() {
-        return document.querySelector('#annotate-toolbar .at-annotate');
-    }
-    get toolbarClearButton() {
-        return document.querySelector('#annotate-toolbar .at-clear');
-    }
-    read = (key) => {
+// 标注/收藏/标注色的纯数据层：零 DOM 查询、零事件、零 timer
+var ToolboxModules;
+(function (ToolboxModules) {
+    ToolboxModules.HIGHLIGHT_KEY_PREFIX = 'arknights:highlights:';
+    ToolboxModules.FAVORITES_KEY = 'arknights:favorites';
+    ToolboxModules.ANNOTATE_COLOR_KEY = 'arknights:annotate-color';
+    ToolboxModules.ANNOTATE_COLORS = ['yellow', 'green', 'blue', 'pink', 'orange'];
+    function readRaw(key) {
         try {
             return window.localStorage.getItem(key);
         }
         catch (e) {
             return null;
         }
-    };
-    write = (key, value) => {
+    }
+    ToolboxModules.readRaw = readRaw;
+    function writeRaw(key, value) {
         try {
             if (value === null) {
                 window.localStorage.removeItem(key);
@@ -2327,10 +2331,669 @@ class Toolbox {
             }
         }
         catch (e) { }
-    };
-    highlightKey = () => {
-        return Toolbox.HIGHLIGHT_KEY_PREFIX + window.location.pathname;
-    };
+    }
+    ToolboxModules.writeRaw = writeRaw;
+    function highlightKey() {
+        return ToolboxModules.HIGHLIGHT_KEY_PREFIX + window.location.pathname;
+    }
+    ToolboxModules.highlightKey = highlightKey;
+    function parseHighlights(stored) {
+        if (stored === null) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(stored);
+            const container = parsed;
+            if (parsed === null || typeof parsed !== 'object' || !Array.isArray(container.ranges)) {
+                return [];
+            }
+            const ranges = [];
+            container.ranges.forEach((item) => {
+                const range = item;
+                if (typeof range.start === 'number' && typeof range.length === 'number' && range.start >= 0 && range.length > 0) {
+                    const color = typeof range.color === 'string' && ToolboxModules.ANNOTATE_COLORS.includes(range.color) ? range.color : 'yellow';
+                    const text = typeof range.text === 'string' ? range.text : undefined;
+                    ranges.push({ start: range.start, length: range.length, color: color, text: text });
+                }
+            });
+            return ranges;
+        }
+        catch (e) {
+            return [];
+        }
+    }
+    ToolboxModules.parseHighlights = parseHighlights;
+    function serializeHighlights(records) {
+        return JSON.stringify({ version: 1, ranges: records });
+    }
+    ToolboxModules.serializeHighlights = serializeHighlights;
+    function parseFavorites(stored) {
+        if (stored === null) {
+            return {};
+        }
+        try {
+            const parsed = JSON.parse(stored);
+            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                return {};
+            }
+            return parsed;
+        }
+        catch (e) {
+            return {};
+        }
+    }
+    ToolboxModules.parseFavorites = parseFavorites;
+    function serializeFavorites(records) {
+        return JSON.stringify(records);
+    }
+    ToolboxModules.serializeFavorites = serializeFavorites;
+    function readAnnotateColor() {
+        const stored = readRaw(ToolboxModules.ANNOTATE_COLOR_KEY);
+        return stored !== null && ToolboxModules.ANNOTATE_COLORS.includes(stored) ? stored : 'yellow';
+    }
+    ToolboxModules.readAnnotateColor = readAnnotateColor;
+    function writeAnnotateColor(color) {
+        writeRaw(ToolboxModules.ANNOTATE_COLOR_KEY, color);
+    }
+    ToolboxModules.writeAnnotateColor = writeAnnotateColor;
+})(ToolboxModules || (ToolboxModules = {}));
+var ToolboxModules;
+(function (ToolboxModules) {
+    ToolboxModules.EXCLUDED_SELECTOR = '.bottom-btn, #annotate-toolbar, #post-footer, #post-info, #reward, #comments, #paginator, script, style';
+    // 标注序列化：以正文文本节点的累计字符偏移（start + length）记录——<mark> 包裹不改变文本总量，
+    // 增删标注后同一偏移仍指向同一段文字；文章文本变化导致偏移漂移时按边界校验静默丢弃
+    function createAnnotationController() {
+        let pendingRange = null;
+        const getArticle = () => document.querySelector('article');
+        const getToolbar = () => document.querySelector('#annotate-toolbar');
+        const getAnnotateButton = () => document.querySelector('.toolbox-annotate');
+        const toolbarNode = (selector) => document.querySelector('#annotate-toolbar ' + selector);
+        const isAnnotating = () => document.body.classList.contains('annotating');
+        const syncAnnotateButton = () => {
+            const button = getAnnotateButton();
+            if (button === null)
+                return;
+            const on = isAnnotating();
+            button.classList.toggle('active', on);
+            button.setAttribute('aria-pressed', String(on));
+        };
+        const setAnnotating = (on) => {
+            document.body.classList.toggle('annotating', on);
+            syncAnnotateButton();
+            if (on)
+                return;
+            hideToolbar();
+            pendingRange = null;
+        };
+        const showToolbar = (range) => {
+            const toolbar = getToolbar();
+            if (toolbar === null)
+                return;
+            placeToolbar(range);
+            toolbar.classList.add('open');
+            toolbar.setAttribute('aria-hidden', 'false');
+            updateToolbarButtons(range);
+        };
+        const hideToolbar = () => {
+            const toolbar = getToolbar();
+            if (toolbar === null)
+                return;
+            toolbar.classList.remove('open');
+            toolbar.setAttribute('aria-hidden', 'true');
+            closeColors();
+        };
+        const placeToolbar = (range) => {
+            const toolbar = getToolbar();
+            if (toolbar === null || typeof range.getBoundingClientRect !== 'function')
+                return;
+            const rect = range.getBoundingClientRect();
+            if (rect.width === 0 && rect.height === 0)
+                return;
+            const margin = 8;
+            const gap = 6;
+            const width = toolbar.offsetWidth;
+            const height = toolbar.offsetHeight;
+            let left = rect.left + rect.width / 2 - width / 2;
+            left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+            let top = rect.top - height - gap;
+            if (top < margin)
+                top = Math.min(rect.bottom + gap, window.innerHeight - height - margin);
+            toolbar.style.left = left + 'px';
+            toolbar.style.top = top + 'px';
+        };
+        const onSelectionChange = () => {
+            if (!isAnnotating())
+                return;
+            const range = selectionRange();
+            if (range === null)
+                return hideToolbar();
+            showToolbar(range);
+        };
+        const closeColors = () => {
+            const panel = toolbarNode('.at-colors');
+            if (panel !== null)
+                panel.classList.remove('open');
+        };
+        const toolbarActions = {
+            'at-annotate': () => annotateSelection(),
+            'at-clear': () => clearSelectionHighlights(),
+            'at-copy': () => copySelection(),
+            'at-search': () => searchSelection(),
+            'at-color': () => toggleColors()
+        };
+        const onToolbarClick = (event) => {
+            const target = event.target;
+            if (target === null || typeof target.closest !== 'function' || target.closest('#annotate-toolbar') === null)
+                return;
+            const colorOption = target.closest('.at-color-opt');
+            if (colorOption !== null)
+                return setAnnotateColor(colorOption.getAttribute('data-color'));
+            const button = target.closest('.at-btn');
+            if (button === null)
+                return;
+            for (const name of Array.from(button.classList)) {
+                const action = toolbarActions[name];
+                if (action !== undefined)
+                    return action();
+            }
+        };
+        // 选区覆盖判定：选区被高亮全覆盖 → 无从新增（annotate 禁用）；不含高亮 → 无从清除（clear 禁用）
+        const updateToolbarButtons = (range) => {
+            const article = getArticle();
+            const annotate = toolbarNode('.at-annotate');
+            const clear = toolbarNode('.at-clear');
+            if (article === null || annotate === null || clear === null)
+                return;
+            const layout = textLayout(article);
+            const start = boundaryOffset(range.startContainer, range.startOffset, layout);
+            const end = boundaryOffset(range.endContainer, range.endOffset, layout);
+            const state = start === null || end === null || start >= end ? null : selectionGaps(article, layout, start, end);
+            annotate.disabled = state === null || state.gaps.length === 0;
+            clear.disabled = state === null || !state.hasHighlight;
+        };
+        const refreshToolbarButtons = () => {
+            const toolbar = getToolbar();
+            if (toolbar === null || !toolbar.classList.contains('open') || !isAnnotating())
+                return;
+            const range = selectionRange();
+            if (range === null)
+                hideToolbar();
+            else
+                updateToolbarButtons(range);
+        };
+        // 选区 [start,end) 内「未被既有高亮覆盖」的补齐段落；hasHighlight = 选区含既有高亮
+        const selectionGaps = (article, layout, start, end) => {
+            const covered = Array.from(article.querySelectorAll('.hl-mark'))
+                .map((mark) => markOffsets(mark, layout))
+                .filter((offsets) => offsets !== null && offsets.start < end && start < offsets.end)
+                .map((offsets) => ({ start: Math.max(offsets.start, start), end: Math.min(offsets.end, end) }))
+                .sort((left, right) => left.start - right.start);
+            const gaps = [];
+            let cursor = start;
+            covered.forEach((item) => {
+                if (item.start > cursor)
+                    gaps.push({ start: cursor, end: item.start });
+                cursor = Math.max(cursor, item.end);
+            });
+            if (cursor < end)
+                gaps.push({ start: cursor, end: end });
+            return { gaps: gaps, hasHighlight: covered.length !== 0 };
+        };
+        const isAnnotatable = (node) => {
+            const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+            const article = getArticle();
+            if (element === null || article === null || !article.contains(element))
+                return false;
+            return element.closest(ToolboxModules.EXCLUDED_SELECTOR) === null;
+        };
+        const textLayout = (root) => {
+            const nodes = [];
+            const starts = [];
+            let total = 0;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+                if (!isAnnotatable(node))
+                    continue;
+                nodes.push(node);
+                starts.push(total);
+                total += node.data.length;
+            }
+            return { nodes: nodes, starts: starts, total: total };
+        };
+        // 'from' 取 pivot 自身、被包含或其后的首个文本；'after' 取 pivot 之后且不含于 pivot 的首个文本
+        const adjacentText = (pivot, layout, mode) => {
+            for (const text of layout.nodes) {
+                if (mode === 'from' && text === pivot)
+                    return text;
+                const relation = pivot.compareDocumentPosition(text);
+                const following = (relation & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+                const inside = (relation & Node.DOCUMENT_POSITION_CONTAINED_BY) !== 0;
+                if (mode === 'from' ? following || inside : following && !inside)
+                    return text;
+            }
+            return null;
+        };
+        const boundaryOffset = (node, offset, layout) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const index = layout.nodes.indexOf(node);
+                if (index < 0)
+                    return null;
+                return layout.starts[index] + Math.min(offset, node.data.length);
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE)
+                return null;
+            const element = node;
+            const found = offset < element.childNodes.length
+                ? adjacentText(element.childNodes[offset], layout, 'from')
+                : adjacentText(element, layout, 'after');
+            return found === null ? layout.total : layout.starts[layout.nodes.indexOf(found)];
+        };
+        // 起边界取 position 之后的首个文本（避免范围横跨其间元素，如被排除的 #post-info）；
+        // 止边界取 position 之前的末个文本（避免吞入其后元素的标签结构，产生嵌套 mark）
+        const pointAt = (layout, position, forward) => {
+            if (layout.nodes.length === 0)
+                return null;
+            const step = forward ? 1 : -1;
+            const limit = forward ? layout.nodes.length : -1;
+            for (let index = forward ? 0 : layout.nodes.length - 1; index !== limit; index += step) {
+                const node = layout.nodes[index];
+                const start = layout.starts[index];
+                const end = start + node.data.length;
+                if (forward ? position < end : position > start)
+                    return { node, offset: Math.min(Math.max(position - start, 0), node.data.length) };
+            }
+            const edge = forward ? layout.nodes.length - 1 : 0;
+            return { node: layout.nodes[edge], offset: forward ? layout.nodes[edge].data.length : 0 };
+        };
+        const rangeFromOffsets = (layout, start, end) => {
+            if (start < 0 || end > layout.total || start >= end)
+                return null;
+            const startPoint = pointAt(layout, start, true);
+            const endPoint = pointAt(layout, end, false);
+            if (startPoint === null || endPoint === null)
+                return null;
+            const range = document.createRange();
+            range.setStart(startPoint.node, startPoint.offset);
+            range.setEnd(endPoint.node, endPoint.offset);
+            return range;
+        };
+        const wrapRange = (range, color, text) => {
+            const mark = document.createElement('mark');
+            mark.className = 'hl-mark';
+            mark.setAttribute('data-color', color);
+            if (text !== undefined)
+                mark.setAttribute('data-text', text);
+            try {
+                range.surroundContents(mark);
+                return true;
+            }
+            catch (e) { }
+            try {
+                mark.appendChild(range.extractContents());
+                range.insertNode(mark);
+                return true;
+            }
+            catch (error) {
+                return false;
+            }
+        };
+        const unwrapMark = (mark) => {
+            const parent = mark.parentNode;
+            if (parent === null)
+                return;
+            while (mark.firstChild !== null) {
+                parent.insertBefore(mark.firstChild, mark);
+            }
+            parent.removeChild(mark);
+            parent.normalize();
+        };
+        const removeAllMarks = (article) => {
+            article.querySelectorAll('.hl-mark').forEach((mark) => unwrapMark(mark));
+        };
+        const markOffsets = (mark, layout) => {
+            const range = document.createRange();
+            range.selectNodeContents(mark);
+            const start = boundaryOffset(range.startContainer, range.startOffset, layout);
+            const end = boundaryOffset(range.endContainer, range.endOffset, layout);
+            if (start === null || end === null || start >= end)
+                return null;
+            return { start: start, end: end };
+        };
+        const isRangeAnnotatable = (range) => !range.collapsed && isAnnotatable(range.startContainer) && isAnnotatable(range.endContainer);
+        const selectionRange = () => {
+            const selection = window.getSelection();
+            if (selection === null || selection.rangeCount === 0 || selection.isCollapsed)
+                return null;
+            const range = selection.getRangeAt(0);
+            return isRangeAnnotatable(range) ? range : null;
+        };
+        const onMouseDown = (event) => {
+            pendingRange = null;
+            const target = event.target;
+            if (target === null || typeof target.closest !== 'function')
+                return;
+            const inToolbar = target.closest('#annotate-toolbar') !== null;
+            if (!inToolbar && target.closest('.toolbox-annotate') === null)
+                return;
+            // 阻止默认（选区折叠 / 焦点转移）：否则 selectionchange 会在 click 之前隐藏工具条、丢失目标选区
+            if (inToolbar)
+                event.preventDefault();
+            const selection = window.getSelection();
+            if (selection === null || selection.rangeCount === 0 || selection.isCollapsed)
+                return;
+            pendingRange = selection.getRangeAt(0).cloneRange();
+        };
+        const annotate = () => {
+            const on = !isAnnotating();
+            setAnnotating(on);
+            if (on) {
+                const range = resolveRange();
+                if (range !== null)
+                    highlightRange(range);
+            }
+        };
+        // 只补选区中未标注的部分（按当前色新增）；既有高亮保持原样（不重着色、不删除、不合并）
+        const highlightRange = (range) => {
+            const article = getArticle();
+            if (article === null)
+                return;
+            const layout = textLayout(article);
+            const start = boundaryOffset(range.startContainer, range.startOffset, layout);
+            const end = boundaryOffset(range.endContainer, range.endOffset, layout);
+            const gaps = start === null || end === null || start >= end ? [] : selectionGaps(article, layout, start, end).gaps;
+            let wrapped = false;
+            gaps.forEach((gap) => {
+                const gapRange = rangeFromOffsets(textLayout(article), gap.start, gap.end);
+                if (gapRange !== null) {
+                    const text = gapRange.toString();
+                    if (wrapRange(gapRange, ToolboxModules.readAnnotateColor(), text))
+                        wrapped = true;
+                }
+            });
+            if (wrapped)
+                persistHighlights();
+        };
+        const onMarkClick = (event) => {
+            // 标注模式下点击标注文字不移除——由工具栏「清除」按钮操作
+            if (isAnnotating())
+                return;
+            const target = event.target;
+            if (target === null || typeof target.closest !== 'function')
+                return;
+            const mark = target.closest('.hl-mark');
+            if (mark === null || !isAnnotatable(mark))
+                return;
+            unwrapMark(mark);
+            persistHighlights();
+        };
+        const resolveRange = () => {
+            const current = selectionRange();
+            if (current !== null)
+                return current;
+            if (pendingRange !== null && isRangeAnnotatable(pendingRange))
+                return pendingRange;
+            return null;
+        };
+        const annotateSelection = () => {
+            const range = resolveRange();
+            if (range !== null)
+                highlightRange(range);
+            refreshToolbarButtons();
+        };
+        const clearSelectionHighlights = () => {
+            const range = resolveRange();
+            const article = getArticle();
+            if (range === null || article === null)
+                return refreshToolbarButtons();
+            const layout = textLayout(article);
+            const start = boundaryOffset(range.startContainer, range.startOffset, layout);
+            const end = boundaryOffset(range.endContainer, range.endOffset, layout);
+            if (start === null || end === null || start >= end)
+                return refreshToolbarButtons();
+            const affected = [];
+            article.querySelectorAll('.hl-mark').forEach((mark) => {
+                const offsets = markOffsets(mark, layout);
+                if (offsets !== null && offsets.start < end && start < offsets.end) {
+                    affected.push({ start: offsets.start, end: offsets.end, color: markColor(mark) });
+                    unwrapMark(mark);
+                }
+            });
+            affected.forEach((item) => {
+                const beforeEnd = Math.min(item.end, start);
+                const afterStart = Math.max(item.start, end);
+                if (beforeEnd > item.start) {
+                    const before = rangeFromOffsets(textLayout(article), item.start, beforeEnd);
+                    if (before !== null)
+                        wrapRange(before, item.color);
+                }
+                if (item.end > afterStart) {
+                    const after = rangeFromOffsets(textLayout(article), afterStart, item.end);
+                    if (after !== null)
+                        wrapRange(after, item.color);
+                }
+            });
+            if (affected.length !== 0)
+                persistHighlights();
+            refreshToolbarButtons();
+        };
+        const copySelection = () => {
+            const range = resolveRange();
+            if (range === null)
+                return;
+            const text = range.toString();
+            if (text.length === 0)
+                return;
+            const complete = () => {
+                const button = toolbarNode('.at-copy');
+                if (button === null)
+                    return;
+                button.classList.add('copied');
+                setTimeout(() => button.classList.remove('copied'), ToolboxModules.COPIED_DELAY);
+            };
+            const fallback = () => {
+                if (typeof document.execCommand === 'function' && document.execCommand('copy'))
+                    complete();
+            };
+            try {
+                navigator.clipboard.writeText(text).then(complete).catch(fallback);
+            }
+            catch (e) {
+                fallback();
+            }
+        };
+        const searchSelection = () => {
+            const range = resolveRange();
+            if (range === null)
+                return;
+            const keyword = range.toString().trim();
+            if (keyword.length === 0)
+                return;
+            const search = window.searchWithKeyword;
+            if (typeof search === 'function')
+                search(keyword);
+            hideToolbar();
+        };
+        const toggleColors = () => {
+            const panel = toolbarNode('.at-colors');
+            if (panel !== null)
+                panel.classList.toggle('open');
+        };
+        const setAnnotateColor = (color) => {
+            if (color === null || !ToolboxModules.ANNOTATE_COLORS.includes(color))
+                return;
+            ToolboxModules.writeAnnotateColor(color);
+            applyAnnotateColor();
+        };
+        const applyAnnotateColor = () => {
+            const color = ToolboxModules.readAnnotateColor();
+            const button = toolbarNode('.at-color');
+            if (button !== null)
+                button.setAttribute('data-color', color);
+            document.querySelectorAll('#annotate-toolbar .at-color-opt').forEach((option) => {
+                option.classList.toggle('active', option.getAttribute('data-color') === color);
+            });
+        };
+        const markColor = (mark) => {
+            const color = mark.getAttribute('data-color');
+            return color !== null && ToolboxModules.ANNOTATE_COLORS.includes(color) ? color : 'yellow';
+        };
+        const persistHighlights = () => {
+            const article = getArticle();
+            if (article === null)
+                return;
+            const layout = textLayout(article);
+            const ranges = [];
+            article.querySelectorAll('.hl-mark').forEach((mark) => {
+                const offsets = markOffsets(mark, layout);
+                if (offsets !== null) {
+                    const item = { start: offsets.start, length: offsets.end - offsets.start };
+                    const color = markColor(mark);
+                    if (color !== 'yellow')
+                        item.color = color;
+                    const text = mark.getAttribute('data-text') || undefined;
+                    if (text !== undefined)
+                        item.text = text;
+                    ranges.push(item);
+                }
+            });
+            ranges.sort((left, right) => left.start - right.start);
+            ToolboxModules.writeRaw(ToolboxModules.highlightKey(), ranges.length === 0 ? null : ToolboxModules.serializeHighlights(ranges));
+        };
+        const restoreHighlights = () => {
+            const article = getArticle();
+            const ranges = ToolboxModules.parseHighlights(ToolboxModules.readRaw(ToolboxModules.highlightKey()));
+            if (article === null || ranges.length === 0)
+                return;
+            removeAllMarks(article);
+            ranges.sort((left, right) => left.start - right.start);
+            ranges.forEach((item) => {
+                const range = rangeFromOffsets(textLayout(article), item.start, item.start + item.length);
+                if (range !== null)
+                    wrapRange(range, item.color ?? 'yellow', item.text);
+            });
+        };
+        const restore = () => {
+            hideToolbar();
+            restoreHighlights();
+            syncAnnotateButton();
+            applyAnnotateColor();
+        };
+        document.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('selectionchange', onSelectionChange);
+        document.addEventListener('click', onMarkClick);
+        document.addEventListener('click', onToolbarClick);
+        const main = document.querySelector('main');
+        if (main !== null)
+            main.addEventListener('scroll', hideToolbar, { passive: true });
+        return {
+            annotate,
+            isAnnotating,
+            restore,
+            closeColors,
+            hideToolbar,
+            dismissPendingSelection: () => { pendingRange = null; },
+            refreshToolbarButtons
+        };
+    }
+    ToolboxModules.createAnnotationController = createAnnotationController;
+})(ToolboxModules || (ToolboxModules = {}));
+// 分享与 .copied 反馈：唯一 status 写入者为共享 lease，自有唯一一次性 timer
+var ToolboxModules;
+(function (ToolboxModules) {
+    ToolboxModules.COPIED_DELAY = 1200;
+    function createShareController(closeToolbox) {
+        const getShareButton = () => document.querySelector('.toolbox-share');
+        const copyShareUrl = (url) => {
+            const button = getShareButton();
+            const complete = () => {
+                if (button === null) {
+                    return;
+                }
+                claimStatus(button.dataset.labelCopied || '', { owner: 'share' });
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    closeToolbox();
+                }, ToolboxModules.COPIED_DELAY);
+            };
+            try {
+                navigator.clipboard.writeText(url).then(complete).catch(() => { });
+            }
+            catch (e) { }
+        };
+        return {
+            share: () => {
+                const data = { title: document.title, url: window.location.href };
+                if (typeof navigator.share === 'function') {
+                    try {
+                        navigator.share(data).then(() => closeToolbox()).catch(() => { });
+                    }
+                    catch (e) { }
+                    return;
+                }
+                copyShareUrl(data.url);
+            }
+        };
+    }
+    ToolboxModules.createShareController = createShareController;
+})(ToolboxModules || (ToolboxModules = {}));
+// 收藏与 .saved 反馈：不创建任何 UI timer，status 写入经共享 lease
+var ToolboxModules;
+(function (ToolboxModules) {
+    function createFavoriteController() {
+        const getFavoriteButton = () => document.querySelector('.toolbox-favorite');
+        const readFavorites = () => ToolboxModules.parseFavorites(ToolboxModules.readRaw(ToolboxModules.FAVORITES_KEY));
+        const applyFavoriteState = () => {
+            const button = getFavoriteButton();
+            if (button === null) {
+                return;
+            }
+            const saved = readFavorites()[window.location.pathname] !== undefined;
+            button.classList.toggle('saved', saved);
+            button.setAttribute('aria-pressed', String(saved));
+            const label = button.getAttribute(saved ? 'data-label-saved' : 'data-label-default');
+            if (label !== null) {
+                button.setAttribute('title', label);
+                button.setAttribute('aria-label', label);
+            }
+        };
+        return {
+            favorite: () => {
+                const favorites = readFavorites();
+                const path = window.location.pathname;
+                const wasSaved = favorites[path] !== undefined;
+                if (wasSaved) {
+                    delete favorites[path];
+                }
+                else {
+                    favorites[path] = { url: window.location.href, title: document.title, time: Date.now() };
+                }
+                ToolboxModules.writeRaw(ToolboxModules.FAVORITES_KEY, Object.keys(favorites).length === 0 ? null : ToolboxModules.serializeFavorites(favorites));
+                applyFavoriteState();
+                const button = getFavoriteButton();
+                if (button !== null) {
+                    claimStatus(wasSaved
+                        ? button.dataset.labelRemovedStatus || ''
+                        : button.dataset.labelSavedStatus || '', { owner: 'favorite' });
+                }
+            },
+            restore: applyFavoriteState
+        };
+    }
+    ToolboxModules.createFavoriteController = createFavoriteController;
+})(ToolboxModules || (ToolboxModules = {}));
+// 工具箱 facade：只拥有自身 DOM 状态、data-action 委托、外点/Escape 与既有 pjax 重置，
+// 标注 / 分享 / 收藏分别下沉到同层 controller
+class Toolbox {
+    annotation;
+    shareController;
+    favoriteController;
+    get toolbox() {
+        return document.querySelector('.toolbox');
+    }
+    get toggleButton() {
+        return document.querySelector('#to-toolbox');
+    }
     applyState = (open) => {
         const toolbox = this.toolbox;
         if (toolbox !== null) {
@@ -2342,23 +3005,16 @@ class Toolbox {
         }
         if (open) {
             document.addEventListener('click', this.onOutsideClick);
+            window.bgmControl?.clearStatus();
         }
         else {
             document.removeEventListener('click', this.onOutsideClick);
-            this.pendingRange = null;
+            this.annotation.dismissPendingSelection();
         }
     };
     toggle = () => {
         const toolbox = this.toolbox;
         this.applyState(toolbox === null || !toolbox.classList.contains('toolbox-open'));
-    };
-    writeStatus = (message) => {
-        const status = document.querySelector('.toolbox-status');
-        if (status === null) {
-            return;
-        }
-        status.textContent = message;
-        status.hidden = message === '';
     };
     dispatchAction = (action) => {
         switch (action) {
@@ -2413,90 +3069,7 @@ class Toolbox {
         }
         this.applyState(false);
     };
-    onKeyup = (event) => {
-        if (event.key === 'Escape') {
-            this.applyState(false);
-            this.hideToolbar();
-        }
-    };
-    isAnnotating = () => {
-        return document.body.classList.contains('annotating');
-    };
-    setAnnotating = (on) => {
-        document.body.classList.toggle('annotating', on);
-        this.syncAnnotateButton();
-        if (!on) {
-            this.hideToolbar();
-            this.pendingRange = null;
-        }
-    };
-    syncAnnotateButton = () => {
-        const button = this.annotateButton;
-        if (button === null) {
-            return;
-        }
-        const on = this.isAnnotating();
-        button.classList.toggle('active', on);
-        button.setAttribute('aria-pressed', String(on));
-    };
-    showToolbar = (range) => {
-        const toolbar = this.annotateToolbar;
-        if (toolbar === null) {
-            return;
-        }
-        this.placeToolbar(range);
-        toolbar.classList.add('open');
-        toolbar.setAttribute('aria-hidden', 'false');
-        this.updateToolbarButtons(range);
-    };
-    hideToolbar = () => {
-        const toolbar = this.annotateToolbar;
-        if (toolbar === null) {
-            return;
-        }
-        toolbar.classList.remove('open');
-        toolbar.setAttribute('aria-hidden', 'true');
-        this.closeColors();
-    };
-    placeToolbar = (range) => {
-        const toolbar = this.annotateToolbar;
-        if (toolbar === null || typeof range.getBoundingClientRect !== 'function') {
-            return;
-        }
-        const rect = range.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) {
-            return;
-        }
-        const margin = 8;
-        const gap = 6;
-        const width = toolbar.offsetWidth;
-        const height = toolbar.offsetHeight;
-        let left = rect.left + rect.width / 2 - width / 2;
-        left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
-        let top = rect.top - height - gap;
-        if (top < margin) {
-            top = Math.min(rect.bottom + gap, window.innerHeight - height - margin);
-        }
-        toolbar.style.left = left + 'px';
-        toolbar.style.top = top + 'px';
-    };
-    onSelectionChange = () => {
-        if (!this.isAnnotating()) {
-            return;
-        }
-        const range = this.selectionRange();
-        if (range === null) {
-            this.hideToolbar();
-            return;
-        }
-        this.showToolbar(range);
-    };
-    closeColors = () => {
-        const panel = this.colorPanel;
-        if (panel !== null) {
-            panel.classList.remove('open');
-        }
-    };
+    // 色板自动关闭的唯一 owner：命中色板本体或选项时放行，其余目标下沉到标注 controller
     onDocumentClick = (event) => {
         const target = event.target;
         if (target === null || typeof target.closest !== 'function') {
@@ -2505,631 +3078,44 @@ class Toolbox {
         if (target.closest('.at-color') !== null || target.closest('.at-colors') !== null) {
             return;
         }
-        this.closeColors();
+        this.annotation.closeColors();
     };
-    onToolbarClick = (event) => {
-        const target = event.target;
-        if (target === null || typeof target.closest !== 'function' || target.closest('#annotate-toolbar') === null) {
-            return;
-        }
-        const colorOption = target.closest('.at-color-opt');
-        if (colorOption !== null) {
-            this.setAnnotateColor(colorOption.getAttribute('data-color'));
-            return;
-        }
-        const button = target.closest('.at-btn');
-        if (button === null) {
-            return;
-        }
-        if (button.classList.contains('at-annotate')) {
-            this.annotateSelection();
-        }
-        else if (button.classList.contains('at-clear')) {
-            this.clearSelectionHighlights();
-        }
-        else if (button.classList.contains('at-copy')) {
-            this.copySelection();
-        }
-        else if (button.classList.contains('at-search')) {
-            this.searchSelection();
-        }
-        else if (button.classList.contains('at-color')) {
-            this.toggleColors();
-        }
-    };
-    // 选区覆盖判定：选区被高亮全覆盖 → 无从新增（annotate 禁用）；不含高亮 → 无从清除（clear 禁用）
-    updateToolbarButtons = (range) => {
-        const article = this.article;
-        const annotate = this.toolbarAnnotateButton;
-        const clear = this.toolbarClearButton;
-        if (article === null || annotate === null || clear === null) {
-            return;
-        }
-        const layout = this.textLayout(article);
-        const start = this.boundaryOffset(range.startContainer, range.startOffset, layout);
-        const end = this.boundaryOffset(range.endContainer, range.endOffset, layout);
-        if (start === null || end === null || start >= end) {
-            annotate.disabled = true;
-            clear.disabled = true;
-            return;
-        }
-        const state = this.selectionGaps(article, layout, start, end);
-        annotate.disabled = state.gaps.length === 0;
-        clear.disabled = !state.hasHighlight;
-    };
-    refreshToolbarButtons = () => {
-        const toolbar = this.annotateToolbar;
-        if (toolbar === null || !toolbar.classList.contains('open') || !this.isAnnotating()) {
-            return;
-        }
-        const range = this.selectionRange();
-        if (range === null) {
-            this.hideToolbar();
-            return;
-        }
-        this.updateToolbarButtons(range);
-    };
-    // 选区 [start,end) 内「未被既有高亮覆盖」的补齐段落；hasHighlight = 选区含既有高亮
-    selectionGaps = (article, layout, start, end) => {
-        const covered = [];
-        article.querySelectorAll('.hl-mark').forEach((mark) => {
-            const offsets = this.markOffsets(mark, layout);
-            if (offsets !== null && offsets.start < end && start < offsets.end) {
-                covered.push({ start: Math.max(offsets.start, start), end: Math.min(offsets.end, end) });
-            }
-        });
-        covered.sort((left, right) => left.start - right.start);
-        const gaps = [];
-        let cursor = start;
-        covered.forEach((item) => {
-            if (item.start > cursor) {
-                gaps.push({ start: cursor, end: item.start });
-            }
-            cursor = Math.max(cursor, item.end);
-        });
-        if (cursor < end) {
-            gaps.push({ start: cursor, end: end });
-        }
-        return { gaps: gaps, hasHighlight: covered.length !== 0 };
-    };
-    isAnnotatable = (node) => {
-        const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-        const article = this.article;
-        if (element === null || article === null || !article.contains(element)) {
-            return false;
-        }
-        return element.closest(Toolbox.EXCLUDED_SELECTOR) === null;
-    };
-    textLayout = (root) => {
-        const nodes = [];
-        const starts = [];
-        let total = 0;
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-            if (!this.isAnnotatable(node)) {
-                continue;
-            }
-            nodes.push(node);
-            starts.push(total);
-            total += node.data.length;
-        }
-        return { nodes: nodes, starts: starts, total: total };
-    };
-    firstTextFrom = (node, layout) => {
-        for (const text of layout.nodes) {
-            if (text === node) {
-                return text;
-            }
-            const relation = node.compareDocumentPosition(text);
-            if ((relation & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY)) !== 0) {
-                return text;
-            }
-        }
-        return null;
-    };
-    firstTextAfter = (element, layout) => {
-        for (const text of layout.nodes) {
-            const relation = element.compareDocumentPosition(text);
-            if ((relation & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 && (relation & Node.DOCUMENT_POSITION_CONTAINED_BY) === 0) {
-                return text;
-            }
-        }
-        return null;
-    };
-    boundaryOffset = (node, offset, layout) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-            const index = layout.nodes.indexOf(node);
-            if (index < 0) {
-                return null;
-            }
-            return layout.starts[index] + Math.min(offset, node.data.length);
-        }
-        if (node.nodeType !== Node.ELEMENT_NODE) {
-            return null;
-        }
-        const element = node;
-        const found = offset < element.childNodes.length
-            ? this.firstTextFrom(element.childNodes[offset], layout)
-            : this.firstTextAfter(element, layout);
-        return found === null ? layout.total : layout.starts[layout.nodes.indexOf(found)];
-    };
-    // 起边界取 position 之后的首个文本（避免范围横跨其间元素，如被排除的 #post-info）；
-    // 止边界取 position 之前的末个文本（避免吞入其后元素的标签结构，产生嵌套 mark）
-    pointAt = (layout, position, forward) => {
-        if (layout.nodes.length === 0) {
-            return null;
-        }
-        if (forward) {
-            for (let index = 0; index < layout.nodes.length; index++) {
-                const end = layout.starts[index] + layout.nodes[index].data.length;
-                if (position < end) {
-                    return { node: layout.nodes[index], offset: position - layout.starts[index] };
-                }
-            }
-            const last = layout.nodes.length - 1;
-            return { node: layout.nodes[last], offset: layout.nodes[last].data.length };
-        }
-        for (let index = layout.nodes.length - 1; index >= 0; index--) {
-            const start = layout.starts[index];
-            if (position > start) {
-                return { node: layout.nodes[index], offset: Math.min(position - start, layout.nodes[index].data.length) };
-            }
-        }
-        return { node: layout.nodes[0], offset: 0 };
-    };
-    rangeFromOffsets = (layout, start, end) => {
-        if (start < 0 || end > layout.total || start >= end) {
-            return null;
-        }
-        const startPoint = this.pointAt(layout, start, true);
-        const endPoint = this.pointAt(layout, end, false);
-        if (startPoint === null || endPoint === null) {
-            return null;
-        }
-        const range = document.createRange();
-        range.setStart(startPoint.node, startPoint.offset);
-        range.setEnd(endPoint.node, endPoint.offset);
-        return range;
-    };
-    wrapRange = (range, color, text) => {
-        const mark = document.createElement('mark');
-        mark.className = 'hl-mark';
-        mark.setAttribute('data-color', color);
-        if (text !== undefined) {
-            mark.setAttribute('data-text', text);
-        }
-        try {
-            range.surroundContents(mark);
-            return true;
-        }
-        catch (e) {
-            try {
-                mark.appendChild(range.extractContents());
-                range.insertNode(mark);
-                return true;
-            }
-            catch (error) {
-                return false;
-            }
-        }
-    };
-    unwrapMark = (mark) => {
-        const parent = mark.parentNode;
-        if (parent === null) {
-            return;
-        }
-        while (mark.firstChild !== null) {
-            parent.insertBefore(mark.firstChild, mark);
-        }
-        parent.removeChild(mark);
-        parent.normalize();
-    };
-    removeAllMarks = (article) => {
-        article.querySelectorAll('.hl-mark').forEach((mark) => this.unwrapMark(mark));
-    };
-    markOffsets = (mark, layout) => {
-        const range = document.createRange();
-        range.selectNodeContents(mark);
-        const start = this.boundaryOffset(range.startContainer, range.startOffset, layout);
-        const end = this.boundaryOffset(range.endContainer, range.endOffset, layout);
-        if (start === null || end === null || start >= end) {
-            return null;
-        }
-        return { start: start, end: end };
-    };
-    selectionRange = () => {
-        const selection = window.getSelection();
-        if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) {
-            return null;
-        }
-        const range = selection.getRangeAt(0);
-        if (!this.isRangeAnnotatable(range)) {
-            return null;
-        }
-        return range;
-    };
-    isRangeAnnotatable = (range) => {
-        return !range.collapsed && this.isAnnotatable(range.startContainer) && this.isAnnotatable(range.endContainer);
-    };
-    onMouseDown = (event) => {
-        this.pendingRange = null;
-        const target = event.target;
-        if (target === null || typeof target.closest !== 'function') {
-            return;
-        }
-        const inToolbar = target.closest('#annotate-toolbar') !== null;
-        if (!inToolbar && target.closest('.toolbox-annotate') === null) {
-            return;
-        }
-        if (inToolbar) {
-            // 阻止默认（选区折叠 / 焦点转移）：否则 selectionchange 会在 click 之前隐藏工具条、丢失目标选区
-            event.preventDefault();
-        }
-        const selection = window.getSelection();
-        if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) {
-            return;
-        }
-        this.pendingRange = selection.getRangeAt(0).cloneRange();
-    };
-    annotate = () => {
-        const on = !this.isAnnotating();
-        this.setAnnotating(on);
-        if (on) {
-            const range = this.resolveRange();
-            if (range !== null) {
-                this.highlightRange(range);
-            }
-        }
-        this.pendingRange = null;
-        this.applyState(false);
-    };
-    // 只补选区中未标注的部分（按当前色新增）；既有高亮保持原样（不重着色、不删除、不合并）
-    highlightRange = (range) => {
-        const article = this.article;
-        if (article === null) {
-            return;
-        }
-        const layout = this.textLayout(article);
-        const start = this.boundaryOffset(range.startContainer, range.startOffset, layout);
-        const end = this.boundaryOffset(range.endContainer, range.endOffset, layout);
-        if (start === null || end === null || start >= end) {
-            return;
-        }
-        const gaps = this.selectionGaps(article, layout, start, end).gaps;
-        let wrapped = false;
-        gaps.forEach((gap) => {
-            const gapRange = this.rangeFromOffsets(this.textLayout(article), gap.start, gap.end);
-            if (gapRange !== null) {
-                const text = gapRange.toString();
-                if (this.wrapRange(gapRange, this.currentAnnotateColor(), text)) {
-                    wrapped = true;
-                }
-            }
-        });
-        if (wrapped) {
-            this.persistHighlights();
-        }
-    };
-    onMarkClick = (event) => {
-        // 标注模式下点击标注文字不移除——由工具栏「清除」按钮操作
-        if (this.isAnnotating()) {
-            return;
-        }
-        const target = event.target;
-        if (target === null || typeof target.closest !== 'function') {
-            return;
-        }
-        const mark = target.closest('.hl-mark');
-        if (mark === null || !this.isAnnotatable(mark)) {
-            return;
-        }
-        this.unwrapMark(mark);
-        this.persistHighlights();
-    };
-    resolveRange = () => {
-        const current = this.selectionRange();
-        if (current !== null) {
-            return current;
-        }
-        if (this.pendingRange !== null && this.isRangeAnnotatable(this.pendingRange)) {
-            return this.pendingRange;
-        }
-        return null;
-    };
-    annotateSelection = () => {
-        const range = this.resolveRange();
-        if (range !== null) {
-            this.highlightRange(range);
-        }
-        this.refreshToolbarButtons();
-    };
-    clearSelectionHighlights = () => {
-        const range = this.resolveRange();
-        const article = this.article;
-        if (range === null || article === null) {
-            this.refreshToolbarButtons();
-            return;
-        }
-        const layout = this.textLayout(article);
-        const start = this.boundaryOffset(range.startContainer, range.startOffset, layout);
-        const end = this.boundaryOffset(range.endContainer, range.endOffset, layout);
-        if (start === null || end === null || start >= end) {
-            this.refreshToolbarButtons();
-            return;
-        }
-        const affected = [];
-        article.querySelectorAll('.hl-mark').forEach((mark) => {
-            const offsets = this.markOffsets(mark, layout);
-            if (offsets !== null && offsets.start < end && start < offsets.end) {
-                affected.push({ start: offsets.start, end: offsets.end, color: this.markColor(mark) });
-                this.unwrapMark(mark);
-            }
-        });
-        affected.forEach((item) => {
-            const beforeEnd = Math.min(item.end, start);
-            const afterStart = Math.max(item.start, end);
-            if (beforeEnd > item.start) {
-                const before = this.rangeFromOffsets(this.textLayout(article), item.start, beforeEnd);
-                if (before !== null) {
-                    this.wrapRange(before, item.color);
-                }
-            }
-            if (item.end > afterStart) {
-                const after = this.rangeFromOffsets(this.textLayout(article), afterStart, item.end);
-                if (after !== null) {
-                    this.wrapRange(after, item.color);
-                }
-            }
-        });
-        if (affected.length !== 0) {
-            this.persistHighlights();
-        }
-        this.refreshToolbarButtons();
-    };
-    copySelection = () => {
-        const range = this.resolveRange();
-        if (range === null) {
-            return;
-        }
-        const text = range.toString();
-        if (text.length === 0) {
-            return;
-        }
-        const complete = () => {
-            const button = this.copyButton;
-            if (button === null) {
-                return;
-            }
-            button.classList.add('copied');
-            setTimeout(() => button.classList.remove('copied'), Toolbox.COPIED_DELAY);
-        };
-        const fallback = () => {
-            if (typeof document.execCommand === 'function' && document.execCommand('copy')) {
-                complete();
-            }
-        };
-        try {
-            navigator.clipboard.writeText(text).then(complete).catch(fallback);
-        }
-        catch (e) {
-            fallback();
-        }
-    };
-    searchSelection = () => {
-        const range = this.resolveRange();
-        if (range === null) {
-            return;
-        }
-        const keyword = range.toString().trim();
-        if (keyword.length === 0) {
-            return;
-        }
-        const search = window.searchWithKeyword;
-        if (typeof search === 'function') {
-            search(keyword);
-        }
-        this.hideToolbar();
-    };
-    toggleColors = () => {
-        const panel = this.colorPanel;
-        if (panel !== null) {
-            panel.classList.toggle('open');
-        }
-    };
-    setAnnotateColor = (color) => {
-        if (color === null || !Toolbox.ANNOTATE_COLORS.includes(color)) {
-            return;
-        }
-        this.write(Toolbox.ANNOTATE_COLOR_KEY, color);
-        this.applyAnnotateColor();
-    };
-    currentAnnotateColor = () => {
-        const stored = this.read(Toolbox.ANNOTATE_COLOR_KEY);
-        return stored !== null && Toolbox.ANNOTATE_COLORS.includes(stored) ? stored : 'yellow';
-    };
-    applyAnnotateColor = () => {
-        const color = this.currentAnnotateColor();
-        const button = this.colorButton;
-        if (button !== null) {
-            button.setAttribute('data-color', color);
-        }
-        document.querySelectorAll('#annotate-toolbar .at-color-opt').forEach((option) => {
-            option.classList.toggle('active', option.getAttribute('data-color') === color);
-        });
-    };
-    markColor = (mark) => {
-        const color = mark.getAttribute('data-color');
-        return color !== null && Toolbox.ANNOTATE_COLORS.includes(color) ? color : 'yellow';
-    };
-    persistHighlights = () => {
-        const article = this.article;
-        if (article === null) {
-            return;
-        }
-        const layout = this.textLayout(article);
-        const ranges = [];
-        article.querySelectorAll('.hl-mark').forEach((mark) => {
-            const offsets = this.markOffsets(mark, layout);
-            if (offsets !== null) {
-                const color = this.markColor(mark);
-                const text = mark.getAttribute('data-text') || undefined;
-                const item = { start: offsets.start, length: offsets.end - offsets.start };
-                if (color !== 'yellow') {
-                    item.color = color;
-                }
-                if (text !== undefined) {
-                    item.text = text;
-                }
-                ranges.push(item);
-            }
-        });
-        ranges.sort((left, right) => left.start - right.start);
-        this.write(this.highlightKey(), ranges.length === 0 ? null : JSON.stringify({ version: 1, ranges: ranges }));
-    };
-    restoreHighlights = () => {
-        const article = this.article;
-        const stored = this.read(this.highlightKey());
-        if (article === null || stored === null) {
-            return;
-        }
-        const ranges = [];
-        try {
-            const parsed = JSON.parse(stored);
-            const container = parsed;
-            if (parsed !== null && typeof parsed === 'object' && Array.isArray(container.ranges)) {
-                container.ranges.forEach((item) => {
-                    const range = item;
-                    if (typeof range.start === 'number' && typeof range.length === 'number' && range.start >= 0 && range.length > 0) {
-                        const color = typeof range.color === 'string' && Toolbox.ANNOTATE_COLORS.includes(range.color) ? range.color : 'yellow';
-                        const text = typeof range.text === 'string' ? range.text : undefined;
-                        ranges.push({ start: range.start, length: range.length, color: color, text: text });
-                    }
-                });
-            }
-        }
-        catch (e) {
-            return;
-        }
-        if (ranges.length === 0) {
-            return;
-        }
-        this.removeAllMarks(article);
-        ranges.sort((left, right) => left.start - right.start);
-        ranges.forEach((item) => {
-            const range = this.rangeFromOffsets(this.textLayout(article), item.start, item.start + item.length);
-            if (range !== null) {
-                this.wrapRange(range, item.color ?? 'yellow', item.text);
-            }
-        });
-    };
-    share = () => {
-        const data = { title: document.title, url: window.location.href };
-        if (typeof navigator.share === 'function') {
-            try {
-                navigator.share(data).then(() => this.applyState(false)).catch(() => { });
-            }
-            catch (e) { }
-            return;
-        }
-        this.copyShareUrl(data.url);
-    };
-    copyShareUrl = (url) => {
-        const button = this.shareButton;
-        const complete = () => {
-            if (button === null) {
-                return;
-            }
-            this.writeStatus(button.dataset.labelCopied || '');
-            button.classList.add('copied');
-            setTimeout(() => {
-                button.classList.remove('copied');
-                this.applyState(false);
-            }, Toolbox.COPIED_DELAY);
-        };
-        try {
-            navigator.clipboard.writeText(url).then(complete).catch(() => { });
-        }
-        catch (e) { }
-    };
-    readFavorites = () => {
-        const stored = this.read(Toolbox.FAVORITES_KEY);
-        if (stored === null) {
-            return {};
-        }
-        try {
-            const parsed = JSON.parse(stored);
-            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                return {};
-            }
-            return parsed;
-        }
-        catch (e) {
-            return {};
-        }
-    };
-    applyFavoriteState = () => {
-        const button = this.favoriteButton;
-        if (button === null) {
-            return;
-        }
-        const saved = this.readFavorites()[window.location.pathname] !== undefined;
-        button.classList.toggle('saved', saved);
-        button.setAttribute('aria-pressed', String(saved));
-        const label = button.getAttribute(saved ? 'data-label-saved' : 'data-label-default');
-        if (label !== null) {
-            button.setAttribute('title', label);
-            button.setAttribute('aria-label', label);
-        }
-    };
-    favorite = () => {
-        const favorites = this.readFavorites();
-        const path = window.location.pathname;
-        const wasSaved = favorites[path] !== undefined;
-        if (wasSaved) {
-            delete favorites[path];
-        }
-        else {
-            favorites[path] = { url: window.location.href, title: document.title, time: Date.now() };
-        }
-        this.write(Toolbox.FAVORITES_KEY, Object.keys(favorites).length === 0 ? null : JSON.stringify(favorites));
-        this.applyFavoriteState();
-        const button = this.favoriteButton;
-        if (button !== null) {
-            this.writeStatus(wasSaved
-                ? button.dataset.labelRemovedStatus || ''
-                : button.dataset.labelSavedStatus || '');
+    onKeyup = (event) => {
+        if (event.key === 'Escape') {
+            this.applyState(false);
+            this.annotation.hideToolbar();
         }
     };
     onPjaxSuccess = () => {
         this.applyState(false);
-        this.hideToolbar();
-        this.restoreHighlights();
-        this.applyFavoriteState();
-        this.syncAnnotateButton();
-        this.applyAnnotateColor();
+        this.annotation.restore();
+        this.favoriteController.restore();
     };
     onPjaxSend = () => {
         this.applyState(false);
-        this.hideToolbar();
+        this.annotation.hideToolbar();
+    };
+    annotate = () => {
+        this.annotation.annotate();
+        this.applyState(false);
+    };
+    share = () => {
+        this.shareController.share();
+    };
+    favorite = () => {
+        this.favoriteController.favorite();
     };
     constructor() {
+        this.annotation = ToolboxModules.createAnnotationController();
+        this.shareController = ToolboxModules.createShareController(() => this.applyState(false));
+        this.favoriteController = ToolboxModules.createFavoriteController();
         document.addEventListener('keyup', this.onKeyup);
-        document.addEventListener('mousedown', this.onMouseDown);
         document.addEventListener('click', this.onToolboxClick);
-        document.addEventListener('click', this.onMarkClick);
-        document.addEventListener('click', this.onToolbarClick);
         document.addEventListener('click', this.onDocumentClick);
-        document.addEventListener('selectionchange', this.onSelectionChange);
         document.addEventListener('pjax:success', this.onPjaxSuccess);
         document.addEventListener('pjax:send', this.onPjaxSend);
-        const main = document.querySelector('main');
-        if (main !== null) {
-            main.addEventListener('scroll', this.hideToolbar, { passive: true });
-        }
-        this.restoreHighlights();
-        this.applyFavoriteState();
-        this.syncAnnotateButton();
-        this.applyAnnotateColor();
+        this.annotation.restore();
+        this.favoriteController.restore();
     }
 }
 var toolbox = new Toolbox();

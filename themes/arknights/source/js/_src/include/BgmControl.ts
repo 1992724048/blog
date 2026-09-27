@@ -1,3 +1,5 @@
+/// <reference path="ToolboxStatusLease.ts" />
+
 'use strict'
 
 class BgmControl {
@@ -100,6 +102,10 @@ class BgmControl {
     this.writeStatus(audio.paused
       ? button.dataset.labelPausedStatus || ''
       : button.dataset.labelPlayingStatus || '')
+  }
+
+  public clearStatus = (): void => {
+    clearStatus()
   }
 
   constructor() {
