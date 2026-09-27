@@ -70,12 +70,14 @@
     height 100%
 
   // 一级导航按内容自适应（border-box，高度 36px 与顶栏 36px 外高一致）：
-  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 9px×2 + 内容宽。
+  // min-width 归零、width auto，宽度完全由内容决定——左右内边距 12px×2 + 内容宽。
   // 两态内容宽相同：名称在桌面恒折叠（由 header.styl 桌面块的「中和一」拉平）、
   // 图标恒占满 --nav-icon-w 槽（「中和二」），故 active 与非 active 的按钮宽完全相等，
   // 切换当前页时其后按钮与右侧簇零位移（内边距取值只影响绝对宽度，不影响等宽与零位移）。
-  // 内边距 9px：实机反馈要求「每个按钮宽度缩小 6px」（12px → 9px，左右各减 3px），
-  // 按钮宽由 20px 槽 + 24px = 44px 收到 38px，接近方形更紧凑。
+  // 内边距 12px：按钮宽 = 图标槽 20px + 24px = 44px。实机反馈「给导航栏按钮增宽 6px」
+  // （9px → 12px，左右各加 3px，单按钮 38px → 44px），与 44px 命中盒同宽；
+  // 命中盒 44×36 仍满足 WCAG 2.5.8（≥24×24）。≥1024px 下六项共 264px，
+  // 连同社交簇与常驻搜索框仍远小于 1024px 视口，不构成窄桌面风险。
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
     width auto
@@ -84,7 +86,7 @@
     display flex
     align-items center
     justify-content center
-    padding 0 9px
+    padding 0 12px
 
   // 标题占满按钮可用宽度并水平居中：桌面端按钮内容只有图标槽，居中即图标居中
   .navContent > .navItem > :is(.navBlock, .navSecond) > .navItemTitle
