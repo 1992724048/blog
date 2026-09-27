@@ -23,7 +23,7 @@ const SNAPSHOT_FIELDS = Object.freeze([
   'snapshotHash'
 ]);
 const INTERNAL_SEARCH_PATTERN =
-  /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-(?:open|close))-|\u0000/u;
+  /data-arknights-line-marker|arknights-line-marker-v1:|\u0000/u;
 
 function hashText(value) {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');

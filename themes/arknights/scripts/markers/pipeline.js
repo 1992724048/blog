@@ -1,532 +1,258 @@
 'use strict'
 
+const { Marked } = require('marked')
 const { scanMarkers } = require('./lexer')
-const { parseMarker } = require('./parser')
 const { createTokenStore } = require('./token')
 const { createRegistry } = require('./registry')
 const { aiHandler } = require('./handlers/ai')
-const { projectsHandler } = require('./handlers/projects')
-const { createSentinelContext } = require('./sentinel')
+const { projectHandler } = require('./handlers/project')
+const { alertsHandler } = require('./handlers/alerts')
+const { editorHandler } = require('./handlers/editor')
+const { linkCardHandler } = require('./handlers/link-card')
 const {
-  CARRIER_SYMBOL,
   createRenderCarrier,
   attachCarrierBridge,
   restoreCarrierBridge,
   restoreCarrierBridgeFromData
 } = require('./carrier')
 const { installMarkedExtension } = require('./marked-extension')
+const { inspectSearchEncryption } = require('../filters/encryption-policy')
+const { materializeField } = require('./pipeline/materialize')
+const {
+  normalizeLineEndings, createSharedFailureHelpers
+} = require('./pipeline/failure')
+const { buildProjectGroups, applyProjectGroups } = require('./pipeline/project-grid')
+const { deriveExcerptProjection, readProjectedText } = require('./pipeline/projection')
 
 const SOURCE_FIELDS = Object.freeze(['content', 'excerpt'])
-const HTML_TEXT_ENTITIES = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;'
-})
-const MORE_PATTERN = /<!--\s*more\s*-->|<span\b[^>]*\bid=["']more["'][^>]*>\s*<\/span>/i
-const INTERNAL_HANDLER_PATTERN =
-  /data-arknights-carrier|arknights-marker-v1:|arknights-(?:pj-card|grid-(?:open|close))-|\u0000/u
-const CARRIER_WRAPPER_NAMESPACE_PATTERN = /data-arknights-carrier\b/giu
-const CARRIER_WRAPPER_ATTRIBUTE_PATTERN =
-  /data-arknights-carrier\s*=\s*(?:"([^"]*)"|'([^']*)')/giu
+const PRODUCTION_HANDLERS = Object.freeze([
+  aiHandler, projectHandler, alertsHandler, editorHandler, linkCardHandler
+])
+const ALLOWED_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
+const ALLOWED_IMAGE_SCHEMES = new Set(['http:', 'https:'])
+const SCHEME_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*):/
+const URL_NOISE_PATTERN = /[\u0000-\u0020]/g
+const HTML_TEXT_ENTITIES = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })
+const PENDING_STATES = new Set(['pending-render', 'excerpt-pending'])
+const environmentSlots = new WeakMap()
+const contextRegistrations = new WeakMap()
 
 function escapeHtmlText(value) {
   return value.replace(/[&<>]/g, character => HTML_TEXT_ENTITIES[character])
 }
 
-function createFieldFallback(value) { return escapeHtmlText(value.replaceAll('\u0000', '\uFFFD')) }
-
-function isDataObject(data) { return data !== null && typeof data === 'object' && !Array.isArray(data) }
-
-function isEncrypted(data) {
-  try {
-    const encrypt = data.encrypt
-    const password = data.password
-    return Boolean(encrypt) ||
-      (password !== undefined && password !== null && password !== '')
-  } catch {
-    return true
-  }
-}
-
-function collectSourceFields(data) {
-  const fields = []
-  const content = data.content
-  if (typeof content === 'string') {
-    fields.push({ field: 'content', source: content, explicit: false })
-  }
-  if (Object.hasOwn(data, 'excerpt')) {
-    const excerpt = data.excerpt
-    if (typeof excerpt === 'string') {
-      fields.push({ field: 'excerpt', source: excerpt, explicit: true })
-    }
-  }
-  return fields
-}
-
-function createContext(data, sourceField, mode, occurrenceId) {
-  try {
-    return Object.freeze({
-      mode,
-      type: data.type ?? null,
-      encrypt: Boolean(data.encrypt),
-      password: data.password ?? null,
-      sourceField,
-      sourcePath: data.path ?? data.source ?? null,
-      occurrenceId
-    })
-  } catch {
-    return null
-  }
-}
-
-function tokenizeField(source, store) {
-  const scan = scanMarkers(source)
-  const tokens = []
-  for (const marker of scan.markers) {
-    const token = store.issue({ raw: marker.raw, mode: marker.mode })
-    tokens.push({ token, raw: marker.raw, mode: marker.mode })
-  }
-
-  let transformed = source
-  for (let index = tokens.length - 1; index >= 0; index -= 1) {
-    const marker = scan.markers[index]
-    transformed = transformed.slice(0, marker.start) + tokens[index].token + transformed.slice(marker.end)
-  }
-  return { transformed, tokens }
-}
-
-function createTokenizedFields(fields, tokenStoreFactory) {
-  const occupiedText = fields.map(field => field.source).join('\u0000')
-  const store = tokenStoreFactory({ occupiedText })
-  const transformedFields = []
-
-  for (const field of fields) {
-    const result = tokenizeField(field.source, store)
-    transformedFields.push({
-      field: field.field,
-      value: result.transformed,
-      explicit: field.explicit
-    })
-  }
-
-  return { store, transformedFields }
-}
-
-function makeFailure(raw) {
-  const safeRaw = typeof raw === 'string' ? raw : ''
-  const escaped = escapeHtmlText(safeRaw)
-  return {
-    html: escaped,
-    projection: escaped,
-    blockProject: false,
-    failed: true
-  }
-}
-
-function prepareOccurrence(occurrence, state, data, field, registry) {
-  const record = state.store.lookup(occurrence.token)
-  if (record === null) {
-    return makeFailure('')
-  }
-  let decoded = null
-  try {
-    decoded = state.store.decode(occurrence.token, occurrence.mode)
-  } catch {
-    return makeFailure(record.raw)
-  }
-  if (decoded === null) {
-    return makeFailure(record.raw)
-  }
-
-  let parsed = null
-  try {
-    parsed = parseMarker(decoded.raw, decoded.mode)
-  } catch {
-    return makeFailure(decoded.raw)
-  }
-  if (parsed === null || parsed.ok !== true) {
-    return makeFailure(decoded.raw)
-  }
-
-  try {
-    state.store.attachParsed(occurrence.token, {
-      name: parsed.marker.name,
-      args: parsed.marker.args
-    })
-  } catch {
-    return makeFailure(decoded.raw)
-  }
-
-  const context = createContext(data, field, decoded.mode, occurrence.id)
-  if (context === null) {
-    return makeFailure(decoded.raw)
-  }
-
-  let dispatched = null
-  try {
-    dispatched = registry.dispatch(parsed.marker.name, parsed.marker.args, context)
-  } catch {
-    return makeFailure(decoded.raw)
-  }
-  if (
-    dispatched === null ||
-    dispatched.ok !== true ||
-    dispatched.handler === null ||
-    dispatched.handler === undefined
-  ) {
-    return makeFailure(decoded.raw)
-  }
-
-  let rendered = null
-  let plainText = null
-  try {
-    rendered = dispatched.handler.render(dispatched.node, context)
-    plainText = dispatched.handler.toPlainText(dispatched.node)
-  } catch {
-    return makeFailure(decoded.raw)
-  }
-  if (typeof rendered !== 'string' || typeof plainText !== 'string') {
-    return makeFailure(decoded.raw)
-  }
-  if (INTERNAL_HANDLER_PATTERN.test(rendered) || INTERNAL_HANDLER_PATTERN.test(plainText)) {
-    return makeFailure(decoded.raw)
-  }
-
-  return {
-    html: rendered,
-    projection: escapeHtmlText(plainText),
-    blockProject: parsed.marker.name === 'PJ' &&
-      parsed.marker.mode === 'block' &&
-      dispatched.node !== null &&
-      typeof dispatched.node === 'object' &&
-      dispatched.node.markerName === 'PJ',
-    failed: false
-  }
-}
-
-function createCarrierWrapper(token) {
-  return `<span data-arknights-carrier="${token}"></span>`
-}
-
-function countExactText(value, expected) {
-  return value.split(expected).length - 1
-}
-
-function applyOccurrences(value, occurrences, replacements, tokenized) {
-  if (occurrences.length !== replacements.length) {
-    return null
-  }
-  let result = value
-  for (let index = occurrences.length - 1; index >= 0; index -= 1) {
-    const occurrence = occurrences[index]
-    const replacement = replacements[index]
-    if (tokenized) {
-      result = result.slice(0, occurrence.start) + replacement + result.slice(occurrence.end)
-      continue
-    }
-    const wrapper = createCarrierWrapper(occurrence.token)
-    let replacementCount = 0
-    result = result.replace(wrapper, () => {
-      replacementCount += 1
-      return replacement
-    })
-    if (replacementCount !== 1) {
-      return null
-    }
-  }
-  return result
-}
-
-function isGridSeparator(value) {
-  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  if (/\n[ \t]*\n/.test(normalized) || /<br\b[^>]*>[ \t\r\n]*<br\b[^>]*>/i.test(value)) {
-    return false
-  }
-  return /^(?:[ \t\n]|<br\b[^>]*>)*$/i.test(normalized)
-}
-
-function renderCardGroup(ids, cardContents, projectionOnly, sentinelContext) {
-  const contents = ids.map(id => cardContents.get(id))
-  if (contents.some(content => typeof content !== 'string' || content === '')) {
-    return null
-  }
-  const inner = contents.join('\n')
-  if (projectionOnly) {
-    return inner
-  }
-  const sentinels = sentinelContext.createGridSentinels(ids[0], inner)
-  return `${sentinels.open}${inner}${sentinels.close}`
-}
-
-function composeCardGroups(value, cardContents, projectionOnly, sentinelContext) {
-  const matches = sentinelContext.findCardSentinels(value)
-  if (matches.length === 0) {
-    return value
-  }
-
-  let output = ''
-  let cursor = 0
-  let groupStart = -1
-  let groupEnd = -1
-  let groupIds = []
-  let failed = false
-
-  const flushGroup = () => {
-    if (groupStart < 0) {
-      return
-    }
-    const rendered = renderCardGroup(groupIds, cardContents, projectionOnly, sentinelContext)
-    if (rendered === null) {
-      failed = true
-      return
-    }
-    output += value.slice(cursor, groupStart)
-    output += rendered
-    cursor = groupEnd
-    groupStart = -1
-    groupEnd = -1
-    groupIds = []
-  }
-
-  for (const match of matches) {
-    const start = match.start
-    const end = match.end
-    const id = match.id
-    if (groupStart < 0) {
-      groupStart = start
-      groupEnd = end
-      groupIds = [id]
-      continue
-    }
-
-    const separator = value.slice(groupEnd, start)
-    if (isGridSeparator(separator)) {
-      groupIds.push(id)
-      groupEnd = end
-      continue
-    }
-
-    flushGroup()
-    groupStart = start
-    groupEnd = end
-    groupIds = [id]
-  }
-
-  flushGroup()
-  return failed ? value : output + value.slice(cursor)
-}
-
-function removeEdgeBreaks(value) {
-  return value.replace(/^(?:[ \t\r\n]*<br\b[^>]*>[ \t\r\n]*)+/i, '')
-    .replace(/(?:[ \t\r\n]*<br\b[^>]*>[ \t\r\n]*)+$/i, '')
-}
-
-function isCommentOnly(value) { return /^(?:<!--[\s\S]*?-->[ \t\r\n]*)+$/.test(value.trim()) }
-
-function appendPlainParagraph(output, value) {
-  const plainValue = removeEdgeBreaks(value).trim()
-  if (plainValue === '') {
-    return output
-  }
-  if (isCommentOnly(plainValue)) {
-    return output + plainValue
-  }
-  return output + `<p>${plainValue}</p>`
-}
-
-function transformGridParagraph(inner, sentinelContext) {
-  const matches = sentinelContext.findGridSentinels(inner)
-  if (matches.length === 0) {
-    return null
-  }
-  if (matches.some(match => match.content.trim() === '')) {
-    return null
-  }
-
-  let output = ''
-  let cursor = 0
-  for (const match of matches) {
-    output = appendPlainParagraph(output, inner.slice(cursor, match.start))
-    output += `<div class="projects-grid">\n${match.content}\n</div>`
-    cursor = match.end
-  }
-  return appendPlainParagraph(output, inner.slice(cursor))
-}
-
-function unwrapGridParagraphs(value, sentinelContext) {
-  return value.replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, (paragraph, inner) => {
-    const transformed = transformGridParagraph(inner, sentinelContext)
-    return transformed === null ? paragraph : transformed
-  })
-}
-
-function unwrapStandaloneGridSentinels(value, sentinelContext) {
-  const matches = sentinelContext.findGridSentinels(value)
-  if (matches.length === 0) {
-    return value
-  }
-  if (matches.some(match => match.content.trim() === '')) {
-    return value
-  }
-
-  let output = ''
-  let cursor = 0
-  for (const match of matches) {
-    output += value.slice(cursor, match.start)
-    output += `<div class="projects-grid">\n${match.content}\n</div>`
-    cursor = match.end
-  }
-  return output + value.slice(cursor)
-}
-
-function auditMaterializationInput(value, state, field, actionableOccurrences) {
-  let renderedOccurrences
-  try {
-    renderedOccurrences = state.store.findOccurrences(value, field)
-  } catch {
-    return null
-  }
-  if (
-    renderedOccurrences.length !== actionableOccurrences.length ||
-    renderedOccurrences.some((occurrence, index) => (
-      occurrence.id !== actionableOccurrences[index].id
-    ))
-  ) {
-    return null
-  }
-
-  const wrapperNamespaces = value.match(CARRIER_WRAPPER_NAMESPACE_PATTERN) ?? []
-  if (field === 'excerpt') {
-    return wrapperNamespaces.length === 0 ? renderedOccurrences : null
-  }
-  if (wrapperNamespaces.length !== actionableOccurrences.length) {
-    return null
-  }
-
-  const wrapperTokens = [...value.matchAll(CARRIER_WRAPPER_ATTRIBUTE_PATTERN)]
-    .map(match => match[1] ?? match[2])
-  if (
-    wrapperTokens.length !== actionableOccurrences.length ||
-    wrapperTokens.some((token, index) => token !== actionableOccurrences[index].token) ||
-    actionableOccurrences.some(occurrence => (
-      countExactText(value, createCarrierWrapper(occurrence.token)) !== 1
-    ))
-  ) {
-    return null
-  }
-  return renderedOccurrences
-}
-
-function finalizeMaterializedValue(value, store, sentinelContext) {
-  try {
-    sentinelContext.assertFullyConsumed(value)
-    if (/data-arknights-carrier\b/i.test(value)) {
-      return null
-    }
-    for (const token of store.issuedTokens()) {
-      if (value.includes(token)) {
-        return null
-      }
-    }
-    return value
-  } catch {
-    return null
-  }
-}
-
-function materializeField(value, state, data, field, registry, sentinelContext) {
-  const actionableOccurrences = state.store.getOccurrences().filter(occurrence => (
-    occurrence.field === field &&
-    (occurrence.state === 'pending-markdown' || occurrence.state === 'excerpt-pending')
-  ))
-  const occurrences = auditMaterializationInput(value, state, field, actionableOccurrences)
-  if (occurrences === null) {
-    return null
-  }
-
-  const htmlCards = new Map()
-  const projectionCards = new Map()
-  const replacements = []
-  for (const occurrence of actionableOccurrences) {
-    const replacement = prepareOccurrence(occurrence, state, data, field, registry)
-    state.replacements.set(occurrence.id, {
-      success: !replacement.failed,
-      failed: replacement.failed === true
-    })
-    if (replacement.blockProject) {
-      const card = sentinelContext.createCardSentinel(
-        `${replacement.html}\n${replacement.projection}`
-      )
-      htmlCards.set(card.id, replacement.html)
-      projectionCards.set(card.id, replacement.projection)
-      replacement.html = card.sentinel
-      replacement.projection = card.sentinel
-    }
-    replacements.push(replacement)
-  }
-
-  const tokenized = field === 'excerpt'
-  let html = applyOccurrences(value, occurrences, replacements.map(replacement => replacement.html), tokenized)
-  let projection = applyOccurrences(value, occurrences, replacements.map(replacement => replacement.projection), tokenized)
-  if (html === null || projection === null) {
-    return null
-  }
-  html = composeCardGroups(html, htmlCards, false, sentinelContext)
-  html = unwrapGridParagraphs(html, sentinelContext)
-  html = unwrapStandaloneGridSentinels(html, sentinelContext)
-  projection = composeCardGroups(projection, projectionCards, true, sentinelContext)
-  const finalizedHtml = finalizeMaterializedValue(html, state.store, sentinelContext)
-  const finalizedProjection = finalizeMaterializedValue(projection, state.store, sentinelContext)
-  if (finalizedHtml === null || finalizedProjection === null) {
-    return null
-  }
-  return { html: finalizedHtml, projection: finalizedProjection }
-}
-
-function deriveExcerptProjection(contentProjection) {
-  const match = MORE_PATTERN.exec(contentProjection)
-  return match === null ? contentProjection : contentProjection.slice(0, match.index).trim()
-}
-
-function readProjectedText(projection, sourceField) {
-  if (projection === undefined) {
-    return null
-  }
-  if (sourceField === 'content') {
-    return typeof projection.content === 'string' ? projection.content : null
-  }
-  if (projection.explicitExcerpt) {
-    return typeof projection.excerpt === 'string' ? projection.excerpt : null
-  }
-  return typeof projection.content === 'string' ? deriveExcerptProjection(projection.content) : null
+function isAdjacent(source, leftEnd, rightStart) {
+  const gap = source.slice(leftEnd, rightStart)
+  return gap === '\n' || gap === '\r\n' || gap === '\r'
 }
 
 function createPipelineError(code, reason) {
   return Object.assign(new Error(code), { code, reason })
 }
 
-function createMarkerPipeline(options = {}) {
+function createMarkdownServices() {
+  const instance = new Marked({ sanitizeUrl: true, async: false })
+
+  function auditArgument(source, auditContext) {
+    if (typeof source !== 'string' || auditContext === null || typeof auditContext !== 'object' ||
+        typeof auditContext.sourceField !== 'string' ||
+        typeof auditContext.occurrenceId !== 'string') {
+      throw createPipelineError('HANDLER_SERVICE_ERROR', 'markdown service argument is invalid')
+    }
+  }
+
+  function isAllowedUrl(value, schemes) {
+    if (typeof value !== 'string') {
+      return false
+    }
+    const normalized = value.replace(URL_NOISE_PATTERN, '')
+    if (normalized === '' || normalized.startsWith('//') || normalized.startsWith('/')) {
+      return true
+    }
+    const match = SCHEME_PATTERN.exec(normalized)
+    return match === null || schemes.has(`${match[1].toLowerCase()}:`)
+  }
+
+  function walkTokens(tokens, visit) {
+    for (const token of tokens ?? []) {
+      visit(token)
+      walkTokens(token.tokens, visit)
+      for (const item of token.items ?? []) {
+        walkTokens(item.tokens, visit)
+      }
+      for (const cell of token.header ?? []) {
+        walkTokens(cell.tokens, visit)
+      }
+      for (const row of token.rows ?? []) {
+        for (const cell of row) {
+          walkTokens(cell.tokens, visit)
+        }
+      }
+    }
+  }
+
+  function assertAllowedUrls(tokens) {
+    walkTokens(tokens, token => {
+      if (token.type === 'link' && !isAllowedUrl(token.href, ALLOWED_LINK_SCHEMES)) {
+        throw createPipelineError('HANDLER_SERVICE_ERROR', 'link scheme is not allowed')
+      }
+      if (token.type === 'image' && !isAllowedUrl(token.href, ALLOWED_IMAGE_SCHEMES)) {
+        throw createPipelineError('HANDLER_SERVICE_ERROR', 'image scheme is not allowed')
+      }
+    })
+  }
+
+  function inlineText(tokens) {
+    return (tokens ?? []).map(token => (
+      token.tokens === undefined
+        ? (typeof token.text === 'string' ? token.text : '')
+        : inlineText(token.tokens)
+    )).join('')
+  }
+
+  function blockTextOfToken(token) {
+    switch (token.type) {
+      case 'space':
+      case 'hr':
+      case 'html':
+        return ''
+      case 'code':
+        return token.text
+      case 'paragraph':
+      case 'heading':
+        return inlineText(token.tokens)
+      case 'list':
+        return (token.items ?? []).map(item => blockText(item.tokens)).join('\n')
+      case 'table':
+        return [...(token.header ?? []), ...(token.rows ?? []).flat()]
+          .map(cell => inlineText(cell.tokens))
+          .join('\n')
+      default:
+        return token.tokens === undefined
+          ? (typeof token.text === 'string' ? token.text : '')
+          : blockText(token.tokens)
+    }
+  }
+
+  function blockText(tokens) {
+    return (tokens ?? []).map(blockTextOfToken).join('\n')
+  }
+
+  return Object.freeze({
+    renderMarkdown(source, auditContext) {
+      auditArgument(source, auditContext)
+      const tokens = instance.lexer(source)
+      assertAllowedUrls(tokens)
+      return instance.parser(tokens).replaceAll('\u0000', '')
+    },
+    markdownToPlainText(source, auditContext) {
+      auditArgument(source, auditContext)
+      return blockText(instance.lexer(source))
+    }
+  })
+}
+
+function isDataObject(data) {
+  return data !== null && typeof data === 'object' && !Array.isArray(data)
+}
+
+function assertSupportedSanitizer(data) {
+  const marked = data.marked
+  if (marked === null || typeof marked !== 'object') {
+    return
+  }
+  const sanitizer = marked.dompurify
+  if (sanitizer === undefined || sanitizer === false) {
+    return
+  }
+  throw createPipelineError(
+    'MARKDOWN_SANITIZER_UNSUPPORTED',
+    'only an absent or literal false dompurify option is supported'
+  )
+}
+
+function collectSourceFields(data) {
+  if (Object.hasOwn(data, 'excerpt') && typeof data.excerpt !== 'string') {
+    throw createPipelineError('INVALID_EXCERPT_FIELD', 'explicit excerpt must be a string')
+  }
+  const fields = []
+  if (typeof data.content === 'string') {
+    fields.push({ field: 'content', source: data.content, explicit: false })
+  }
+  if (Object.hasOwn(data, 'excerpt')) {
+    fields.push({ field: 'excerpt', source: data.excerpt, explicit: true })
+  }
+  for (const field of fields) {
+    if (field.source.includes('\u0000')) {
+      throw createPipelineError('UNEXPECTED_NUL', `${field.field} source contains U+0000`)
+    }
+  }
+  return fields
+}
+
+function tokenizeField(source, store, field, captures) {
+  const scan = scanMarkers(source)
+  const tokens = scan.markers.map(marker => {
+    const token = store.issue({ raw: marker.raw, field, sourceRange: marker.sourceRange })
+    captures.set(token, Object.freeze({
+      sourceRange: Object.freeze({ start: marker.sourceRange.start, end: marker.sourceRange.end }),
+      raw: marker.raw,
+      name: marker.name,
+      physicalLines: Object.freeze(marker.physicalLines.map(line => Object.freeze({ ...line })))
+    }))
+    return token
+  })
+
+  let transformed = source
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const { sourceRange } = scan.markers[index]
+    transformed = transformed.slice(0, sourceRange.start) + tokens[index] + transformed.slice(sourceRange.end)
+  }
+  return { value: transformed, tokens }
+}
+
+function tokenizeFields(fields, tokenStoreFactory) {
+  const store = tokenStoreFactory({ occupiedText: fields.map(field => field.source).join('\u0000') })
+  const captures = new Map()
+  const transformed = fields.map(field => ({
+    ...tokenizeField(field.source, store, field.field, captures),
+    field: field.field,
+    explicit: field.explicit
+  }))
+  for (const field of transformed) {
+    store.findOccurrences(field.value, field.field)
+  }
+  return { store, captures, transformed }
+}
+
+function validatePipelineOptions(options) {
   if (options === null || typeof options !== 'object' || Array.isArray(options)) {
     throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'pipeline options must be an object')
   }
-
-  const allowedOptionKeys = new Set(['handlers', 'tokenStoreFactory'])
-  if (Object.keys(options).some(key => !allowedOptionKeys.has(key))) {
+  const allowedKeys = new Set(['handlers', 'tokenStoreFactory'])
+  if (Object.keys(options).some(key => !allowedKeys.has(key))) {
     throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'pipeline option is unsupported')
   }
-
-  const handlers = Object.hasOwn(options, 'handlers')
-    ? options.handlers
-    : [aiHandler, projectsHandler]
-  const tokenStoreFactory = Object.hasOwn(options, 'tokenStoreFactory')
-    ? options.tokenStoreFactory
-    : createTokenStore
-  if (!Array.isArray(handlers) || handlers.length === 0) {
+  if (!Object.hasOwn(options, 'handlers') || !Object.hasOwn(options, 'tokenStoreFactory')) {
+    throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'handlers and tokenStoreFactory are required')
+  }
+  if (!Array.isArray(options.handlers) || options.handlers.length === 0) {
     throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'pipeline handlers must be a non-empty array')
   }
-  if (typeof tokenStoreFactory !== 'function') {
+  const names = options.handlers.map(handler => (
+    handler === null || typeof handler !== 'object' ? null : handler.name
+  ))
+  if (names.some(name => typeof name !== 'string') || new Set(names).size !== names.length) {
+    throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'pipeline handler names must be unique')
+  }
+  if (typeof options.tokenStoreFactory !== 'function') {
     throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'pipeline token store factory must be a function')
   }
+}
+
+function createMarkerPipeline(options = {}) {
+  validatePipelineOptions(options)
+  const { handlers, tokenStoreFactory } = options
 
   const registry = createRegistry()
   for (const handler of handlers) {
@@ -535,27 +261,32 @@ function createMarkerPipeline(options = {}) {
 
   const renderStates = new WeakMap()
   const projectionStates = new WeakMap()
+  const failureHelpers = createSharedFailureHelpers()
+  const projectGridHelpers = Object.freeze({ isAdjacent, escapeHtmlText })
+  const environment = { encryptConfig: {}, services: createMarkdownServices() }
 
   const beforePostRender = data => {
     if (!isDataObject(data)) {
       return data
     }
-
-    const previousState = renderStates.get(data)
-    if (previousState !== undefined) {
-      restoreCarrierBridge(data, previousState.carrier)
-      for (const field of previousState.fields) {
-        const originalValue = previousState.carrier.originalField(field)
-        if (typeof originalValue === 'string') {
-          data[field] = originalValue
-        }
+    const previous = renderStates.get(data)
+    if (previous !== undefined) {
+      restoreCarrierBridge(data, previous.carrier)
+      for (const field of previous.fields) {
+        data[field] = previous.carrier.originalField(field)
       }
       renderStates.delete(data)
     }
     projectionStates.delete(data)
     restoreCarrierBridgeFromData(data)
-    if (isEncrypted(data)) {
+    assertSupportedSanitizer(data)
+
+    const encryption = inspectSearchEncryption(data, environment.encryptConfig)
+    if (encryption.state === 'encrypted') {
       return data
+    }
+    if (encryption.state !== 'public') {
+      throw createPipelineError('ENCRYPTION_STATE_AMBIGUOUS', 'encryption state cannot be decided')
     }
 
     const fields = collectSourceFields(data)
@@ -563,19 +294,7 @@ function createMarkerPipeline(options = {}) {
       return data
     }
 
-    let tokenized
-    try {
-      tokenized = createTokenizedFields(fields, tokenStoreFactory)
-    } catch (error) {
-      if (typeof error?.code === 'string' && error.code !== 'TOKEN_GENERATION_EXHAUSTED') {
-        throw error
-      }
-      return data
-    }
-
-    for (const field of tokenized.transformedFields) {
-      tokenized.store.findOccurrences(field.value, field.field)
-    }
+    const tokenized = tokenizeFields(fields, tokenStoreFactory)
     const carrier = createRenderCarrier({
       data,
       store: tokenized.store,
@@ -585,10 +304,9 @@ function createMarkerPipeline(options = {}) {
         originalValue: field.source
       }))
     })
-
     try {
       attachCarrierBridge(data, carrier)
-      for (const field of tokenized.transformedFields) {
+      for (const field of tokenized.transformed) {
         data[field.field] = field.value
       }
     } catch (error) {
@@ -596,18 +314,18 @@ function createMarkerPipeline(options = {}) {
       for (const field of fields) {
         data[field.field] = field.source
       }
-      if (typeof error?.code === 'string' && error.code.startsWith('CARRIER_BRIDGE_')) {
-        throw error
-      }
-      return data
+      throw error
     }
 
     renderStates.set(data, {
       store: tokenized.store,
       carrier,
-      fields: tokenized.transformedFields.map(field => field.field),
+      captures: tokenized.captures,
+      fields: tokenized.transformed.map(field => field.field),
+      sourcePath: typeof data.path === 'string' ? data.path : null,
+      type: typeof data.type === 'string' ? data.type : null,
       explicitFields: new Set(
-        tokenized.transformedFields.filter(field => field.explicit).map(field => field.field)
+        tokenized.transformed.filter(field => field.explicit).map(field => field.field)
       ),
       replacements: new Map()
     })
@@ -622,94 +340,62 @@ function createMarkerPipeline(options = {}) {
     if (state === undefined) {
       return data
     }
-
     const projection = {
       content: null,
       excerpt: null,
       explicitExcerpt: state.explicitFields.has('excerpt')
     }
-    let occupiedText = ''
-    for (const field of state.fields) {
-      try {
-        const value = data[field]
-        if (typeof value === 'string') {
-          occupiedText += `\u0000${value}`
-        }
-      } catch {
-        continue
-      }
+    const injected = Object.freeze({
+      services: environment.services,
+      normalizeLineEndings,
+      failureHelpers,
+      projectGridHelpers,
+      buildProjectGroups,
+      applyProjectGroups
+    })
+
+    const applyFallback = field => {
+      const original = state.carrier.originalField(field)
+      data[field] = failureHelpers.fieldFallbackHtml(original)
+      projection[field] = failureHelpers.fieldFallbackProjection(original)
     }
-    const sentinelContext = createSentinelContext(occupiedText)
-
-    try {
-      for (const field of state.fields) {
-        let value
-        try {
-          value = data[field]
-        } catch {
-          value = null
-        }
-        if (typeof value !== 'string') {
-          value = state.carrier.originalField(field)
-          data[field] = value
-        }
-
-        let materialized
-        try {
-          materialized = materializeField(value, state, data, field, registry, sentinelContext)
-        } catch {
-          materialized = null
-        }
-        if (materialized === null || materialized.html === null || materialized.projection === null) {
-          const originalValue = state.carrier.originalField(field)
-          const fallback = createFieldFallback(originalValue)
-          data[field] = fallback
-          projection[field] = fallback
-          for (const occurrence of state.store.getOccurrences().filter(item => item.field === field)) {
-            if (occurrence.state === 'pending-markdown' || occurrence.state === 'excerpt-pending') {
-              try {
-                state.carrier.markFailed(occurrence.id)
-              } catch {
-                return data
-              }
-            }
-          }
+    const settleField = (field, failed) => {
+      for (const occurrence of state.store.getOccurrences()) {
+        if (occurrence.field !== field || !PENDING_STATES.has(occurrence.state)) {
           continue
         }
-
-        data[field] = materialized.html
-        projection[field] = materialized.projection
-        let fieldRequiresFallback = false
-        for (const occurrence of state.store.getOccurrences().filter(item => item.field === field)) {
-          if (occurrence.state !== 'pending-markdown' && occurrence.state !== 'excerpt-pending') {
-            continue
-          }
-          const replacement = state.replacements.get(occurrence.id)
-          if (replacement === undefined) {
-            state.carrier.markFailed(occurrence.id)
-            fieldRequiresFallback = true
-          } else if (replacement.failed !== true) {
-            state.carrier.markConsumed(occurrence.id)
-          } else {
-            state.carrier.markFailed(occurrence.id)
-          }
-        }
-        if (fieldRequiresFallback) {
-          const originalValue = state.carrier.originalField(field)
-          const fallback = createFieldFallback(originalValue)
-          data[field] = fallback
-          projection[field] = fallback
+        const replacement = state.replacements.get(occurrence.id)
+        if (failed || replacement === undefined || replacement.failed === true) {
+          state.carrier.markFailed(occurrence.id)
+        } else {
+          state.carrier.markConsumed(occurrence.id)
         }
       }
+    }
 
-      const audit = state.carrier.audit()
-      if (audit.ok !== true) {
-        for (const field of state.fields) {
-          const originalValue = state.carrier.originalField(field)
-          const fallback = createFieldFallback(originalValue)
-          data[field] = fallback
-          projection[field] = fallback
+    try {
+      let audited = true
+      for (const field of state.fields) {
+        const current = typeof data[field] === 'string' ? data[field] : state.carrier.originalField(field)
+        data[field] = current
+        const materialized = materializeField(current, state, data, field, registry, injected)
+        if (materialized === null) {
+          audited = false
+          applyFallback(field)
+          settleField(field, true)
+          continue
         }
+        data[field] = materialized.html
+        projection[field] = materialized.projection
+        settleField(field, false)
+      }
+
+      if (audited !== true || state.carrier.audit().ok !== true) {
+        for (const field of state.fields) {
+          settleField(field, true)
+          applyFallback(field)
+        }
+        throw createPipelineError('PIPELINE_AUDIT_FAILED', 'field audit did not reach a terminal state')
       }
       if (typeof projection.content === 'string' && projection.explicitExcerpt === false) {
         projection.excerpt = deriveExcerptProjection(projection.content)
@@ -729,15 +415,24 @@ function createMarkerPipeline(options = {}) {
     return readProjectedText(projectionStates.get(data), sourceField)
   }
 
-  return Object.freeze({ beforePostRender, afterPostRender, projectText })
+  const pipeline = Object.freeze({ beforePostRender, afterPostRender, projectText })
+  environmentSlots.set(pipeline, environment)
+  return pipeline
 }
 
 const defaultPipeline = createMarkerPipeline({
-  handlers: [aiHandler, projectsHandler],
+  handlers: PRODUCTION_HANDLERS,
   tokenStoreFactory: createTokenStore
 })
 
-const contextRegistrations = new WeakMap()
+function bindEnvironment(pipeline, encryptConfig, services) {
+  const environment = environmentSlots.get(pipeline)
+  if (environment === undefined) {
+    throw createPipelineError('INVALID_PIPELINE_OPTIONS', 'pipeline is not managed by this module')
+  }
+  environment.encryptConfig = encryptConfig
+  environment.services = services
+}
 
 function registerMarkerFilters(hexoContext, pipeline = defaultPipeline) {
   if (hexoContext === null || typeof hexoContext !== 'object' || pipeline === null ||
@@ -752,11 +447,16 @@ function registerMarkerFilters(hexoContext, pipeline = defaultPipeline) {
     return existing
   }
 
+  const encryptConfig = hexoContext.config === undefined || hexoContext.config === null
+    ? {}
+    : hexoContext.config.encrypt
+  bindEnvironment(pipeline, encryptConfig, createMarkdownServices())
+
   const registrationContext = { filter: hexoContext.extend.filter }
   const before = pipeline.beforePostRender
   const after = pipeline.afterPostRender
-  const markedUse = function installForRenderer(markedUse) {
-    installMarkedExtension(markedUse)
+  const markedUse = markedUseArgument => {
+    installMarkedExtension(markedUseArgument)
   }
   const registered = []
   try {
@@ -772,7 +472,7 @@ function registerMarkerFilters(hexoContext, pipeline = defaultPipeline) {
       try {
         registrationContext.filter.unregister(type, handler)
       } catch {
-        // Keep the original registration error.
+        void 0
       }
     }
     throw error
@@ -789,15 +489,11 @@ function registerMarkerFilters(hexoContext, pipeline = defaultPipeline) {
   return registration
 }
 
-const beforePostRender = defaultPipeline.beforePostRender
-const afterPostRender = defaultPipeline.afterPostRender
-const projectText = defaultPipeline.projectText
-
 module.exports = {
   createMarkerPipeline,
   defaultPipeline,
   registerMarkerFilters,
-  beforePostRender,
-  afterPostRender,
-  projectText
+  beforePostRender: defaultPipeline.beforePostRender,
+  afterPostRender: defaultPipeline.afterPostRender,
+  projectText: defaultPipeline.projectText
 }
