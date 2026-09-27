@@ -703,103 +703,63 @@ post-index: true/false
 reward: true/false
 ```
 
-## 额外标签
+## 按行内容工具
 
-### admonition
+提示框、代码编辑器与友链卡片统一使用按行 block 协议：首行是 `[#]>名称|`，其后每个字段独占一行，写作 `[字段名]| 值`（竖线分隔符必需，竖线两侧的空格与制表符会被忽略）。多行值用分隔符之后的 `$[` 开启、以独占一行的 `]$` 收尾。header 必须位于物理行首，行中出现的同名文本按普通正文渲染。
+
+### Alerts
 
 ```text
-{% note/warning/success/failure/detail [title] [open/fold] [color] %}
+[#]>Alerts|
+[type]| WARNING
+[title]| someTitle
+[body]| $[
 content
-{% end[note/warning/success/failure/detail] %}
+]$
 ```
 
-添加提示、警告、错误等块式内容，其中 `note/warning/success/failure` 有图标，`detail` 无图标。
++ `type` 必填，可取 `NOTE`、`TIP`、`IMPORTANT`、`WARNING`、`CAUTION`；
++ `open` 默认为 `true`，写 `false` 表示默认折叠；
++ `title` 省略或写 `null` 时取大写的 `type`；
++ `color` 是不带 `#` 的 6 位或 8 位十六进制色值，写 `null` 表示使用类型默认色。
 
-### hide
+### LinkCard
 
-```
-{% hide content %}
-```
+每张卡片写一个 `LinkCard`：
 
-隐藏内容，content 支持 markdown 渲染、可以有空格，无须使用引号。
-
-### link card/linkc
-
-```
-{% linkcard %}
-Title1:
-    avatar: https://someLink/someAvatar.png
-    src: https://someLink/
-    img: https://somelink/somePicture.png
-    descr: someDescr
-    style:
-    	color: someColor
-Title2:
-    avatar: https://someLink/someName.png
-    src: https://someLink/
-{% endlinkcard %}
+```text
+[#]>LinkCard|
+[avatar]| Title1
+[link]| https://someLink/
+[img]| https://someLink/somePicture.png
+[descr]| someDescr
+[style]| color: #22BBFF; --card-bg: #123456
 ```
 
-可生成一组友链，标题（title）、与链接（src）为必选项。样式（style）遵循 CSS 格式。
++ `avatar` 是卡片显示名称，`link` 是 `http:`、`https:` 或受控根相对路径，两者必填；
++ `img` 是卡片背景图，省略时不输出背景图节点；
++ `descr` 按纯文本输出，不按 Markdown 渲染；
++ `style` 是单行受限 CSS declaration list，会被作用域化到当前卡片，不接受任意样式表。
 
-### Monaco Editor
+### Editor
 
 除了 Hexo 自带的 [代码块](https://hexo.io/zh-cn/docs/tag-plugins#%E4%BB%A3%E7%A0%81%E5%9D%97) 外，本主题还支持 VS Code 风格的 [Monaco Editor](https://github.com/microsoft/monaco-editor)。
 
 ```text
-{% editor javascript %}
-/* global hexo */
-
-'use strict';
-
-function render(data) {
-    return hexo.render.renderSync({ text: data, engine: 'markdown' });
-}
-
-hexo.extend.tag.register('hide', (args) => {
-    let content = ''
-    args.forEach((item) => {
-        content += ' ' + item
-    });
-    return `<span class="hide"><object>${render(content.slice(1)).trim()}</object></span>`;
-})
-{% endeditor %}
-```
-
-`editor` 标签支持以下参数：
-
-```text
-[language, [theme, [readOnly, [height]]], [...extras(key:value)]]
+[#]>Editor|
+[language]| javascript
+[body]| $[
+console.log('hello')
+]$
 ```
 
 + `language` 默认为 `plaintext`；
 + `theme` 默认为 `vs-dark`；
-+ `readOnly` 默认为 `true`；
-+ `height` 默认为 `300px`。
++ `number` 默认为 `1`，是同一篇正文里编辑器实例的稳定序号。
 
-较少使用的参数可通过 `extras` 项传入。例如，下面示例在超过 40 列时启用折行：
+编辑器固定只读，最小高度由样式提供；`body` 之外不接受高度、只读开关或任意 Monaco options。可用构造选项见 [Monaco Editor 文档](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html)，具体样式效果见 [PR #215](https://github.com/Yue-plus/hexo-theme-arknights/pull/215)。
 
-```
-{% editor javascript hc-black wordWrap:`wordWrapColumn` wordWrapColumn:40 wrappingIndent:`indent` %}
-/* global hexo */
-
-'use strict';
-
-function render(data) {
-    return hexo.render.renderSync({ text: data, engine: 'markdown' });
-}
-
-hexo.extend.tag.register('hide', (args) => {
-    let content = ''
-    args.forEach((item) => {
-        content += ' ' + item
-    });
-    return `<span class="hide"><object>${render(content.slice(1)).trim()}</object></span>`;
-})
-{% endeditor %}
-```
-
-更多扩展参数请参阅 [Monaco Editor 文档](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html)；具体样式效果见 [PR #215](https://github.com/Yue-plus/hexo-theme-arknights/pull/215)。
+旧的 `hide` 标签不提供替代语法，其标签、样式与颜色变量已一并删除。
 
 ## 引入自定义 CSS/JS 文件
 

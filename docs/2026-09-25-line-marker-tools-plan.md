@@ -137,6 +137,11 @@
 | `themes/arknights/layout/includes/meta-data.pug` | 修改 | B4 | `cssVersion` `20260953` → `20260954` |
 | `AGENTS.md` | 修改 | B4 | 本地定制地图、Source Tree 删除清单、缓存版本 |
 | `.temp/line-marker-pipeline.test.js` | 修改 | B2 | 追加样式导入回归段（规格 12.1.1 第 5 条） |
+| `.temp/line-marker-pipeline.test.js` | 修改 | B1/B3 | 追加旧 tag 注册零命中段与 `link-card.styl` 死 CSS 删除段 |
+| `.temp/b-legacy-scan.js` | 新增 | B1/B4 | 源码级零命中扫描：旧 tag 注册 / 旧 tag 语法（`source/` 与三语 README）/ 旧 marker 语法 |
+| `.temp/b-readme-examples.js` | 新增 | B4 | 三语 README 的按行协议示例逐字喂真实 pipeline，断言终态 DOM 与三语示例逐字一致 |
+| `.temp/b-artifact-regression.js` | 新增 | B4 | 删除前后产物回归：HTML 集合一致、旧 tag 产物零命中、CSS 差异恰为 13 个死规则块且零新增 |
+| `.temp/a3-artifact-audit.js` | 修改 | B4 | 版本断言改 `cssVersion=20260954` / `jsVersion=20260951`；追加旧 tag 死 CSS 清零与 Alerts/LinkCard 保留选择器段 |
 
 ### 1.3 批次 C
 
@@ -3484,7 +3489,7 @@ finally {
 | 批次 | 提交 | 建议提交信息 |
 | --- | --- | --- |
 | A（A1/A2/A3） | A1 控制器拆分 / A2 运行时与 handler 三个里程碑 / A2 审查修复 / A3 激活与同步，共 6 个 | 见下方 A 批实际序列 |
-| B（B1..B4） | B4 提交 | `refactor(tags): 删除旧标签并同步内容文档` |
+| B（B1..B4） | B4 提交 `refactor(tags): 删除旧标签并同步内容文档` | `refactor(tags): 删除旧标签并同步内容文档` |
 | C（C1..C3） | C3 提交 | `fix(theme-ui): 修复告警导航与音乐状态` |
 | D（D1..D3） | D3 提交 | `docs(markers): 同步按行协议最终门禁` |
 
@@ -3513,7 +3518,7 @@ GC12 原文为「A/B/C/D 每批一个原子 commit」；A 批因单次提交体�
 | --- | --- | --- | --- |
 | A | `6cc23d4` / `67543a7` / `b0d1f79` / `69af105` / `75a86af` / A3（激活与同步，hash 见 `git log --oneline -6`） | 全绿：12 个现存探针退出码全 0；全部改动 JS `node --check` 通过；`npm --prefix themes/arknights run build` 产物与仓库内 `arknights.js` 逐字节一致；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 U+0000 零命中；`public/search.json` 形态合规。**但 21 个旧门禁探针源码永久丢失、不重建，因此本批没有旧协议回归网** | 未完成（GC10）：AI tooltip、项目悬停、告警盒展开/折叠、真实截图 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与站内 Pjax 重绑仍须真实有头浏览器人工验收 |
 | P | 待填 | 待填 | 不涉及（纯构建期协议，不改 CSS/TS 产物，不递增 `cssVersion`/`jsVersion`） |
-| B | 待填 | 待填 | 待填 |
+| B | `refactor(tags): 删除旧标签并同步内容文档`（B 批唯一原子 commit，hash 见 `git log --oneline -1`） | 全绿：13 个活门禁退出码全 0 + 本批新增 `b-legacy-scan.js` / `b-readme-examples.js` / `b-artifact-regression.js` 退出码 0；全部改动 JS `node --check` 通过；`TZ=Asia/Shanghai` 下 `npx hexo generate --bail` 退出 0 且日志 `FATAL\|ERROR\|WARN\|Bail` 零命中；`public/` 内 7 类内部串与 NUL 零命中；CSS 产物差异恰为 13 个死规则块（8 个 hide + 5 个 link）且零新增，HTML 集合 32 个文件与删除前逐字一致；`cssVersion=20260954` / `jsVersion=20260951`；三语 README 9 个示例逐字喂真实 pipeline 全部产出契约 DOM 且三语逐字一致。**但 21 个旧门禁探针源码永久丢失、不重建，因此本批同样没有旧协议回归网** | 未完成（GC10）：真实截图 PNG、BGM 播放/错误重试、导航/footer 断点、懒加载、搜索与站内 Pjax 重绑、AI tooltip、项目悬停仍须真实有头浏览器人工验收 |
 | C | 待填 | 待填 | 待填 |
 | D | 待填 | 待填 | 待填 |
 

@@ -701,103 +701,63 @@ post-index: true/false
 reward: true/false
 ```
 
-## extra label
+## line-based content tools
 
-### admonition
+Alert boxes, code editors and friend-link cards all use the same line-based block protocol: the first line is `[#]>Name|`, and every following field sits on its own physical line written as `[field]| value` (the pipe separator is mandatory, and spaces or tabs around it are ignored). A multiline value opens with `$[` right after the separator and closes with a line containing only `]$`. The header must be the first content of a physical line; the same text inside a line renders as ordinary prose.
+
+### Alerts
 
 ```text
-{% note/warning/success/failure/detail [title] [open/fold] [color] %}
+[#]>Alerts|
+[type]| WARNING
+[title]| someTitle
+[body]| $[
 content
-{% end[note/warning/success/failure/detail] %}
+]$
 ```
 
-Add block based content such as note, warning, error, etc. with icons for `note/warning/success/failure` and no icons for `detail`.
++ `type` is required and must be `NOTE`, `TIP`, `IMPORTANT`, `WARNING` or `CAUTION`;
++ `open` defaults to `true`; write `false` to render it collapsed by default;
++ `title` falls back to the uppercased `type` when omitted or `null`;
++ `color` is a 6 or 8 digit hex value without `#`; `null` restores the per-type default color.
 
-### hide
+### LinkCard
 
-```
-{% hide content %}
-```
+Write one `LinkCard` per card:
 
-Hidden content, supports markdown rendering, can have spaces, and does not require quotation marks.
-
-### link card/linkc
-
-```
-{% linkcard %}
-Title1:
-    avatar: https://someLink/someAvatar.png
-    src: https://someLink/
-    img: https://somelink/somePicture.png
-    descr: someDescr
-    style:
-    	color: someColor
-Title2:
-    avatar: https://someLink/someName.png
-    src: https://someLink/
-{% endlinkcard %}
+```text
+[#]>LinkCard|
+[avatar]| Title1
+[link]| https://someLink/
+[img]| https://someLink/somePicture.png
+[descr]| someDescr
+[style]| color: #22BBFF; --card-bg: #123456
 ```
 
-A set of friendly links can be generated, with the title and link (src) as mandatory options. Style follows CSS format.
++ `avatar` is the display name of the card and `link` is an `http:`, `https:` or controlled root-relative URL; both are required;
++ `img` is the card background image, and no background node is emitted when omitted;
++ `descr` is emitted as plain text, not rendered as Markdown;
++ `style` is a single-line restricted CSS declaration list scoped to the current card; arbitrary stylesheets are rejected.
 
-### Monaco Editor
+### Editor
 
 In addition to Hexo's built-in [code blocks](https://hexo.io/docs/tag-plugins.html#Code-Block), this theme also supports the VS Code-style [Monaco Editor](https://github.com/microsoft/monaco-editor).
 
 ```text
-{% editor javascript %}
-/* global hexo */
-
-'use strict';
-
-function render(data) {
-    return hexo.render.renderSync({ text: data, engine: 'markdown' });
-}
-
-hexo.extend.tag.register('hide', (args) => {
-    let content = ''
-    args.forEach((item) => {
-        content += ' ' + item
-    });
-    return `<span class="hide"><object>${render(content.slice(1)).trim()}</object></span>`;
-})
-{% endeditor %}
-```
-
-The `editor` tag supports the following parameters:
-
-```text
-[language, [theme, [readOnly, [height]]], [...extras(key:value)]]
+[#]>Editor|
+[language]| javascript
+[body]| $[
+console.log('hello')
+]$
 ```
 
 + `language` defaults to `plaintext`;
 + `theme` defaults to `vs-dark`;
-+ `readOnly` defaults to `true`;
-+ `height` defaults to `300px`.
++ `number` defaults to `1` and is the stable ordinal of the editor instance inside the same body.
 
-Less commonly used options can be passed through the `extras` field. For example, the following example enables word wrapping when the line exceeds 40 columns:
+The editor is always read-only and its minimum height comes from the stylesheet; besides `body` it accepts no height, read-only switch or arbitrary Monaco options. For more construction options see the [Monaco Editor documentation](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html); for concrete styling examples see [PR #215](https://github.com/Yue-plus/hexo-theme-arknights/pull/215).
 
-```
-{% editor javascript hc-black wordWrap:`wordWrapColumn` wordWrapColumn:40 wrappingIndent:`indent` %}
-/* global hexo */
-
-'use strict';
-
-function render(data) {
-    return hexo.render.renderSync({ text: data, engine: 'markdown' });
-}
-
-hexo.extend.tag.register('hide', (args) => {
-    let content = ''
-    args.forEach((item) => {
-        content += ' ' + item
-    });
-    return `<span class="hide"><object>${render(content.slice(1)).trim()}</object></span>`;
-})
-{% endeditor %}
-```
-
-For more construction options see the [Monaco Editor documentation](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html); for concrete styling examples see [PR #215](https://github.com/Yue-plus/hexo-theme-arknights/pull/215).
+The old `hide` tag has no replacement syntax; its tag, stylesheet and color variables were removed together.
 
 ## Import custom CSS/JS files
 

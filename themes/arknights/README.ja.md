@@ -701,103 +701,63 @@ post-index: true/false
 reward: true/false
 ```
 
-## 追加ラベル
+## 行ベースコンテンツツール
 
-### admonition
+ヒントボックス・コードエディタ・友達リンクカードは、いずれも同じ行ベース block プロトコルを使います。最初の行が `[#]>名前|` で、続く各フィールドは物理行 1 行ずつ `[フィールド名]| 値` と書きます（縦線区切りは必須で、前後のスペースとタブは無視されます）。複数行の値は区切り記号直後の `$[` で開き、独占 1 行の `]$` で閉じます。header は物理行の先頭でなければならず、行中の同名テキストは通常の本文として描画されます。
+
+### Alerts
 
 ```text
-{% note/warning/success/failure/detail [title] [open/fold] [color] %}
+[#]>Alerts|
+[type]| WARNING
+[title]| someTitle
+[body]| $[
 content
-{% end[note/warning/success/failure/detail] %}
+]$
 ```
 
-ヒント、警告、エラーなどのブロックコンテンツを追加します。その中で、`note/warning/success/failure` はアイコンがあり、`detail` はアイコンがありません。
++ `type` は必須で、`NOTE` / `TIP` / `IMPORTANT` / `WARNING` / `CAUTION` のいずれかです；
++ `open` のデフォルトは `true` で、`false` を書くと初期状態で折りたたまれます；
++ `title` を省略または `null` にすると大文字の `type` が使われます；
++ `color` は `#` を伴わない 6 桁または 8 桁の 16 進値で、`null` は型ごとの既定色に戻ります。
 
-### hide
+### LinkCard
 
-```
-{% hide content %}
-```
+カード 1 枚につき `LinkCard` を 1 つ書きます：
 
-コンテンツを非表示にし、content は markdown レンダリングをサポートし、引用符を使用する必要はありません。
-
-### link card/linkc
-
-```
-{% linkcard %}
-Title1:
-    avatar: https://someLink/someAvatar.png
-    src: https://someLink/
-    img: https://somelink/somePicture.png
-    descr: someDescr
-    style:
-    	color: someColor
-Title2:
-    avatar: https://someLink/someName.png
-    src: https://someLink/
-{% endlinkcard %}
+```text
+[#]>LinkCard|
+[avatar]| Title1
+[link]| https://someLink/
+[img]| https://someLink/somePicture.png
+[descr]| someDescr
+[style]| color: #22BBFF; --card-bg: #123456
 ```
 
-友達チェーンのセットを生成できます。タイトル（title）、リンク（src）は必須です。スタイル（style）は CSS フォーマットに準拠しています。
++ `avatar` はカードの表示名、`link` は `http:` / `https:` または制御されたルート相対 URL で、どちらも必須です；
++ `img` はカード背景画像で、省略すると背景ノードを出力しません；
++ `descr` はプレーンテキストとして出力され、Markdown としては描画されません；
++ `style` は 1 行の制限された CSS declaration list で、そのカードにスコープされます。任意のスタイルシートは受け付けられません。
 
-### Monaco Editor
+### Editor
 
 Hexo 標準の [コードブロック](https://hexo.io/ja/docs/tag-plugins.html#%E3%82%B3%E3%83%BC%E3%83%89%E3%83%96%E3%83%AD%E3%83%83%E3%82%AF) に加え、本テーマは VS Code スタイルの [Monaco Editor](https://github.com/microsoft/monaco-editor) をサポートしています。
 
 ```text
-{% editor javascript %}
-/* global hexo */
-
-'use strict';
-
-function render(data) {
-    return hexo.render.renderSync({ text: data, engine: 'markdown' });
-}
-
-hexo.extend.tag.register('hide', (args) => {
-    let content = ''
-    args.forEach((item) => {
-        content += ' ' + item
-    });
-    return `<span class="hide"><object>${render(content.slice(1)).trim()}</object></span>`;
-})
-{% endeditor %}
-```
-
-`editor` タグは次のパラメータをサポートします：
-
-```text
-[language, [theme, [readOnly, [height]]], [...extras(key:value)]]
+[#]>Editor|
+[language]| javascript
+[body]| $[
+console.log('hello')
+]$
 ```
 
 + `language` のデフォルトは `plaintext` です；
 + `theme` のデフォルトは `vs-dark` です；
-+ `readOnly` のデフォルトは `true` です；
-+ `height` のデフォルトは `300px` です。
++ `number` のデフォルトは `1` で、同じ本文内でのエディタインスタンスの安定した連番です。
 
-あまり使われないパラメータは `extras` で渡すことができます。例えば、下の例は列数が 40 を超えた時に折り返し（ワードラップ）を有効にします：
+エディタは常に読み取り専用で、最小の高さはスタイルから与えられます。`body` 以外に高さ・読み取り専用スイッチ・任意の Monaco options は受け付けません。追加の構築オプションは [Monaco Editor ドキュメント](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html) を参照してください。具体的なスタイルの反映例は [PR #215](https://github.com/Yue-plus/hexo-theme-arknights/pull/215) をご覧ください。
 
-```
-{% editor javascript hc-black wordWrap:`wordWrapColumn` wordWrapColumn:40 wrappingIndent:`indent` %}
-/* global hexo */
-
-'use strict';
-
-function render(data) {
-    return hexo.render.renderSync({ text: data, engine: 'markdown' });
-}
-
-hexo.extend.tag.register('hide', (args) => {
-    let content = ''
-    args.forEach((item) => {
-        content += ' ' + item
-    });
-    return `<span class="hide"><object>${render(content.slice(1)).trim()}</object></span>`;
-})
-{% endeditor %}
-```
-
-追加の拡張パラメータは [Monaco Editor ドキュメント](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IStandaloneEditorConstructionOptions.html) を参照してください。具体的なスタイルの反映例は [PR #215](https://github.com/Yue-plus/hexo-theme-arknights/pull/215) をご覧ください。
+旧 `hide` タグには代替構文がありません。タグ・スタイル・色変数もあわせて削除しました。
 
 ## カスタム CSS/JS ファイルの導入
 
