@@ -80,11 +80,9 @@ class BgmControl {
     this.lifecycleGeneration += 1
     const token = this.snapshotLifecycleToken()
     this.unbindPersistentListeners()
-    const ownedNode = invalidateStatusLease()
-    if (ownedNode !== null) {
-      ownedNode.textContent = ''
-      ownedNode.hidden = true
-    }
+    // 共享 status 节点的终结写入收敛到 lease 模块：Pjax 换页窗口内节点即将被替换，
+    // 故走同步清空（无退场、无 timer），但租约校验与写入点仍只有一处
+    clearStatusNow()
     this.bindPersistentListeners(token)
     return token
   }

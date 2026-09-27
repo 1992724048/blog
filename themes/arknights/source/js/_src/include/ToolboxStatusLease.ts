@@ -12,9 +12,10 @@ declare namespace ToolboxModules {
 
 'use strict'
 
-// 全站 .toolbox-status 的唯一写入口：写入、delay 自动清除与「其它 owner 接管」失效都收敛在此。
-// 观察者挂在共享节点上，任何其它控制器的写入（哪怕文本逐字相同）都会产生 mutation record
-// 并使本 lease 失效，因此持有者之外的任何人都不可能依赖本模块的 timer 去清空别人的文案。
+// 全站 .toolbox-status 的唯一写入口：写入、delay 自动清除、进入期同步清空与「其它 owner 接管」失效都收敛在此。
+// 任何模块都不得自行写 textContent / hidden（含经 invalidateStatusLease 交还的节点），否则观察者语义与
+// 「谁持有文案」的唯一事实来源同时失效。观察者挂在共享节点上，任何其它控制器的写入（哪怕文本逐字相同）
+// 都会产生 mutation record 并使本 lease 失效，因此持有者之外的任何人都不可能依赖本模块的 timer 去清空别人的文案。
 // 进入动效由 CSS 承担（.toolbox-status:not([hidden]) 上的 @keyframes，由 hidden 的 false 写入天然触发）；
 // 退场必须发生在 hidden = true 之前，故本模块用 WAJ + generation 守卫 timer 收尾，退场常量镜像 CSS token。
 let statusGeneration = 0
@@ -28,6 +29,12 @@ const STATUS_EXIT_MS = 180
 const STATUS_EXIT_EASING = 'cubic-bezier(.4, 0, 1, 1)'
 const STATUS_EXIT_FADE = 0.6
 const STATUS_REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
+
+// 节点终结写入的唯一实现：清文本 + 落 hidden。退场（动画）必须先于它，故退场路径在调用它之前完成动画
+const clearOwnedNodeNow = (node: HTMLElement): void => {
+  node.textContent = ''
+  node.hidden = true
+}
 
 const releaseStatusLease = (lease: ToolboxModules.StatusLease): void => {
   if (lease.timer !== null) {
@@ -124,12 +131,13 @@ function claimStatus(message: string, options: ToolboxModules.StatusClaimOptions
   }
 }
 
-// 规格 16.3 的 invalidateStatusLease：待处理 mutation 视为其它 owner 已接管；校验 token、node 身份
-// 与文本一致才交还 node 供调用方清空；两种情形都递增 generation、清 timer、disconnect 并丢弃 lease
-function invalidateStatusLease(): HTMLElement | null {
+// 规格 16.3 的租约交还有效期校验：待处理 mutation 视为其它 owner 已接管；校验 token、node 身份
+// 与文本一致才算「本次确实终结的是自有文案」。两种情形都递增 generation、清 timer、disconnect 并丢弃 lease。
+// 节点引用只以回调参数的形式在本模块内流动、绝不作为返回值外泄，故全局不存在第二写入点。
+const withOwnedNode = (use: (node: HTMLElement) => void): void => {
   const lease = statusLease
   if (lease === null) {
-    return null
+    return
   }
   const pending = lease.observer === null ? [] : lease.observer.takeRecords()
   const owned = pending.length === 0
@@ -139,33 +147,38 @@ function invalidateStatusLease(): HTMLElement | null {
   statusGeneration += 1
   releaseStatusLease(lease)
   statusLease = null
-  return owned ? lease.node : null
+  if (owned) {
+    use(lease.node)
+  }
 }
 
-// 清空：持 lease 时先播 180ms 退场再落 hidden（退场必须先于 hidden，否则纯 CSS 无从过渡）；
-// 无 lease（他人已接管）时直接返回，不启动退场、不写节点、不建 timer。
+// 清空（带退场）：持 lease 时先播 180ms 退场再落 hidden（退场必须先于 hidden，否则纯 CSS 无从过渡）；
+// 无 lease（他人已接管）时不启动退场、不写节点、不建 timer。
 // 退场在飞时被新 claimStatus 接管：generation 已再推进一步，终结写入被守卫作废，退场同时被 cancel。
 function clearStatus(): void {
-  const ownedNode = invalidateStatusLease()
-  if (ownedNode === null) {
-    return
-  }
-  if (startStatusExit(ownedNode) === false) {
-    ownedNode.textContent = ''
-    ownedNode.hidden = true
-    return
-  }
-  const generation = statusGeneration
-  exitTimer = window.setTimeout(() => {
-    exitTimer = null
-    if (statusGeneration !== generation || ownedNode.isConnected === false) {
+  withOwnedNode(node => {
+    if (startStatusExit(node) === false) {
+      clearOwnedNodeNow(node)
       return
     }
-    ownedNode.textContent = ''
-    ownedNode.hidden = true
-    if (exitAnimation !== null) {
-      exitAnimation.cancel()
-      exitAnimation = null
-    }
-  }, STATUS_EXIT_MS)
+    const generation = statusGeneration
+    exitTimer = window.setTimeout(() => {
+      exitTimer = null
+      if (statusGeneration !== generation || node.isConnected === false) {
+        return
+      }
+      clearOwnedNodeNow(node)
+      if (exitAnimation !== null) {
+        exitAnimation.cancel()
+        exitAnimation = null
+      }
+    }, STATUS_EXIT_MS)
+  })
+}
+
+// 同步清空（无退场、无 timer）：Pjax 换页窗口内节点即将被替换，播退场既无观感也无意义。
+// 与 clearStatus 的差别仅在退场面，租约校验与终结写入完全共用。
+function clearStatusNow(): void {
+  cancelStatusExit()
+  withOwnedNode(clearOwnedNodeNow)
 }

@@ -220,9 +220,12 @@ header
   td
     border-bottom 1px solid var(--theme-highlight)
 
-// GitHub 风格 Alert（> [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]）
-// 缩小引用块上下间距（通用引用块的底色 / 边框 / hover 见 base.styl 的 blockquote:not(.alert)）
-blockquote
+// GitHub 风格 Alert（> [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]）之外的通用引用块间距定制。
+// 选择器必须与 base.styl 的通用引用块同为 blockquote:not(.alert)：本仓的定制层靠「后导入 + 同特异性」生效，
+// 若这里退回裸 blockquote（0,0,1），就会被 base.styl 的 blockquote:not(.alert)（0,1,1）按特异性压制而静默失效
+// （批次 C 给通用引用块加 :not(.alert) 时发生过）。故此处的 margin / padding 是真正生效的值。
+// 通用引用块的底色 / 边框 / hover 见 base.styl 的 blockquote:not(.alert)
+blockquote:not(.alert)
   margin .5em 0
   padding 6px 20px
   p

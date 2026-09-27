@@ -1021,7 +1021,9 @@ A 批次的 pipeline 子模块以及标注/持久化/分享/收藏控制器拆�
 | 依赖方向 | `pipeline.js` → 子模块；子模块之间不得互相 `require`（`failure` 与 `project-grid` 需要的共享值由 `pipeline.js` 显式注入）；子模块不得反向 `require` `pipeline.js` |
 | 单向依赖 | 子模块只能依赖 `token.js`、`carrier.js`、`registry.js`、handler 与纯工具，不得 `require` Hexo context、文件系统或网络 |
 
-前端侧 `ToolboxStatusLease.ts` 承担共享 `.toolbox-status` 的 lease 协议：`statusGeneration`、唯一 `MutationObserver`、唯一 timer、token/node 归属判定与 `claimStatus`/`invalidateStatusLease`/`clearStatus`。`BgmControl.ts` 组合它并保留 `playbackState`、`mediaFailed`、operation/lifecycle generation 与状态机；`Toolbox.ts` facade 的 private `applyState(true)` 分支调用公开的 `window.bgmControl.clearStatus()`。契约冻结：`.toolbox-status` 不新增公开 DOM attribute，`claimStatus(message, delay)`、`invalidateStatusLease()`、`clearStatus()` 的签名与第 16.3 节 lease 伪代码一致；`window.toolbox` 仍只公开 `toggle()/annotate()/share()/favorite()`，`window.screenshotControl` 仍只公开 `capture()`，`window.bgmControl` 在既有 `toggle()` 外只新增 `clearStatus(): void`。截图/分享/收藏仍作为外部 owner 直接写该 node 而不持 lease，并由 observer 使旧 BGM lease 失效。
+前端侧 `ToolboxStatusLease.ts` 承担共享 `.toolbox-status` 的 lease 协议：`statusGeneration`、唯一 `MutationObserver`、唯一 timer、token/node 归属判定与 `claimStatus`/`withOwnedNode`/`clearStatus`/`clearStatusNow`。`BgmControl.ts` 组合它并保留 `playbackState`、`mediaFailed`、operation/lifecycle generation 与状态机；`Toolbox.ts` facade 的 private `applyState(true)` 分支调用公开的 `window.bgmControl.clearStatus()`。契约冻结：`.toolbox-status` 不新增公开 DOM attribute，`claimStatus(message, delay)`、`withOwnedNode(use)`、`clearStatus()`、`clearStatusNow()` 的签名与第 16.3 节 lease 伪代码一致；`window.toolbox` 仍只公开 `toggle()/annotate()/share()/favorite()`，`window.screenshotControl` 仍只公开 `capture()`，`window.bgmControl` 在既有 `toggle()` 外只新增 `clearStatus(): void`。截图/分享/收藏仍作为外部 owner 直接写该 node 而不持 lease，并由 observer 使旧 BGM lease 失效。
+
+> **审查 P4 修订（唯一写入者收敛）**：`invalidateStatusLease()` 原本把可写节点 `HTMLElement` 返回给调用方，`BgmControl.ts` 就在 `invalidateLifecycle()` 里自行写 `textContent` / `hidden`——而 AGENTS.md 与 GC14 声称「全站唯一写入者」，按选择器名 grep 的门禁又恰好命中不到（`BgmControl` 从不出现该选择器字符串）。修订把租约交还改为**本模块内 `withOwnedNode(use)` 回调**：节点引用一律不外流（该模块零 `HTMLElement` 返回），其它模块既不得引用 `withOwnedNode`、也不得自行 `querySelector('.toolbox-status')`；`BgmControl` 的 Pjax 换页清空改走新增的 `clearStatusNow()`（同步、无退场——节点即将被替换，播退场无意义），「同步无退场」这一差异由 lease 入口承担而非由调用方写节点。门禁改为按**写入位置可达性**把门（R1 / R1b / R2 / R3）并以两条违规形态的变异注入自证有鉴别力。
 
 `environment.d.ts` 的公开类型固定为：
 
@@ -1527,7 +1529,9 @@ accent 映射固定为：
 断点保持 `1024px`：
 
 1. `>=1024px` 所有一级 `.navBlock` 为**按内容自适应宽度**：`width: auto` + `min-width: 0`、`36px` 高度、`border-box` 与 `padding: 0 12px`（实机反馈第三轮：`min-width` 由固定契约值回退为 `0`，`72px` / `60px` / `3.75em` 一律零命中）。等宽**不再由 `min-width` 承担**，而是在内容层由「图标槽宽 = 名称宽」自然得到——六个菜单名都是 2 个全角汉字（`2em`），固定图标槽后各项内容宽恒相等。搜索输入仍按顶栏内容区契约使用 35px，按钮本身不得改成 35px。
-1a. **图标槽宽契约 `--nav-icon-w 2em`**（`header.styl` 的 `:root`，@16px 即 `32px`）：由 `.navBlockIcon > .navItemTitle > i` 的 `width` 与 `max-width` **同时**消费，并配 `text-align center` 使字形在槽内居中。设这条契约的根因是实测而非推测——真读 `fa-solid-900.ttf` 的 `hmtx` 表得六项 advance 为 `fa-house` 576、`fa-circle-info` 512、`fa-folder-open` 576、`fa-link` 640、`fa-database` 448、`fa-box-archive` 512（`unitsPerEm = 512`），@16px 即 18 / 16 / 18 / 20 / 14 / 16px，**极差 6px**；而 `menu` 六项标签长度完全相同，故「友链项更宽」100% 来自字形 advance，固定槽宽即可把该差异彻底移出布局计算。槽宽取 `2em`（而非最宽 advance 的 `1.25em`）是零位移的必要条件：非 active 内容宽 = 槽宽 `2em`，active 内容宽 = 收起后的图标 `0` + 名称 `2em`，两端点相等；槽宽须 ≥ 最宽 advance 以保证 `overflow: hidden` 不裁切（当前 32px > 20px，门禁逐字形断言）。`em` 随页面缩放同步（WCAG 1.4.4），前提是桌面导航路径不覆盖 `font-size`。图标槽**不得**声明 `min-width`（`min-width` 会压过 `max-width: 0`，使 active 态无法收拢）。
+1a. **图标槽宽契约 `--nav-icon-w 1.25em`**（`header.styl` 的 `:root`，@16px 即 `20px`）：由 `.navBlockIcon > .navItemTitle > i` 的 `width` 与 `max-width` **同时**消费，并配 `text-align center` 使字形在槽内居中。设这条契约的根因是实测而非推测——真读 `fa-solid-900.ttf` 的 `hmtx` 表得六项 advance 为 `fa-house` 576、`fa-circle-info` 512、`fa-folder-open` 576、`fa-link` 640、`fa-database` 448、`fa-box-archive` 512（`unitsPerEm = 512`），@16px 即 18 / 16 / 18 / 20 / 14 / 16px，**极差 6px**；而 `menu` 六项标签长度完全相同（均 2 个全角字，名称宽恒 2em），故「友链项更宽」100% 来自字形 advance，固定槽宽即可把该差异彻底移出布局计算。**槽宽取实测最大 advance（`fa-link` 的 `1.25em`）**：既保证 `overflow: hidden` 不裁切（当前 20px = 最宽 advance，门禁逐字形断言 advance 与墨迹宽都 `<=` 槽宽），又使图标明显小于两个汉字的名称宽 `2em`（门禁断言槽宽 `===` 最大 advance 且 `<` 2em）。`em` 随页面缩放同步（WCAG 1.4.4），前提是桌面导航路径不覆盖 `font-size`。图标槽**不得**声明 `min-width`（`min-width` 会压过 `max-width: 0`，使 active 态无法收拢）。
+
+> **实机反馈第四轮修订（零位移已撤销）**：本节初版把槽宽定为 `2em`，其唯一理由是「两态内容宽相等 → 切换当前页零位移」。但 `2em` 槽正是「图标与两个汉字等大」的来源，而用户实机反馈正是「导航栏按钮还是没有改成自适应大小」与「图标按钮大小不应当和文字一样」。用户裁决为：保留「非当前页只显图标 / 当前页只显名称」的互换设计，把图标槽收到约 1em 级，并**明确接受**两态存在宽度差。故零位移性质连带撤销：现槽宽 `1.25em` < 名称宽 `2em`，active 项（名称态 56px）比非 active 项（图标态 44px）宽 `0.75em` = 12px，切换当前页时其后按钮与右侧簇位移 12px，属已登记的已知取舍。顺序化过渡保证**峰值**不出现：过渡期内容宽恒 `<= max(槽, 名称) = 2em = 32px`（同时占位的反事实为 52px 内容 / 76px 按钮，门禁见证其严格更宽），代价是中途两者都收起、内容宽经过 0（按钮短暂退回 24px 纯内边距宽）。
 2. 一级按钮统一 `justify-content: center`；图标项与文字项的内部布局一致。
 3. `.navItemTitle` 在桌面一级项中占满按钮可用宽度并水平居中。
 4. active 项收起 icon 时，active `.navItemLabel` 的 `margin-left` 归零，名称在按钮内居中；**名称与图标的尺寸过渡必须顺序化**（各半 `.15s`）：进入 active 时图标立即收拢、名称延迟 `.15s` 展开，离开 active 时名称立即收起、图标延迟 `.15s` 展开。两段合计仍为 `.3s`，但两者不再同时占位，过渡期内容宽度上界由「图标槽 + 名称」的 `4em`（`2em` 槽 + `2em` 名称 = 64px，连内边距即 88px）降为 `max(槽, 名称)` = `2em`（连内边距 56px），且因槽宽 = 名称宽，两端点相等，因此切换当前页时按钮宽度零跳变、其后按钮与右侧簇零位移（当前配置 6 项均得 56px）。
@@ -1580,7 +1584,7 @@ retireOperation(token)
 invalidateLifecycle(reason)
   1. lifecycleGeneration += 1；旧 OperationToken 因 lifecycle 不匹配而全部失效
   2. 断开旧 persistent/operation-scoped media listener，并用新 lifecycle 重新绑定唯一 persistent listener
-  3. 调用 invalidateStatusLease() 恰好一次；返回 ownedNode 时才清空该 node
+  3. 调用 `clearStatusNow()` 恰好一次（其内部走 `withOwnedNode`，校验通过才终结写入自己的文案）
   4. 返回只捕获新 lifecycleGeneration 的 LifecycleToken
 ```
 
@@ -1630,7 +1634,7 @@ enterFailed(reason, token)
 | 任意状态 | 原生 `error` 或 `reconcile` 发现当前 `audio.error !== null` | 以该 listener/reconcile 的 `M`/`L` 调用 `enterFailed("audio-error", token)` | `failed` |
 | 任意状态 | 一个 `pjax:send`、`pjax:error` 或 `pjax:success` dispatch | 该 handler 恰好调用一次 `L=invalidateLifecycle(eventType)`；健康时按 `audio.paused` 重算 `playing/paused` 并以 `L` reconcile，若 `mediaFailed` 或 `audio.error` 为真则以同一 `L` 调用 `enterFailed("pjax-"+eventType, L)` | 对应实况状态 |
 
-三个 Pjax 事件各自是一次独立 dispatch；其中新增 `pjax:error` 处理以及下述 generation/status 变化均属于 C 批次用户已要求的 BGM/status 行为修复，不归入 A 的控制器纯搬运。每次 `invalidateLifecycle()` 恰好令 `lifecycleGeneration` 增加 1、调用 `invalidateStatusLease()` 1 次并重绑 persistent listener 1 次，且自身不改变 `operationGeneration`。只有该 dispatch 随后实际进入 `enterFailed(..., L)` 时，`advanceOperationGeneration()` 才额外增加 operation 1 次；健康路径的 operation 增量为 0。一次 `send → error → success` 序列固定产生 3 次 lifecycle 失效，不得因重复注册、媒体回调或 reconcile 产生第 2 次同 dispatch lifecycle 失效。Pjax 始终保留区外唯一 `audio#bgm` 的实况播放状态与 `mediaFailed`，success 只按新 `L` 对应的实况 reconcile。
+三个 Pjax 事件各自是一次独立 dispatch；其中新增 `pjax:error` 处理以及下述 generation/status 变化均属于 C 批次用户已要求的 BGM/status 行为修复，不归入 A 的控制器纯搬运。每次 `invalidateLifecycle()` 恰好令 `lifecycleGeneration` 增加 1、经 `clearStatusNow()` 释放自有 status lease 1 次（其内部 `withOwnedNode` 恰好校验一次；有待处理 mutation 即视为其它 owner 已接管、不写节点）并重绑 persistent listener 1 次，且自身不改变 `operationGeneration`。只有该 dispatch 随后实际进入 `enterFailed(..., L)` 时，`advanceOperationGeneration()` 才额外增加 operation 1 次；健康路径的 operation 增量为 0。一次 `send → error → success` 序列固定产生 3 次 lifecycle 失效，不得因重复注册、媒体回调或 reconcile 产生第 2 次同 dispatch lifecycle 失效。Pjax 始终保留区外唯一 `audio#bgm` 的实况播放状态与 `mediaFailed`，success 只按新 `L` 对应的实况 reconcile。
 
 `mediaFailed` 只在 `enterFailed(reason, token)` 中置为 `true`，且该函数必须与 `playbackState = "failed"` 同步完成。唯一清除点是 `failed` 用户重试中的当前 `O` 所对应 `load()` 正常返回：必须先清零再以同一 `O` 调用 `play()`；随后 play resolve 保持 `false`，play reject、pause 抛错或任何绑定当前 token 的新 `error` 立即通过 `enterFailed(reason, token)` 重新置为 `true`。初始化、pause、普通 `play()`、Pjax success、status timer 和 DOM reconcile 都不得清零。只有 `failed` toggle 才执行 `load()`；普通 `paused -> starting` 不重载媒体。所有旧 operation/lifecycle 的 resolve、reject、media callback 与 Pjax continuation 都不得修改 `mediaFailed`、状态、status、timer 或 `aria-busy`。
 
@@ -1649,7 +1653,7 @@ observer callback
   2. 清 timer、disconnect observer、丢弃 lease
   3. 不再写 node；即使外部写入了与 lease.message 相同的文本也视为其它 owner 接管
 
-invalidateStatusLease()
+withOwnedNode()
   1. 无 BGM lease 时返回 null
   2. 先调用 observer.takeRecords()；有待处理 mutation 时递增 statusGeneration、清 timer、disconnect observer、丢弃 lease并返回 null
   3. 再校验 token、node 身份与 node.textContent === lease.message
@@ -1657,7 +1661,7 @@ invalidateStatusLease()
   5. 校验成功时递增 statusGeneration、清 timer、disconnect observer、丢弃 lease并返回原 lease.node
 
 timer callback / clearStatus()
-  1. 调用 invalidateStatusLease() 并保存 ownedNode
+  1. 调用 `clearStatusNow()`（Pjax 换页窗口，节点即将被替换故同步清空、无退场）
   2. 仅 ownedNode 非 null 时最后清空该 node；否则不写 node
   3. 自有 mutation 不得反向生成新 lease
 ```
@@ -1666,7 +1670,7 @@ timer callback / clearStatus()
 
 所有当前 token 的退出路径都以 `retireOperation(O)`（终态写回之前）或 `enterFailed(reason, token)`（内部按 token 类型完成 retire / advance）结束自己的 busy 并断绑 operation-scoped listener；旧 token 不得覆盖新操作。状态文案只读取按钮现有 `data-label-playing-status`、`data-label-paused-status` 和 `data-label-failed-status`，不新增配置或硬编码中文。
 
-确定性 fixture 必须覆盖：`failed -> retrying-load -> retrying-play -> playing|failed` 的两条终态、`load()`/`play()`/`pause()` 同步抛错、`load()` 返回后 play reject 重置 `mediaFailed`、普通 paused play 不调用 load、原生 `play` 健康与失败、原生 `pause`、`ended`、`error`、连续 play→pause→play、外部写入与 BGM 完全相同文本、2500ms 前后截图覆盖 status、BGM 无 lease 时 toolbox 打开 no-op。generation 专项断言：初始化 `snapshotLifecycleToken()` 不增加任一 generation；每次 `beginOperation()` 只把 operation 计数增加 1；每个 Pjax dispatch 的 `invalidateLifecycle()` 只使 lifecycle 增加 1、调用 `invalidateStatusLease()` 1 次且 operation 增量在健康路径为 0、失败路径仅由随后一次 `enterFailed(..., L)` 增加 1；Pjax 后旧 `O`、旧 `M`、旧 `L` 的 resolve/reject/媒体/Pjax continuation 均在写入前拒绝；被拒绝和所有实际进入 `failed` 的路径分别证明 generation/状态写入计数为 0 与 `enterFailed(reason, 当前 token)` 调用后 `mediaFailed === true`。`retireOperation` 专项断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用一次 `retireOperation(O)`，同一 operation 不得再由 `enterFailed` 或 `beginOperation` 重复 retire；`retrying-load -> retrying-play` 中途不得 retire；`retireOperation` 后 operation-scoped listener 集合归零（探针统计 addEventListener/removeEventListener 差值为 0）；终态之后人为触发的旧 `O` 延迟 resolve、旧 `O` 的排队 one-shot media 回调与 `setTimeout` 延迟回调全部在写入前 no-op；对 `retireOperation` 传入 `LifecycleToken`、旧 `O` 与非 token 值时返回 false 且 generation、listener 集合、状态、status、timer 与 `aria-busy` 写入计数均为 0；`enterFailed` 以 OperationToken 进入时恰好调用一次 `retireOperation` 且不再单独调用 `advanceOperationGeneration`，以 LifecycleToken 进入时恰好调用一次 `advanceOperationGeneration`。
+确定性 fixture 必须覆盖：`failed -> retrying-load -> retrying-play -> playing|failed` 的两条终态、`load()`/`play()`/`pause()` 同步抛错、`load()` 返回后 play reject 重置 `mediaFailed`、普通 paused play 不调用 load、原生 `play` 健康与失败、原生 `pause`、`ended`、`error`、连续 play→pause→play、外部写入与 BGM 完全相同文本、2500ms 前后截图覆盖 status、BGM 无 lease 时 toolbox 打开 no-op。generation 专项断言：初始化 `snapshotLifecycleToken()` 不增加任一 generation；每次 `beginOperation()` 只把 operation 计数增加 1；每个 Pjax dispatch 的 `invalidateLifecycle()` 只使 lifecycle 增加 1、调用 `withOwnedNode()` 1 次且 operation 增量在健康路径为 0、失败路径仅由随后一次 `enterFailed(..., L)` 增加 1；Pjax 后旧 `O`、旧 `M`、旧 `L` 的 resolve/reject/媒体/Pjax continuation 均在写入前拒绝；被拒绝和所有实际进入 `failed` 的路径分别证明 generation/状态写入计数为 0 与 `enterFailed(reason, 当前 token)` 调用后 `mediaFailed === true`。`retireOperation` 专项断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用一次 `retireOperation(O)`，同一 operation 不得再由 `enterFailed` 或 `beginOperation` 重复 retire；`retrying-load -> retrying-play` 中途不得 retire；`retireOperation` 后 operation-scoped listener 集合归零（探针统计 addEventListener/removeEventListener 差值为 0）；终态之后人为触发的旧 `O` 延迟 resolve、旧 `O` 的排队 one-shot media 回调与 `setTimeout` 延迟回调全部在写入前 no-op；对 `retireOperation` 传入 `LifecycleToken`、旧 `O` 与非 token 值时返回 false 且 generation、listener 集合、状态、status、timer 与 `aria-busy` 写入计数均为 0；`enterFailed` 以 OperationToken 进入时恰好调用一次 `retireOperation` 且不再单独调用 `advanceOperationGeneration`，以 LifecycleToken 进入时恰好调用一次 `advanceOperationGeneration`。
 
 ## 17. 安全、搜索与描述
 
@@ -1901,7 +1905,7 @@ public 门禁与上述内存门禁是两套独立断言，不能互相替代：
 
 1. `.temp/theme-ui-alerts.test.js` 解析最终 `arknights.css`，分别计算普通 blockquote 与五种 GitHub Alert 在 light/dark、rest/hover/focus-within 下的合成 background、accent border 和 `--theme-text` 标题/正文；断言文字 `>=4.5:1`、边框 `>=3:1`、hover/focus 规则相同，并验证 IMPORTANT/其它类型不污染普通引用。
 2. `.temp/theme-ui-nav.test.js` 覆盖 1023/1024/1280px，断言桌面一级按钮 72×36、border-box、居中、active 前后位置不变；移动端整行左对齐。
-3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()/pause()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/lifecycle/status generation、对应 token 拒绝、原生 `play`/`pause`/`ended`/`error`、Pjax 三事件与旧 Promise 交错；断言初始化 snapshot 不递增 generation、每个 Pjax dispatch 的 lifecycle 只递增 1、`invalidateStatusLease()` 只调用 1 次、persistent listener 只重绑 1 次，operation 在健康路径增量为 0、失败路径仅由一次 `enterFailed(..., L)` 递增 1，并证明旧 `O/M/L` 在任何写入前 no-op、`enterFailed()` 不会接收旧 lifecycle token。`retireOperation` 必须单列一组断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用 1 次；`retrying-load -> retrying-play` 中途不调用；调用后 operation-scoped listener 计数归零；终态后人为触发的旧 `O` 延迟 resolve、排队 one-shot media 回调与 timer 延迟回调全部 no-op；传入 `LifecycleToken`/旧 `O`/非 token 时返回 false 且 generation、listener、状态、status、timer 与 `aria-busy` 写入计数为 0。每条实际进入 `failed` 的路径都必须传入当前 token 并断言调用后 `mediaFailed === true`，同时覆盖外部相同文本写入、2500ms lease 与 toolbox 打开。
+3. `.temp/theme-ui-bgm.test.js` 使用 fake timer、可控 `audio.load()/play()/pause()` 与 `MutationObserver` 确定性探针，逐项覆盖第 16.3 节 `failed -> retrying-load -> retrying-play -> playing|failed`、`mediaFailed` 清零条件、operation/lifecycle/status generation、对应 token 拒绝、原生 `play`/`pause`/`ended`/`error`、Pjax 三事件与旧 Promise 交错；断言初始化 snapshot 不递增 generation、每个 Pjax dispatch 的 lifecycle 只递增 1、`withOwnedNode()` 只调用 1 次、persistent listener 只重绑 1 次，operation 在健康路径增量为 0、失败路径仅由一次 `enterFailed(..., L)` 递增 1，并证明旧 `O/M/L` 在任何写入前 no-op、`enterFailed()` 不会接收旧 lifecycle token。`retireOperation` 必须单列一组断言：成功终态（play resolve 到 `playing`、pause 正常返回到 `paused`）各恰好调用 1 次；`retrying-load -> retrying-play` 中途不调用；调用后 operation-scoped listener 计数归零；终态后人为触发的旧 `O` 延迟 resolve、排队 one-shot media 回调与 timer 延迟回调全部 no-op；传入 `LifecycleToken`/旧 `O`/非 token 时返回 false 且 generation、listener、状态、status、timer 与 `aria-busy` 写入计数为 0。每条实际进入 `failed` 的路径都必须传入当前 token 并断言调用后 `mediaFailed === true`，同时覆盖外部相同文本写入、2500ms lease 与 toolbox 打开。
 4. 必须运行现有真实脚本 `.temp/project-tooltip.test.js`、`.temp/theme-ui-screenshot.test.js`、`.temp/theme-ui-toolbox.test.js`；脚本从 source/DOM fixture 初始化 Project、截图 lease 和五项 toolbox，不以缺少 source 的 public HTML 作为通过证据。
 5. `.temp/search-projection-lifecycle.test.js` 继续跨真实 Warehouse 文档生命周期验证五类投影、失败原文、加密/ambiguous 空 sidecar 和内部串清零。
 6. `.temp/line-marker-artifacts.js` 默认模式必须同时读取真实 `source/` 输入和 `public/` 输出并逐项建立 source→artifact 对照；`--install-fixture --nonce` / `--remove-fixture --expected-nonce` 只负责第 18.2 节 synthetic build fixture 的成对磁盘 ownership 生命周期。默认模式还要验证 final source 与 public 目录每个 regular file 携带同一 receipt，且 `index.html` 身份匹配；remove 进程先比较 expected nonce 再读取固定 receipt。staging/source/public 任一 receipt 不匹配时必须保留目标并非零退出。`public/search.json` 不含 synthetic URL，`public/sitemap.xml` 与 `public/sitemap.txt` 均不含 sentinel、receipt、`__line-marker-artifact-fixture` 与站点 URL。真实 source 缺失、fixture 未迁移、只存在 public 输出、synthetic source/output 不成对或清理残留时立即失败。

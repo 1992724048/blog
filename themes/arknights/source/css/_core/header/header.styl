@@ -9,11 +9,14 @@
   // 改由按钮本体的底色 / 文字色承担
   --nav-tab-drop 2px
   --nav-tab-color var(--theme-highlight)
-  // 桌面一级导航的图标槽宽：等于最宽菜单名的渲染宽（2 个全角字 × 1em/字 = 2em），
-  // 使「收起图标」与「展开名称」两态的内容宽恒相等，切换当前页时按钮与其后按钮零位移；
-  // 同时把 FontAwesome 各字形 14–20px 不等的 advance 统一到一个槽宽（字形居中、不裁切），
-  // 从根上消除「友链项比其它项宽」的字形差异。用 em 随字号 / 页面缩放同步（WCAG 1.4.4）
-  --nav-icon-w 2em
+  // 桌面一级导航的图标槽宽：取各 menu_icons 字形 advance 的最大值，em 声明随页面缩放同步（WCAG 1.4.4）。
+  // 实测 fa-solid-900.ttf（UPEM 512）的 hmtx advance（.temp/fa-font-metrics.js 复算，门禁逐字形断言）：
+  // fa-link 640 → 1.25em（最宽）、fa-house / fa-folder-open 576 → 1.125em、
+  // fa-circle-info / fa-box-archive 512 → 1em、fa-database 448 → 0.875em（最窄），极差 0.375em。
+  // 槽宽取最大值 1.25em 的理由：既保证任何字形都不被裁切（advance ≤ 槽宽），又使图标明显小于
+  // 两个汉字的名称宽（2em），消除「图标与文字等大」的观感；固定槽宽同时把各字形 advance
+  // 差异移出布局计算，从根上消除「友链项比其它项宽」的字形差异。
+  --nav-icon-w 1.25em
 
 header
   position sticky
@@ -113,8 +116,8 @@ ol.navContent
   align-items center
 
 // 图标：当前页时收拢淡出；槽宽固定为 --nav-icon-w（字形居中、不裁切），
-// 使 FontAwesome 各字形 14–20px 不等的 advance 不再进入布局计算（实测 fa-link 20px /
-// fa-database 14px，跨度 6px，正是「友链项更宽」的根因）。
+// 使 FontAwesome 各字形 0.875–1.25em 不等的 advance 不再进入布局计算（实测 fa-link 1.25em /
+// fa-database 0.875em，跨度 0.375em，正是「友链项更宽」的根因）。
 // .navItemTitle 为 flex 容器，图标作为弹性项可直接过渡 max-width；overflow hidden 兼作裁切与解除弹性项自动最小尺寸
 // 过渡为「顺序化」的一半（延迟 .15s）：离开当前页时名称先收起、图标随后展开（见 .navItemLabel 注释）
 .navBlockIcon > .navItemTitle > i
@@ -134,8 +137,10 @@ ol.navContent
 // margin-left 归零配合 .navItemTitle 的 flex 1 + 居中，使名称在按钮内居中；
 // ≤1023px 由 flex_layout.styl 覆盖回 6px，保持图标 + 名称成组
 // 过渡同样顺序化：收起方向立即（.15s），展开方向延迟 .15s。两段合计 .3s，与原同节奏总时长一致，
-// 但图标与名称不再同时占位 → 过渡期内容宽度恒 ≤ max(图标槽, 名称)，配合「图标槽宽 = 名称宽」
-// 两端点相等，故切换当前页时按钮宽度零跳变、其后按钮与右侧簇零位移
+// 但图标与名称不再同时占位 → 过渡期内容宽度恒 ≤ max(图标槽, 名称)，不出现二者相加的占位峰值。
+// 已知取舍：图标槽 1.25em 小于名称 2em，故 active 项（名称态）比非 active 项（图标态）宽 0.75em，
+// 切换当前页时其后按钮与右侧簇会位移 0.75em（用户实机反馈后明确接受的取舍，不再以 min-width 掩盖）。
+// 顺序化过渡使两者不同时占位，故中途内容宽经过 0（按钮短暂退回 24px 纯内边距宽），两端点则各自恒定。
 .navItemLabel
   display inline-block
   max-width 0

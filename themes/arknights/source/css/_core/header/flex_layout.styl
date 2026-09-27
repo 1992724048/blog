@@ -70,10 +70,12 @@
 
   // 一级导航按内容自适应（border-box，高度 36px 与顶栏 36px 外高一致）：
   // min-width 归零、width auto，宽度完全由内容决定——左右内边距 12px×2 + 内容宽。
-  // 内容宽两态相等：非 active = 图标槽 --nav-icon-w（2em），active = 收起后的图标（0）+ 展开的名称（2em），
-  // 两者同为 2em；配合 header.styl 的顺序化过渡（图标先收拢 / 名称后展开，两向皆然），
-  // 过渡期内容宽度恒 ≤ max(图标槽, 名称) = 2em，不引入占位峰值
-  // → 切换当前页时任一按钮的两态自然宽度相同、其后按钮与右侧簇零位移（不靠 min-width 掩盖）
+  // 两态内容宽不同且这是明确取舍：非 active = 图标槽 --nav-icon-w（1.25em），
+  // active = 收起后的图标（0）+ 展开的名称（2em），故 active 项比非 active 项宽 0.75em。
+  // 配合 header.styl 的顺序化过渡（图标先收拢 / 名称后展开，两向皆然），
+  // 过渡期内容宽度恒 ≤ max(图标槽, 名称) = 2em，不引入二者相加的占位峰值；
+  // 代价是切换当前页时其后按钮与右侧簇位移 0.75em，且顺序化过渡令中途内容宽经过 0
+  // （用户实机反馈「按钮还是没改成自适应 / 图标不该和文字一样大」后裁决的取舍，不再以 min-width 掩盖）
   .navContent > .navItem > :is(.navBlock, .navSecond)
     box-sizing border-box
     width auto

@@ -95,7 +95,8 @@ strong em, em strong
   color var(--theme-stress)
 
 // 通用引用块：:not(.alert) 把 GitHub Alert 排除在外，避免其 accent 背景与本规则的
-// 底色 / 边框 / hover 层叠（Alert 自身的 resting 与 hover/focus-within 规则见 custom.styl）
+// 底色 / 边框 / hover 层叠（Alert 自身的 resting 与 hover 规则见 custom.styl；
+// 本块的 margin / padding 会被 custom.styl 的同选择器定制覆盖，见该处注释）
 blockquote:not(.alert)
   margin 1em 0
   border-left var(--theme-highlight) solid 5px
