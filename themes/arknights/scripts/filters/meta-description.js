@@ -28,3 +28,5 @@ hexo.extend.filter.register('after_post_render', function (data) {
   if (description) data.description = description
   return data
 }, 20)
+
+module.exports = { projectText }
