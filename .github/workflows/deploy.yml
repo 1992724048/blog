@@ -39,12 +39,6 @@ jobs:
           folder: public
           clean: true
 
-      # sidecar 已 gitignore，构建不会把它带回 main，只有这一步能让 7 天 TTL 跨构建生效。
-      # 无条件跑：fetch.js 在无待抓取条目时先于 flushSidecar 提前返回，此时根本没有文件产出，
-      # 所以「本次有无文件」不能当条件；全缓存命中时两处守卫都走 no-op 并 exit 0。
-      # 不用 --force、不 rebase：非快进时让 push 自己失败，胜过悄悄改写 main；
-      # 用 GITHUB_TOKEN 推的 commit 不会再触发本工作流，故不会自激。
-
       - name: Commit embed sidecar
         if: github.ref == 'refs/heads/main'
         run: |
