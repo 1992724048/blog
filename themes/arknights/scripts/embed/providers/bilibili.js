@@ -3,7 +3,6 @@
 const { formatDate } = require('../platform')
 
 const BV_IN_LOCATION_RE = /\/video\/(BV[0-9A-Za-z]{10})/
-const REFERER = 'https://www.bilibili.com/'
 const VIEW_API = 'https://api.bilibili.com/x/web-interface/view?bvid='
 const SHORT_LINK_ORIGIN = 'https://b23.tv/'
 
@@ -19,7 +18,8 @@ const toHttps = (url) => (typeof url === 'string' && url.startsWith('http://') ?
 const stat = (data, key) => (Number.isFinite(data.stat && data.stat[key]) ? data.stat[key] : 0)
 
 // 成功是 HTTP 200 且 body 的 code 为 0：业务错误码装在 200 响应里，只看 HTTP 状态会把失败当成功。
-// 抛错交由调用方转成 ok:false，故 -352 这类需人工滑块的风控降级、不重试
+// 抛错交由调用方转成 ok:false：业务码不经过 isRetryable（它只看 HTTP 状态），重发同一 URL
+// 只会拿到同一个业务码，故一律不重试
 const normalizeViewPayload = (json) => {
   if (!json || json.code !== 0 || !json.data) {
     throw new Error(`BILIBILI_CODE_${json && json.code !== undefined ? json.code : 'UNKNOWN'}`)
@@ -44,14 +44,18 @@ const normalizeViewPayload = (json) => {
   }
 }
 
-// 浏览器 UA + Referer 是 Gaia 风控的预防手段而非签名：接口本身无需登录态也无需 WBI 签名
-const buildHeaders = (referer = REFERER) => ({
+// ⚠ 不得加回 Referer：桌面 Chrome UA 与 referer: bilibili.com 共存会被风控判为「无任何会话
+// Cookie 却声称来自站内」的爬虫，直接 412 + code -412「request was banned」（48 次交错试验该
+// 组合 12/12 触发，缺任一头即 200/code 0）。UA 单独只描述客户端形态、不含「来自站内」的断言，
+// 故保留。接口本身无需登录态也无需 WBI 签名。
+const buildHeaders = () => ({
   accept: 'application/json, text/plain, */*',
   'accept-language': 'zh-CN,zh;q=0.9',
-  referer,
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 })
 
+// 412 不纳入重试且该结论承重：ban 由请求头形状确定性决定（同一组头 12/12 复现），重发必然
+// 再 412，只会白烧每张卡片 2 次的预算并把一次 ban 放大成三次。429 / 5xx 确属瞬态。
 const isRetryable = (status) => status === 429 || status >= 500
 
 const sleepDefault = (ms) => new Promise((resolve) => setTimeout(resolve, ms))

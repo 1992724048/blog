@@ -175,7 +175,7 @@ b23.tv 之外不处理短链（GitHub 无需）。
 ### 4.4 Bilibili provider
 
 1. 若为 `b23.tv/{code}`：`GET` + `redirect: "manual"`，从 `Location` 取 `BV[0-9A-Za-z]{10}`。**不跟随重定向**。
-2. `GET https://api.bilibili.com/x/web-interface/view?bvid={BV}`，请求头带浏览器 `User-Agent` + `Referer: https://www.bilibili.com/`（预防 Gaia 风控）。
+2. `GET https://api.bilibili.com/x/web-interface/view?bvid={BV}`，请求头带浏览器 `User-Agent`，**不得带 `Referer`**：桌面 Chrome UA 与 `Referer: https://www.bilibili.com/` 共存会被风控判为「无任何会话 Cookie 却声称来自站内」的爬虫，返回 HTTP 412 + `code: -412`（`request was banned`）。实测 48 次交错试验中该组合 12/12 触发 412，**缺任一头即 200 / `code: 0`**。UA 单独只描述客户端形态、不含「来自站内」的断言，故保留。
 
 | 卡片字段 | API 来源 | 备注 |
 | --- | --- | --- |
@@ -189,7 +189,7 @@ b23.tv 之外不处理短链（GitHub 无需）。
 | 发布时间 | `data.pubdate`（Unix 秒） | 格式化为 `YYYY-MM-DD` |
 | 封面 | `data.pic` | **`http://` 改写为 `https://`**；作为卡片右侧缩略图 |
 
-错误码处理：`-400` / `-404` / `62002` / `62004` / `-403` 一律降级为纯链接卡片 + WARN。`-352`（Gaia 风控，需人工滑块）同样降级，**不做自动恢复**。
+错误码处理：`-400` / `-404` / `62002` / `62004` / `-403` 一律降级为纯链接卡片 + WARN。`-352`（滑块风控）同样降级，**不做自动恢复**。实测从未观测到 `-352`；实际观测到的 ban 是 HTTP 412 + `code: -412`，它在 **HTTP 状态层**即被短路（`ok: false` → `VIEW_UNAVAILABLE`），**到不了本表**，同样不重试。
 
 ### 4.5 数字格式化
 
@@ -330,7 +330,8 @@ GitHub 用 K 惯例（英文语境），Bilibili 用万 / 亿（中文语境）�
 | 识别 | 域名未识别 | 不进 `Map`，不升级 |
 | 抓取 | 超时 / 5xx / 403 限流 | 2 次退避重试 → 仍失败则 `ok: false` 条目 + WARN |
 | 抓取 | 404 / 已删除 / 私有 | `ok: false` + WARN，**不重试** |
-| 抓取 | Bilibili `-352` 风控 | `ok: false` + WARN，**不自动恢复** |
+| 抓取 | Bilibili `-352` 风控 | `ok: false` + WARN，**不自动恢复**（未观测到） |
+| 抓取 | Bilibili `412` / `code: -412` ban | `ok: false` + WARN，**不重试**（头形状确定性决定，重发必然再 412） |
 | 抓取 | 全局预算耗尽 | 剩余全部 `ok: false` + 单条汇总 WARN |
 | 抓取 | `GITHUB_TOKEN` 失效 | 退化为匿名（去 `Authorization` 头重试 1 次）→ 仍失败降级 |
 | 渲染 | `Map` 未命中 | 保持原样 autolink |
@@ -382,7 +383,7 @@ GitHub 用 K 惯例（英文语境），Bilibili 用万 / 亿（中文语境）�
 
 | 风险 | 等级 | 缓解 |
 | --- | --- | --- |
-| Bilibili Gaia 风控 `-352` 触发后需人工滑块 | 中 | fail-soft 降级；预防性请求头；实测 38 次连续请求零触发 |
+| Bilibili 412 ban（`code: -412`，由 UA + Referer 共存触发） | 中 | **已消除诱因**：删除 `Referer` 请求头，48 次试验中触发率由 12/12 降至 0；412 不重试、fail-soft 降级。`-352` 未被观测到，原「预防性请求头 / 38 次连续请求零触发」的登记结论作废 |
 | GitHub 匿名 60/hr 按 IP，Actions 出口为共享网段 | 低 | 自动使用 `GITHUB_TOKEN`（1000/hr）；sidecar 缓存使实际请求数极低 |
 | 卡片文案被误当正文（SEO / 搜索索引） | 低 | 挂 11 使 `excerpt` / `meta-description` / search 投影三者结构性隔离 |
 | 数字格式化阈值的中文 / 英文观感不一致 | 低 | 已在 §4.5 固定两套规则 |

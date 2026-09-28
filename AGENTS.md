@@ -47,7 +47,7 @@ themes/arknights/scripts/
 │   ├── fetch.js                   # before_generate 5 的异步编排：扫描 + 去重 + 缓存跳过 + 并发池 + 硬预算
 │   ├── render.js                  # after_post_render 11 的同步渲染：唯一锚点段落 → 卡片 / 纯链接降级卡
 │   ├── register.js                # embed 子树唯一副作用入口（无导出 API）
-│   └── providers/{github.js, bilibili.js}  # 两平台元数据抓取（失败只 resolve 不抛）
+│   └── providers/{github.js, bilibili.js}  # 两平台元数据抓取（失败只 resolve 不抛；bilibili 请求头不得带 Referer，否则 412 ban）
 └── generator/search/{snapshot.js, database.js, generator.js}  # sidecar 捕获/校验/自愈、条目组装、接线
 themes/arknights/scripts/markers/
 ├── lexer.js                  # 原始 Markdown candidate、保护区、block-only header 判定与逐字 range

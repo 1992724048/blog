@@ -656,7 +656,7 @@ git commit -m "feat(embed): 新增 GitHub 仓库元数据抓取"
   ```js
   extractBvFromLocation(location) -> string | null
   normalizeViewPayload(json) -> object    // 抛错表示不可用
-  buildHeaders(referer) -> object
+  buildHeaders() -> object
   fetchBilibili(target, { fetchImpl, timeoutMs, retries, sleep }) -> Promise<entry>
   ```
   `normalizeViewPayload` 产出：
@@ -745,7 +745,6 @@ console.log('bilibili-check ok')
 const { formatDate } = require('../platform')
 
 const BV_IN_LOCATION_RE = /\/video\/(BV[0-9A-Za-z]{10})/
-const REFERER = 'https://www.bilibili.com/'
 
 const extractBvFromLocation = (location) => {
   if (typeof location !== 'string') return null
@@ -783,11 +782,12 @@ const normalizeViewPayload = (json) => {
   }
 }
 
-// 浏览器 UA + Referer 是 Gaia 风控的预防手段，不是签名。
+// ⚠ 不得加回 Referer：桌面 Chrome UA 与 referer: bilibili.com 共存会被风控判为「无任何会话
+// Cookie 却声称来自站内」的爬虫，直接 412 + code -412「request was banned」（48 次交错试验该
+// 组合 12/12 触发，缺任一头即 200/code 0）。UA 单独只描述客户端形态、不含「来自站内」的断言。
 const buildHeaders = () => ({
   accept: 'application/json, text/plain, */*',
   'accept-language': 'zh-CN,zh;q=0.9',
-  referer: REFERER,
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 })
 
@@ -843,7 +843,7 @@ module.exports = { extractBvFromLocation, normalizeViewPayload, buildHeaders, fe
 
 - [ ] **Step 5: 同步 AGENTS.md + 提交**
 
-Architecture 增一条：B 站走 `x/web-interface/view`，**`like` 无需登录态、WBI 签名非必需**；**B 站对带 `Origin` 的请求直接返回 403 且不返回任何 CORS 头，故只能构建期抓取**；`-352` Gaia 风控需人工滑块，**不做自动恢复**，一律降级；`pic` 是 `http://` 必须改写为 `https://`。
+Architecture 增一条：B 站走 `x/web-interface/view`，**`like` 无需登录态、WBI 签名非必需**；**B 站对带 `Origin` 的请求直接返回 403 且不返回任何 CORS 头，故只能构建期抓取**；请求头**不得带 `Referer`**（与桌面 Chrome UA 共存即触发 412 ban，见 §`buildHeaders`）；`-412` ban 与 `-352` 滑块风控**都不做自动恢复**、一律降级，且都**不重试**；`pic` 是 `http://` 必须改写为 `https://`。
 
 ```powershell
 git add themes/arknights/scripts/embed/providers/bilibili.js AGENTS.md
