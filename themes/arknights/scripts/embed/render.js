@@ -62,7 +62,7 @@ const buildGithubCard = (key, data) => card({
   href: data.webUrl,
   icon: GITHUB_ICON,
   title: data.name,
-  desc: data.description,
+  // 描述只走 title 悬停：可见行让卡片变高且与标题重复，upName 与降级提示则仍需常显
   titleAttr: data.description || data.name,
   stats: [
     statChip('fa-solid fa-star', 'star', data.starsLabel || formatCountEn(data.stars)),
