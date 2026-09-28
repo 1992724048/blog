@@ -5,8 +5,8 @@
 // 刻意不用四边框 —— --theme-border 在本仓是强调色（明 #fe2 对卡片底仅 1.13:1、暗 13.44:1，
 // 两套观感差近 12 倍），而引用块竖条明暗一致。卡片底色对页面底几乎不可辨（明 1.03:1 /
 // 暗 1.13:1，逐层 alpha 合成实算），故底色不参与划分边界，组件全靠文字识别
-// （标题 --theme-text 明 14.96:1 / 暗 9.25:1）；竖条与底色都不是识别组件所必需的信息，
-// WCAG 1.4.11 故不适用。完整数值与裁决留档见 AGENTS.md「链接卡片」。
+// （标题 --theme-text 明 14.96:1 / 暗 9.25:1）；平台图标 aria-hidden 且信息与标题重复，
+// 故竖条 / 底色 / 图标三者均不属 WCAG 1.4.11 的必需视觉信息。实算见 .temp/embed-contrast-check.js。
 //
 // 几何契约：卡片是整段替换，margin .5em 0 即该段的 margin，横向归零使盒左缘与
 // table / figure.highlight / blockquote / .expand-box 的横向偏移同为 0px
@@ -43,7 +43,12 @@
     font-size 20px
     line-height 1
     text-align center
-    color var(--theme-highlight)
+    // 平台标记取前景色（明 #000 / 暗 #fff）而非强调色：其信息已由标题文字承载，
+    // 着色只会与左竖条重复。aria-hidden 故 WCAG 1.4.11 不适用。
+    color var(--theme-text-light)
+    // 左移 5px 只平移图标自身：负 margin 会让 auto 列收窄 5px 并连带左移正文列，
+    // 故用不参与布局的 transform，正文缩进保持 5px 竖条 + 20px 内边距 = 25px。
+    transform translateX(-5px)
   .embed-card__body
     grid-row 1
     grid-column 2
