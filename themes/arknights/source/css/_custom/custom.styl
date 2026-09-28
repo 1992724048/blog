@@ -732,7 +732,7 @@ blockquote.alert
   color var(--theme-search-text)
   background-color var(--theme-search-bg)
   letter-spacing .02em
-// 状态词：黑字压中间色（绿/灰/黄/紫上黑字对比约 7–10:1），两主题同色；
+// 状态词：黑字压中间色（绿/灰/黄/紫/粉上黑字对比约 6.8–9.6:1），两主题同色；
 // line-height normal 脱离徽标行盒——等宽字体在 line-height 1 行盒内字形光学偏上，正常行盒再 flex 居中
 .ai-badge__status
   display inline-flex
@@ -752,7 +752,9 @@ blockquote.alert
   background-color #909399
 .ai-badge--none .ai-badge__status
   background-color #E6A23C
-// 悬停图例：徽标下方浮层，列四态标签（对应底色）+ 介绍；显隐不改变徽标布局
+.ai-badge--noai .ai-badge__status
+  background-color #F48FB1
+// 悬停图例：徽标下方浮层，列五态标签（对应底色）+ 介绍；显隐不改变徽标布局
 .ai-badge__tip
   position absolute
   left 0
@@ -816,7 +818,7 @@ blockquote.alert
   line-height 1.4
   letter-spacing .05em
   color #000
-  // 底色复用四态（与 .ai-badge--* .ai-badge__status 同值）
+  // 底色复用五态（与 .ai-badge--* .ai-badge__status 同值）
   &.ai-badge--pass
     background-color #67C23A
   &.ai-badge--edit
@@ -825,5 +827,7 @@ blockquote.alert
     background-color #909399
   &.ai-badge--none
     background-color #E6A23C
+  &.ai-badge--noai
+    background-color #F48FB1
 .ai-badge__tip-desc
   color var(--theme-text)

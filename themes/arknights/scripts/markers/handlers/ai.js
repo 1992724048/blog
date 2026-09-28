@@ -9,7 +9,8 @@ const AI_STATES = Object.freeze({
   PASS: Object.freeze({ key: 'pass', label: 'PASS', description: '已人工审核通过' }),
   EDIT: Object.freeze({ key: 'edit', label: 'EDIT', description: '经人工审核并被人工修改' }),
   UNKN: Object.freeze({ key: 'unkn', label: 'UNKN', description: '未知，无法判断' }),
-  NONE: Object.freeze({ key: 'none', label: 'NONE', description: '未经人工审核' })
+  NONE: Object.freeze({ key: 'none', label: 'NONE', description: '未经人工审核' }),
+  NOAI: Object.freeze({ key: 'noai', label: 'NOAI', description: '人工撰写，无 AI 参与' })
 })
 const SOURCE_FIELDS = new Set(['content', 'excerpt'])
 const TEXT_MAX_LENGTH = 40
@@ -54,7 +55,7 @@ function parse(input, _context) {
   const fields = readFields(input, 'AI')
   const state = fields.state
   if (typeof state !== 'string' || !Object.hasOwn(AI_STATES, state)) {
-    return failure('AI_INVALID_STATE', 'AI state must be PASS, EDIT, UNKN, or NONE')
+    return failure('AI_INVALID_STATE', 'AI state must be PASS, EDIT, UNKN, NONE, or NOAI')
   }
 
   let text = null

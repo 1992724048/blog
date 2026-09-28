@@ -57,11 +57,9 @@ const cacheKey = (target) => {
 
 const groupDigits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 
-// 升序档位表，每项 [档位下界, 除数, 单位, 小数位]；除数与下界是两件事（'k' 自 10000 入档却除以 1000）
 const COUNT_UNITS_EN = [[10000, 1000, 'k', 1], [1000000, 1000000, 'M', 2]]
 const COUNT_UNITS_ZH = [[10000, 10000, '万', 1], [100000000, 100000000, '亿', 2]]
 
-// 档位取完须按渲染值复核：999999 落 'k' 档会渲染成 '1000.0k'，故触到下一档下界就提升一档重算，输出永不出现已越过的单位
 const formatCountByUnits = (value, units, plain) => {
   if (!Number.isFinite(value) || value < 0) return ''
   let level = units.findIndex(([lower]) => value >= lower)

@@ -243,4 +243,4 @@ python ./tools/bench_to_labplot.py       # 汇总为宽表 CSV + LabPlot 工程
 
 测试工程要求：Intel 6 代及以后带核显的酷睿 CPU、支持 AVX2；不含 dGPU / AMD iGPU 支持。
 
-完整测试工程（源码 + 运行脚本 + 结果转换工具）已开源：[github.com/1992724048/sycl-igpu-benchmark](https://github.com/1992724048/sycl-igpu-benchmark)。
+<https://github.com/1992724048/sycl-igpu-benchmark>
