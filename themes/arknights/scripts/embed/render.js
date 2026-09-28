@@ -1,6 +1,7 @@
 'use strict'
 
 const { identifyPlatform, cacheKey, formatCountEn, formatCountZh } = require('./platform')
+const { languageColor } = require('./language-color')
 const { escapeHtmlText } = require('../markers/handlers/shared/html')
 const { isSafeUrl } = require('../markers/handlers/shared/url')
 
@@ -43,6 +44,14 @@ const statChip = (iconClass, label, value) => {
     `<span class="embed-stat-value">${esc(value)}</span></span>`
 }
 
+// 语言点取 linguist 官方色（language-color.js 的查表），色值不进 CSS 分支、不进类名，
+// 纯靠内联 background-color 落到页面上。查不到色就不画点，语言名文字照旧：
+// 补一个中性点会被读成「查到了就是这个色」，比没有点更糟。aria-hidden 与同行图标一致。
+const languageDot = (name) => {
+  const color = languageColor(name)
+  return color === null ? '' : `<i class="embed-stat__dot" style="background-color: ${color}" aria-hidden="true"></i>`
+}
+
 // card() 是 href 的唯一出口：过不了 isSafeUrl 就返回空串交由调用方按「不认领」处理，
 // 绝不把危险协议写进页面。stats 由 statChip 逐段拼装、各段自身已转义，故这里整体插入。
 const card = ({ platform, key, href, icon, title, desc, stats, extraClass = '', titleAttr }) => {
@@ -69,7 +78,7 @@ const buildGithubCard = (key, data) => card({
     statChip('fa-solid fa-code-branch', 'fork', formatCountEn(data.forks)),
     statChip('fa-solid fa-hashtag', '提交', data.commits ? formatCountEn(data.commits) : ''),
     statChip('fa-solid fa-calendar', '创建于', data.createdAt),
-    data.language ? `<span class="embed-stat embed-stat--plain">${esc(data.language)}</span>` : ''
+    data.language ? `<span class="embed-stat embed-stat--plain">${languageDot(data.language)}${esc(data.language)}</span>` : ''
   ].join('')
 })
 

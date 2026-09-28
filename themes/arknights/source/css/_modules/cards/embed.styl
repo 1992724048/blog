@@ -82,6 +82,25 @@
     column-gap 4px
   .embed-stat--plain
     font-style italic
+  // 语言色点：GitHub 仓库页那种「实心圆点 + 语言名」的视觉语言。直径用 em 跟随 .embed-card__stats
+  // 的 14px 字号缩放（.7em = 9.8px，与仓库页 12px 点同量级）；底色由 render.js 逐卡内联
+  // background-color 给出（linguist 官方色，查不到色就不出点），本层只管几何。
+  //
+  // align-self center：.embed-stat 是 align-items baseline 的 flex 容器，空的 inline-block 作为
+  // flex item 其基线在底缘，不覆盖就会坐在文字基线上、整体偏下。center 把点心对齐到行盒中线，
+  // 即文字的光学中心（与仓库页把点放在 align-items center 的行里同一手法）。
+  //
+  // 对比度：linguist 色是给 GitHub 自家仓库页调的，两主题下并非都能到 WCAG 1.4.11 的 3:1
+  // （明色底 38/122、暗色底 54/122 低于 3:1，最低 Lua #000080 对暗底 1.01:1）。此处按原样透传
+  // 不做逐色修正 —— 忠实于仓库页取色是本功能的目的，而该点是 aria-hidden 装饰、信息由旁边的
+  // 语言名文字承载（文字达 1.4.3 的 4.5:1），故 1.4.11 本就不适用于它。实算见
+  // .temp/embed-language-dot-check.js。
+  .embed-stat__dot
+    align-self center
+    flex none
+    width .7em
+    height .7em
+    border-radius 50%
   .embed-stat-label
     // 只对读屏可见：图标已承担视觉语义，重复显示会造成冗余
     position absolute
