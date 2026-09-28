@@ -30,6 +30,7 @@ jobs:
         run: npx hexo generate --bail
         env:
           TZ: Asia/Shanghai
+          EMBED_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy to pages branch
         uses: JamesIves/github-pages-deploy-action@v4
@@ -37,3 +38,26 @@ jobs:
           branch: pages
           folder: public
           clean: true
+
+      # sidecar 已 gitignore，构建不会把它带回 main，只有这一步能让 7 天 TTL 跨构建生效。
+      # 无条件跑：fetch.js 在无待抓取条目时先于 flushSidecar 提前返回，此时根本没有文件产出，
+      # 所以「本次有无文件」不能当条件；全缓存命中时两处守卫都走 no-op 并 exit 0。
+      # 不用 --force、不 rebase：非快进时让 push 自己失败，胜过悄悄改写 main；
+      # 用 GITHUB_TOKEN 推的 commit 不会再触发本工作流，故不会自激。
+
+      - name: Commit embed sidecar
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if [ ! -f embed-cache.json ]; then
+            echo "本次构建未产出 sidecar（无待抓取条目），跳过回写"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f embed-cache.json
+          if git diff --cached --quiet; then
+            echo "sidecar 与 main 一致，跳过回写"
+            exit 0
+          fi
+          git commit -m "chore(embed): 刷新链接卡片元数据缓存"
+          git push origin HEAD:main

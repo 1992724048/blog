@@ -9,3 +9,4 @@ _multiconfig.yml
 .temp/
 .idea/
 .superpowers/
+embed-cache.json
