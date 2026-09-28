@@ -1183,42 +1183,7 @@ try {
     var colorMode = new ColorMode();
 }
 catch (e) { }
-class Pair {
-    comment;
-    button;
-    constructor(first, second) {
-        this.comment = first;
-        this.button = second;
-    }
-}
-class Selectors {
-    elements = [];
-    nowActive;
-    changeTo = (item) => {
-        if (item === this.nowActive) {
-            return;
-        }
-        this.nowActive.comment.style.display = 'none';
-        this.nowActive.button.classList.remove('active');
-        item.comment.style.display = '';
-        item.button.classList.add('active');
-        this.nowActive = item;
-    };
-    constructor(elements = [], active = 0) {
-        this.elements = elements;
-        this.nowActive = this.elements[active];
-        this.elements.forEach((item) => item.comment.style.display = 'none');
-        this.nowActive = this.elements[0];
-        for (let i of this.elements) {
-            i.button.addEventListener('click', () => this.changeTo(i));
-        }
-        this.nowActive.comment.style.display = '';
-        this.nowActive.button.classList.add('active');
-    }
-}
 class Comments {
-    search = ["valine", "gitalk", "waline", "artalk", "utterances", "giscus"];
-    elements = [];
     async validateGiscusOrigin() {
         return typeof giscusManager !== 'undefined' ? await giscusManager.validateOrigin() : true;
     }
@@ -1234,20 +1199,8 @@ class Comments {
         }
     }
     setHTML = async () => {
-        const commentsContainer = document.querySelector('#comments');
-        if (!commentsContainer)
+        if (!document.querySelector('#comments'))
             return;
-        const selectorContainer = commentsContainer.querySelector('.selector');
-        if (selectorContainer) {
-            this.elements = [];
-            this.search.forEach((item) => {
-                try {
-                    this.elements.push(new Pair(getElement(`#${item}`), getElement(`.${item}-sel`)));
-                }
-                catch (e) { }
-            });
-            new Selectors(this.elements, 0);
-        }
         await this.loadGiscus();
     };
     constructor() {
@@ -1270,9 +1223,6 @@ class Cursor {
     .navBtnIcon,
     #post-content img,
     .ex-header,
-    .gt-user-inner,
-    .wl-sort>li,
-    #valine .vicon,#valine .vat,
     .lg-container img,.clickable`;
     set = (X = this.nowX, Y = this.nowY) => {
         this.outer.transform =
