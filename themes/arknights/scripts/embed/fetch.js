@@ -5,21 +5,18 @@ const cache = require('./cache')
 const githubProvider = require('./providers/github')
 const bilibiliProvider = require('./providers/bilibili')
 
-// 「独占一行」是本子系统唯一的行级规则，只在此处实现一次。
+// 「独占一行」是本子系统唯一的行级规则，只在此处实现一次；它刻意不识别 ``` 围栏
+// （消除围栏需在本模块重复一套 Markdown 块级扫描），故围栏内的独占行 URL 仍会被抓取并付配额
 const SOLE_LINK_LINE = /^\s*<(https?:\/\/[^>\s]+)>\s*$/
 
-// MAX_TIME_UNITS_PER_CARD 是「时间单元」上界的**倍数**，既不是单卡请求数上界、也不是单卡
-// 时间单元总数（后者是本值 × (2·retries+1)，见下方 timeUnits）：bilibili 短链在 retries=2
-// 时会发 4 次请求（跳转探测固定 retries:0 只探 1 次，详情接口再走完整的 3 次尝试阶梯），
-// 故任何按请求数写的上界都小于它。倍数取 2 的依据是：一轮 provider 调用里「走完整重试
-// 阶梯的请求数」上界为 2——github 的 /repos + /commits 恰好取到；bilibili 短链是 1 条完整
-// 阶梯加 1 次无退避探测（2·retries+2 ≤ 4·retries+2）；bilibili BV 号只有 1 条（2·retries+1）。
-// 故 timeUnits = 2 × (2·retries+1) 是各路径最坏时间单元数的**确切**上界，改动此处的
-// 倍数或下方阶梯的构成都会让「取整余量 ≤ timeUnits ms」的有界性证明失效。
+// 一个「时间单元」是一次 HTTP 尝试或一次退避等待，故一条含 retries 次退避的完整阶梯是
+// 2·retries+1 个单元。MAX_TIME_UNITS_PER_CARD 是单元数的**倍数**，既不是请求数上界也不是
+// 单元总数：bilibili 短链在 retries=2 时发 4 次请求，任何按请求数写的上界都小于它；倍数取 2
+// 的依据是一轮 provider 调用里走完整阶梯的请求数上界为 2（github 的 /repos + /commits 取到），
+// 短链是 1 条阶梯 + 1 次无退避探测。改动此倍数或下方阶梯的构成都会让「取整余量 ≤ 单元数 ms」
+// 的有界性证明失效。
 const MAX_TIME_UNITS_PER_CARD = 2
 
-// 一个「时间单元」是一次 HTTP 尝试或一次退避等待；一条完整阶梯含 retries 次退避 +
-// retries+1 次尝试，即 2·retries+1 个单元。
 const timeUnits = (retries) => MAX_TIME_UNITS_PER_CARD * (2 * retries + 1)
 
 const collectSoleLinks = (documents) => {
@@ -59,9 +56,8 @@ const failureEntry = (platform, reason, now) => ({
   reason
 })
 
-// 剩余预算按时间单元均摊：单请求超时与单次退避各取一份，于是这一张卡的最坏总耗时
-// 不超过 remaining —— 迟到的请求拿到的超时被压进预算之内，deadline 才是硬边界而不只是
-// 下一轮的准入闸门。单元宽不足 1ms 时取 1ms，超出量因此有界（<= timeUnits(retries) ms）。
+// 剩余预算按时间单元均摊，超时与退避各取一份，两者都必须封顶：只压 timeoutMs 的话
+// 退避等待仍能吃穿预算，于是 deadline 不再是硬边界。单元宽不足 1ms 时取 1ms，超出量有界。
 const budgetSlice = (remainingMs, retries, timeoutMs, sleep) => {
   const perUnit = Math.max(1, Math.floor(remainingMs / timeUnits(retries)))
   return {
@@ -80,7 +76,7 @@ const fetchEmbedMetadata = async (hexo, deps) => {
   const sleep = options.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)))
   const now = options.now || Date.now
 
-  // 日志与写盘都不是本阶段失败的判据：一个不完整的卡片远好过一次让整站变红的构建。
+  // 本阶段的失败一律降级而不抛出：一个不完整的卡片远好过一次让整站变红的构建
   const warn = (message) => {
     if (hexo && hexo.log && typeof hexo.log.warn === 'function') hexo.log.warn(message)
   }
@@ -90,7 +86,6 @@ const fetchEmbedMetadata = async (hexo, deps) => {
     try {
       documents.push(...hexo.model(model).toArray())
     } catch (err) {
-      // 模型不存在时跳过，不阻断构建
       warn(`[embed] 读取 ${model} 模型失败，本次构建不扫描该模型：${err && err.message ? err.message : 'Error'}`)
     }
   }

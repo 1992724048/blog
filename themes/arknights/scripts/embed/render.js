@@ -4,22 +4,20 @@ const { identifyPlatform, cacheKey, formatCountEn, formatCountZh } = require('./
 const { escapeHtmlText } = require('../markers/handlers/shared/html')
 const { isSafeUrl } = require('../markers/handlers/shared/url')
 
-// 只匹配「段落里唯一子元素是一个 <a>」的形态；段落内有其它内容则不匹配，
-// 围栏内联代码渲染出的 <p><code><a …></a></code></p> 同样命不中。空白文本节点不算子元素。
-// 锚点内容必须一个标签都不含（(?:(?!<)[\s\S])*）：惰性的 [\s\S]*? 会在「同一段落里有两个及以上
-// 锚点」时为凑上结尾的 </p> 而吞掉后一个锚点的 </a>，于是后一个链接连同其可见文字被整段删除。
-// 行内标签与换行都不含 <，普通独占行链接（marked 会把软换行留在 <a> 内）照常命中。
+// 只匹配「段落里唯一子元素是一个 <a>」的形态，空白文本节点不算子元素（故设计稿的
+// 「唯一子元素」措辞成立），围栏内联代码渲染出的 <p><code><a …></a></code></p> 同样命不中。
+// 锚点内容必须一个标签都不含（(?:(?!<)[\s\S])*）：惰性的 [\s\S]*? 会在同一段落有两个及以上锚点时
+// 为凑上结尾的 </p> 而吞掉后一个的 </a>，使后一个链接连同可见文字被整段删除。
 const SOLE_ANCHOR_PARAGRAPH = /<p>\s*<a\s([^>]*)>((?:(?!<)[\s\S])*)<\/a>\s*<\/p>/g
-// 属性名前必须是行首或空白，否则 data-href 会被当成 href 读走。
-// 三种引号形态都要覆盖（双引号 / 单引号 / 无引号），否则同一种作者意图会因引号不同
-// 而得到「被摘除」与「原样放行」两种结局；无引号值按 HTML 规则读到空白或 > 为止。
+// 属性名前必须是行首或空白，否则 data-href 会被当成 href 读走；双引号 / 单引号 / 无引号
+// 三种形态都要覆盖，否则同一种作者意图会因引号不同而得到「被摘除」与「原样放行」两种结局
 const HREF_ATTR_RE = /(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))/i
 
 const GITHUB_ICON = 'fab fa-github'
 const BILIBILI_ICON = 'fab fa-bilibili'
 
-// sidecar 是可被手改的 JSON 落盘文件，字段未必是字符串；转义前先归一，
-// 任何输入都不得让 after_post_render 抛错把 --bail 构建打红。转义规则仍只有一处。
+// sidecar 是可被手改的 JSON 落盘文件，字段未必是字符串，故转义前先归一；
+// 任何输入都不得让 after_post_render 抛错把 --bail 构建打红。转义规则仍只有一处
 const esc = (value) => {
   if (value === null || value === undefined) return ''
   return escapeHtmlText(typeof value === 'string' ? value : String(value))
@@ -31,7 +29,7 @@ const extractHref = (attrs) => {
   return m[1] ?? m[2] ?? m[3] ?? null
 }
 
-// 按 extractHref 读到的同一位置摘属性，位置同源故不会误伤同名属性。
+// 按 extractHref 读到的同一位置摘属性，位置同源故不会误伤同名属性
 const removeHref = (attrs) => {
   const m = HREF_ATTR_RE.exec(attrs)
   if (!m) return attrs
@@ -45,8 +43,8 @@ const statChip = (iconClass, label, value) => {
     `<span class="embed-stat-value">${esc(value)}</span></span>`
 }
 
-// stats 由 statChip 逐段拼装、各段自身已转义，这里整体插入；href 是唯一出口，
-// 过不了 isSafeUrl 就返回空串交由调用方按「不认领」处理，绝不把危险协议写进页面。
+// card() 是 href 的唯一出口：过不了 isSafeUrl 就返回空串交由调用方按「不认领」处理，
+// 绝不把危险协议写进页面。stats 由 statChip 逐段拼装、各段自身已转义，故这里整体插入。
 const card = ({ platform, key, href, icon, title, desc, stats, extraClass = '', titleAttr }) => {
   if (!isSafeUrl(href)) return ''
   const descHtml = desc ? `<span class="embed-card__desc">${esc(desc)}</span>` : ''
@@ -115,8 +113,7 @@ const renderEmbeds = (html, lookup) => {
   const next = html.replace(SOLE_ANCHOR_PARAGRAPH, (match, attrs, inner) => {
     const href = extractHref(attrs)
     if (!href) return match
-    // 段落已被认领、但 href 过不了自家卡片那道闸门：只摘掉这一个属性，
-    // 段落与其余内联标记原样保留，危险协议不进页面。
+    // 段落已被认领、但 href 过不了自家卡片那道闸门：只摘掉这一个属性，段落与其余内联标记原样保留
     if (!isSafeUrl(href)) {
       skipped += 1
       return `<a ${removeHref(attrs)}>${inner}</a>`

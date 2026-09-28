@@ -9,7 +9,7 @@ const CACHE_FILE = 'embed-cache.json'
 const OK_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const FAIL_TTL_MS = 24 * 60 * 60 * 1000
 
-// live store 是抓取阶段与渲染阶段之间唯一的运行时通道；sidecar 文件是它的持久镜像。
+// 两阶段的构建期网络 I/O 无法与同步渲染管线交错，live store 是它们之间唯一的运行时通道，sidecar 文件是它的持久镜像
 const live = new Map()
 let persisted = ''
 
