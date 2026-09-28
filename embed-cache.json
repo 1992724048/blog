@@ -1,0 +1,48 @@
+{
+  "schema": "arknights-embed-cache",
+  "version": 1,
+  "entries": {
+    "github:1992724048/stdpp-xorstr": {
+      "platform": "github",
+      "fetchedAt": "2026-09-28T01:58:31.665Z",
+      "ok": true,
+      "data": {
+        "name": "1992724048/stdpp-xorstr",
+        "webUrl": "https://github.com/1992724048/stdpp-xorstr",
+        "description": "C++20 compile-time string & array obfuscation: Huffman compression + CBC-mode XOR + even/odd byte interleaving — zero runtime overhead, header-only.",
+        "stars": 2,
+        "forks": 0,
+        "watchers": 0,
+        "commits": 5,
+        "createdAt": "2026-07",
+        "language": "C++",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/203243162?v=4",
+        "topics": [],
+        "license": "MIT",
+        "pushedAt": "2026-07-28T00:06:48Z",
+        "starsLabel": "2"
+      }
+    },
+    "github:1992724048/sycl-igpu-benchmark": {
+      "platform": "github",
+      "fetchedAt": "2026-09-28T01:58:31.635Z",
+      "ok": true,
+      "data": {
+        "name": "1992724048/sycl-igpu-benchmark",
+        "webUrl": "https://github.com/1992724048/sycl-igpu-benchmark",
+        "description": "Core Ultra 9 285K CPU vs iGPU SYCL benchmark: five memory modes, bandwidth/matmul/FFT/lookup/zip/latency",
+        "stars": 0,
+        "forks": 0,
+        "watchers": 0,
+        "commits": 6,
+        "createdAt": "2026-09",
+        "language": "C++",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/203243162?v=4",
+        "topics": [],
+        "license": "",
+        "pushedAt": "2026-09-23T11:30:36Z",
+        "starsLabel": "0"
+      }
+    }
+  }
+}
