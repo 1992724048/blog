@@ -4,7 +4,7 @@
   "entries": {
     "github:1992724048/stdpp-xorstr": {
       "platform": "github",
-      "fetchedAt": "2026-09-28T01:58:31.665Z",
+      "fetchedAt": "2026-10-09T10:51:33.765Z",
       "ok": true,
       "data": {
         "name": "1992724048/stdpp-xorstr",
@@ -25,7 +25,7 @@
     },
     "github:1992724048/sycl-igpu-benchmark": {
       "platform": "github",
-      "fetchedAt": "2026-09-28T01:58:31.635Z",
+      "fetchedAt": "2026-10-09T10:51:33.741Z",
       "ok": true,
       "data": {
         "name": "1992724048/sycl-igpu-benchmark",
