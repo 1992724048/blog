@@ -30,6 +30,7 @@ date: 2026-09-19 06:10:09
 - **Flutter/Dart**: 主要用来给C++编写GUI程序, 还有小工具, 开发GUI最方便很喜欢material风格设计(也有fluent可用)
 - **C#**: 语法糖最丰富的一集, 用来写WebAPI服务、ASP.NET、Winform、WPF程序, 还有小工具
 - **Fortran**: 配合C/C++实现高性能计算
+- **ISPC**: 配合C/C++实现高性能计算
 - **Python**: 写写脚本, 还有小工具
 - **HTML/CSS/JavaScript**: 以前用, 现在被flutter web替代大部分工作
 - **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好 ??~~
