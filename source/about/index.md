@@ -49,6 +49,7 @@ date: 2026-09-19 06:10:09
       <li>Visual Studio Code</li>
       <li>WebStorm</li>
       <li>PyCharm</li>
+      <li>IntelliJ IDEA</li>
     </ul>
   </div>
   <div class="tools-group">
