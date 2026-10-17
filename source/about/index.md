@@ -18,9 +18,6 @@ date: 2026-09-19 06:10:09
 - **Flutter 应用开发**
 - **Web 应用前后端开发**
 - **HPC**
-- **二进制安全**
-- **嵌入式**
-- **PCB设计**
 - **~~?? 造轮子  ??~~**
 
 ## 常用语言
@@ -44,12 +41,8 @@ date: 2026-09-19 06:10:09
     <ul>
       <li>Visual Studio</li>
       <li>dotUltimate</li>
-      <li>CLion</li>
       <li>Rider</li>
       <li>Visual Studio Code</li>
-      <li>WebStorm</li>
-      <li>PyCharm</li>
-      <li>IntelliJ IDEA</li>
     </ul>
   </div>
   <div class="tools-group">
@@ -64,30 +57,13 @@ date: 2026-09-19 06:10:09
     <ul>
       <li>Intel oneAPI DPC++/C++ Compiler</li>
       <li>CMake</li>
-      <li>Clang/LLVM</li>
-      <li>Docker</li>
       <li>Git</li>
-      <li>ESP-IDF</li>
     </ul>
   </div>
   <div class="tools-group">
     <h4>数据库</h4>
     <ul>
-      <li>MySQL</li>
       <li>DataGrid</li>
-    </ul>
-  </div>
-  <div class="tools-group">
-    <h4>设计与工程</h4>
-    <ul>
-      <li>FreeCAD</li>
-      <li>Altium Designer</li>
-    </ul>
-  </div>
-  <div class="tools-group">
-    <h4>数据与科学</h4>
-    <ul>
-      <li>LabPlot</li>
     </ul>
   </div>
 </div>
