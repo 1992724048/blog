@@ -836,9 +836,9 @@ h6 {
   --theme-tag-border: #313131;
   --theme-loadingbar: #fff;
   --theme-loadingbar-fail: #f00;
-  --theme-search-bg: #fff;
-  --theme-search-text: #000;
-  --theme-search-placeholder: #5c5c5c;
+  --theme-search-bg: #000;
+  --theme-search-text: #fff;
+  --theme-search-placeholder: #b0b0b0;
 }
 :root[theme-mode=light] {
   --cursor-data: var(--light-cursor);
@@ -882,9 +882,9 @@ h6 {
   --theme-tag-border: #cecece;
   --theme-loadingbar: #000;
   --theme-loadingbar-fail: #f00;
-  --theme-search-bg: #000;
-  --theme-search-text: #fff;
-  --theme-search-placeholder: #b0b0b0;
+  --theme-search-bg: #fff;
+  --theme-search-text: #000;
+  --theme-search-placeholder: #5c5c5c;
 }
 @media (max-width: 1023px) {
   .navBtn,
