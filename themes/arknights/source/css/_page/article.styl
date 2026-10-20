@@ -65,15 +65,15 @@ article
       background-color var(--theme-highlight)
       time, .categories, .post-meta
         color var(--theme-text-hover)
-      a, a:active
-        color var(--theme-text-rev)
+      a, a:active, h1
+        color var(--theme-text-hover)
       .recent-info::after
         background-color var(--theme-bg-hover)
       //- 摘要文本级颜色不随卡片底色继承：悬停时底色变主题蓝，须显式切到近黑（明暗两套均为 #000）
       .list-excerpt
         color var(--theme-text-hover)
       a:hover
-        color var(--theme-text-light)
+        color var(--theme-text-hover)
       hr
         color var(--theme-highlight)
         border-color var(--theme-highlight)
@@ -127,7 +127,7 @@ article
 
 .post-sticky
   background-color var(--theme-highlight)
-  color var(--theme-text-rev)
+  color var(--theme-text-hover)
   padding 1px 2px
   margin-right 5px
   transition .3s

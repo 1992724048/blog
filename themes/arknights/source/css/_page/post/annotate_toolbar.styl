@@ -20,7 +20,9 @@ body.annotating
   gap 1px
   padding 1px
   box-sizing border-box
+  // 外框透明（工具栏与颜色面板同口径）：背景只铺到内容盒，1px padding 环露出页面底色，内部 1px 间隙保留
   background-color var(--theme-text-rev)
+  background-clip content-box
   box-shadow 0 2px 8px rgba(0, 0, 0, .25)
   visibility hidden
   opacity 0
@@ -99,7 +101,7 @@ body.annotating
 #annotate-toolbar .at-color[data-color=orange] .at-color-fill
   background-color var(--hl-orange)
 
-// 颜色面板：默认隐藏，.open 由 JS 切换；右对齐于颜色按钮（工具栏右缘）下方 1px
+// 颜色面板：默认隐藏，.open 由 JS 切换；右对齐于颜色按钮（工具栏右缘）下方 1px（两侧 1px 外环均透明，实际视觉间隙 3px）
 #annotate-toolbar .at-colors
   position absolute
   top calc(100% + 1px)
@@ -109,6 +111,7 @@ body.annotating
   padding 1px
   box-sizing border-box
   background-color var(--theme-text-rev)
+  background-clip content-box
   box-shadow 0 2px 8px rgba(0, 0, 0, .25)
   visibility hidden
   opacity 0

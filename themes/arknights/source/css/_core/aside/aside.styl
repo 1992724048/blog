@@ -81,8 +81,9 @@ aside
   flex-grow 2
   margin-top 1em
   h1
+    // 文字 --theme-text-rev 与底色 --theme-bg-light 成对取反：标题条在任一主题下都保持明暗反差
     color var(--theme-text-rev)
-    background-color var(--theme-text-light)
+    background-color var(--theme-bg-light)
     margin 0
     padding 0 10px
     font-size medium
@@ -92,6 +93,7 @@ aside
   background linear-gradient(var(--theme-bg-trans1), var(--theme-bg-trans1) calc(100% - 15px), transparent)
   @media ( min-width 769px )
     &:hover h1
+      color var(--theme-text-hover)
       background-color var(--theme-highlight)
 
 #description p

@@ -18,7 +18,7 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
   background-color var(--theme-subcolor)
 
 // 「??内容??」遮盖（filters/spoiler.js 产出 span.spoiler）：默认色块完全遮住文字，悬停显示
-// --theme-bg-light 浅色主题 #000 / 深色主题 #fff（两主题均为高对比实心块）；触摸 / 键盘无 hover 属已知限制
+// --theme-text-rev 高对比实心块（浅色主题 #000 / 深色主题 #fff，与页面底色反极）；触摸 / 键盘无 hover 属已知限制
 // 静止态「零装饰」靠两道声明，缺一不可：
 //   display inline-block —— CSS 2.1 §16.3.1 明文「文本装饰不传播进浮层、绝对定位后代与原子级内联后代的内容」，
 //     故作者写 **~~??…??~~** 时祖先 <del> 的 line-through 不会画进黑块；这也是唯一有效的切断手段，
@@ -32,7 +32,7 @@ code, pre, kbd, samp, .hljs, .code, .gutter pre
   overflow-wrap break-word
   position relative
   color transparent
-  background-color var(--theme-bg-light)
+  background-color var(--theme-text-rev)
   text-decoration none
   transition color .2s, background-color .2s
   &::after
@@ -405,7 +405,7 @@ blockquote.alert
     &:hover
       background-color var(--theme-bg-trans2)
 
-// 分区标题栏（复用 archive h1 样式：BenderLight + 反色背景）
+// 分区标题栏（复用 archive h1 样式：BenderLight + 实心标题条）
 .dp-section-header
   display flex
   align-items center
@@ -430,9 +430,10 @@ blockquote.alert
     @media (min-width 769px)
       &:hover
         background-color var(--theme-highlight)
-        color var(--theme-bg-light)
+        color var(--theme-text-hover)
   @media (min-width 769px)
     &:hover
+      color var(--theme-text-hover)
       background-color var(--theme-highlight)
 .dp-section-actions
   display flex
@@ -589,7 +590,7 @@ blockquote.alert
   @media (min-width 769px)
     &:hover
       background-color var(--theme-highlight)
-      color var(--theme-text-rev)
+      color var(--theme-text-hover)
   &:disabled
     opacity .4
     cursor default
