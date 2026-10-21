@@ -832,3 +832,13 @@ blockquote.alert
     background-color #F48FB1
 .ai-badge__tip-desc
   color var(--theme-text)
+
+// FontAwesome 6.4.0 无 X(Twitter) 新 logo，用本地单色 SVG mask 补齐；currentColor 随亮暗主题
+.fa-x-twitter:before
+  content ''
+  display block
+  width 1em
+  height 1em
+  background-color currentColor
+  -webkit-mask url('../icons/x.svg') center / contain no-repeat
+  mask url('../icons/x.svg') center / contain no-repeat

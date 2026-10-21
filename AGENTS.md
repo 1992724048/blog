@@ -16,7 +16,7 @@
 - 主题 JS 源码是 TypeScript：`_src/**/*.ts` → 产物 `arknights.js`（`source/js/_src/tsconfig.json`）；`_src/search/search.ts` → 产物 `search.js`（独立 tsconfig）。
 - tsc 已入主题 devDependencies（`typescript@^5`；TS 7 已移除 `outFile`，不兼容本 tsconfig）；编译：主题目录 `npm install` 后 `npm run build`。
 - 主题功能脚本在 `themes/arknights/scripts/`（filters / generator）：术语自动链接（`filters/terms.js`，词表在根级配置 `terms.list`；每篇文章按正文首次出现编号，重复术语复用同号，全局索引仅作稳定锚点）、文章加密、搜索、`build_time`、`minify`、Alert、遮盖、`meta-description.js`。
-- 本地自定义样式集中在 `themes/arknights/source/css/_custom/custom.styl`；`arknights.styl` 末尾以 `@import '_custom/*'` 通配导入。
+- 本地自定义样式集中在 `themes/arknights/source/css/_custom/custom.styl`；`arknights.styl` 末尾以 `@import '_custom/*'` 通配导入。FontAwesome 6.4.0 缺 X（Twitter）新 logo，顶栏 `.fa-x-twitter` 由 `source/icons/x.svg` + `mask` 在 `custom.styl` 补齐。
 
 ## Source Tree
 
