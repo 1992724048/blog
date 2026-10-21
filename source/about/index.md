@@ -7,6 +7,7 @@ date: 2026-09-19 06:10:09
 
 - **QQ**: 1992724048
 - **交流群**: 112986834 (QQ)
+- **steam**: 1235021046
 - **github**: [传送门](https://www.github.com/1992724048)
 - **bilibili**: [传送门](https://space.bilibili.com/319091647)
 - **x(twitter)**: [传送门](https://x.com/issuimo)
