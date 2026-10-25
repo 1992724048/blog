@@ -6,12 +6,13 @@ date: 2026-09-19 06:10:09
 ## 联系我
 
 - **QQ**: 1992724048
-- **交流群**: 112986834 (QQ)
+- **交流群**: 112986834 (QQ) [传送门](https://qm.qq.com/q/9qFNcFreBW)
 - **steam**: 1235021046
 - **github**: [传送门](https://www.github.com/1992724048)
 - **bilibili**: [传送门](https://space.bilibili.com/319091647)
-- **x(twitter)**: [传送门](https://x.com/issuimo)
+- **X(twitter)**: [传送门](https://x.com/issuimo)
 - **discord**: [传送门](https://ptb.discord.com/users/1012622104111362108)
+- **Telegram**: [传送门](https://t.me/ISSUIMO)
 
 ## 主要关注领域
 
