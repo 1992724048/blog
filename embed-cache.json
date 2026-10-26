@@ -2,6 +2,27 @@
   "schema": "arknights-embed-cache",
   "version": 1,
   "entries": {
+    "github:1992724048/jetbrainsshellpatch": {
+      "platform": "github",
+      "fetchedAt": "2026-10-26T19:34:47.155Z",
+      "ok": true,
+      "data": {
+        "name": "1992724048/JetBrainsShellPatch",
+        "webUrl": "https://github.com/1992724048/JetBrainsShellPatch",
+        "description": "",
+        "stars": 0,
+        "forks": 0,
+        "watchers": 0,
+        "commits": 4,
+        "createdAt": "2026-10",
+        "language": "C#",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/203243162?v=4",
+        "topics": [],
+        "license": "",
+        "pushedAt": "2026-10-26T19:06:53Z",
+        "starsLabel": "0"
+      }
+    },
     "github:1992724048/stdpp-xorstr": {
       "platform": "github",
       "fetchedAt": "2026-10-25T08:35:28.581Z",
@@ -42,6 +63,27 @@
         "license": "",
         "pushedAt": "2026-09-23T11:30:36Z",
         "starsLabel": "0"
+      }
+    },
+    "github:opklnm004/jetbrains-license-server": {
+      "platform": "github",
+      "fetchedAt": "2026-10-26T19:34:47.176Z",
+      "ok": true,
+      "data": {
+        "name": "opklnm004/jetbrains-license-server",
+        "webUrl": "https://github.com/opklnm004/jetbrains-license-server",
+        "description": "一个功能强大的 JetBrains 产品许可证服务器帮助工具，基于 Spring Boot 开发，提供许可证生成、验证和服务器模拟功能。 核心功能 - 🎯 许可证生成 ：支持生成 JetBrains 全系列产品的许可证 - 🖥️ 服务器模拟 ：完全兼容 JetBrains 官方许可证服务器 API 协议 - 📦 产品管理 ：内置完整的 JetBrains 产品和插件信息数据库 - 🔒 安全保障 ：使用 RSA 签名保证数据安全 - 📱 ja-netfilter 集成 ：内置代理工具下载和自动配置 - 🎨 可视化界面 ：提供友好的 Web 管理界面",
+        "stars": 64,
+        "forks": 50,
+        "watchers": 1,
+        "commits": 1,
+        "createdAt": "2026-05",
+        "language": "",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/140141852?v=4",
+        "topics": [],
+        "license": "EPL-2.0",
+        "pushedAt": "2026-04-03T16:24:12Z",
+        "starsLabel": "64"
       }
     }
   }
