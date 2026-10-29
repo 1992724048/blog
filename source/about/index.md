@@ -17,10 +17,8 @@ date: 2026-09-19 06:10:09
 ## 主要关注领域
 
 - **Windows 桌面应用开发**
-- **C/C++ 应用开发**
-- **C# 应用开发**
-- **Flutter 应用开发**
-- **Web 应用前后端开发**
+- **C/C++/C#/Flutter 应用开发**
+- **Web 前后端开发**
 - **HPC**
 - **二进制安全**
 - **嵌入式开发**
@@ -29,16 +27,16 @@ date: 2026-09-19 06:10:09
 
 ## 常用语言
 
-- **C/C++**: 最好用, 喜欢这种没有过多限制的语言
+- **C/C++**: 最好用
 - **DPC++**: 与C/C++/Fortran组合, CPU-GPU异构流水线
-- **Flutter/Dart**: 主要用来给C++编写GUI程序, 还有小工具, 开发GUI最方便很喜欢material风格设计(也有fluent可用)
+- **Flutter/Dart**: 主要用来给C++编写GUI程序, 还有小工具, 开发GUI最方便
 - **C#**: 语法糖最丰富的一集, 用来写WebAPI服务、ASP.NET、Winform、WPF程序, 还有小工具
 - **Fortran**: 配合C/C++实现高性能计算
 - **ISPC**: 配合C/C++实现高性能计算
 - **Python**: 写写脚本, 还有小工具
 - **HTML/CSS/JavaScript**: 以前用, 现在被flutter web替代大部分工作
-- **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好 ??~~
-- **Java**: 学校教的, 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
+- **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好, 为什么不试试LLVM JIT/Codegen或者Asmjit？ ??~~
+- **Java**: 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
 
 ## 部分工具
 
