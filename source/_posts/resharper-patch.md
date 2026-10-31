@@ -11,7 +11,9 @@ description: 使用Patch工具与Docker对JetBrains全家桶和ReSharper进行�
 
 ## 补丁工具
 
+仓库一:
 <https://github.com/1992724048/JetBrainsShellPatch>
+仓库二:
 <https://github.com/opklnm004/jetbrains-license-server>
 
 1. 将两个仓库下载并解压，第一个仓库还需要单独下载 `Release` 中的 `JetBrainsShellPatch.exe`
