@@ -9,12 +9,17 @@ description: 使用Patch工具与Docker对JetBrains全家桶和ReSharper进行�
 [#]>AI|
 [state]| NOAI
 
-## 补丁工具
+## 准备工作
 
-仓库一:
+### 补丁工具
+
 <https://github.com/1992724048/JetBrainsShellPatch>
-仓库二:
+
+### 许可证服务器
+
 <https://github.com/opklnm004/jetbrains-license-server>
+
+### 使用方式
 
 1. 将两个仓库下载并解压，第一个仓库还需要单独下载 `Release` 中的 `JetBrainsShellPatch.exe`
 2. 将第一个仓库中下载的 `product.json` 放入第二个仓库的 `src\main\resources\external\data` 目录并替换里面的文件
@@ -39,6 +44,9 @@ description: 使用Patch工具与Docker对JetBrains全家桶和ReSharper进行�
 7. 其他 JetBrains 产品在许可证管理页面选择 `激活码` 并输入刚刚生成的激活码，点击 `激活` 即可完成激活
 
 ### 使用许可证服务器 (推荐)
+
+> [!IMPORTANT]
+> 该方法需要后台常驻许可证的Docker容器，关闭容器会导致后续使用出现激活失败!!!
 
 1. 打开装有 ReSharper 的 Visual Studio
 2. 点击 `扩展` -> `ReSharper` -> `帮助` -> `许可证信息`，只保留 `使用许可证服务器` 勾选
