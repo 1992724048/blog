@@ -3,6 +3,8 @@ title: 关于我
 date: 2026-09-19 06:10:09
 ---
 
+学的多不一定赢，做出优秀成果才是成功，目前正在精简工具链和关注的领域
+
 ## 联系我
 
 - **QQ**: 1992724048
@@ -21,22 +23,20 @@ date: 2026-09-19 06:10:09
 - **Web 前后端开发**
 - **HPC**
 - **二进制安全**
-- **嵌入式开发**
-- **PCB设计**
 - **~~?? 造轮子  ??~~**
 
 ## 常用语言
 
 - **C/C++**: 最好用
 - **DPC++**: 与C/C++/Fortran组合, CPU-GPU异构流水线
-- **Flutter/Dart**: 主要用来给C++编写GUI程序, 还有小工具, 开发GUI最方便
-- **C#**: 语法糖最丰富的一集, 用来写WebAPI服务、ASP.NET、Winform、WPF程序, 还有小工具
+- **Flutter/Dart**: 主要用来给C++编写GUI程序, 还有小工具, 开发GUI最方便，也用来写网页
+- **C#**: 语法糖最丰富的一集, 用来写WebAPI服务、ASP.NET程序, 还有小工具~~?? 别用C++写Web后端，除非你是受虐狂 ??~~
 - **Fortran**: 配合C/C++实现高性能计算
 - **ISPC**: 配合C/C++实现高性能计算
+- **Java**: 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
 - **Python**: 写写脚本, 还有小工具
 - **HTML/CSS/JavaScript**: 以前用, 现在被flutter web替代大部分工作
 - **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好, 为什么不试试LLVM JIT/Codegen或者Asmjit？ ??~~
-- **Java**: 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
 
 ## 部分工具
 
@@ -46,11 +46,8 @@ date: 2026-09-19 06:10:09
     <ul>
       <li>Visual Studio</li>
       <li>dotUltimate</li>
-      <li>CLion</li>
       <li>Rider</li>
       <li>Visual Studio Code</li>
-      <li>WebStorm</li>
-      <li>PyCharm</li>
       <li>IntelliJ IDEA</li>
     </ul>
   </div>
@@ -67,10 +64,8 @@ date: 2026-09-19 06:10:09
       <li>Intel oneAPI DPC++/C++ Compiler</li>
       <li>Intel Implicit SPMD Program Compiler</li>
       <li>CMake</li>
-      <li>Clang/LLVM</li>
       <li>Docker</li>
       <li>Git</li>
-      <li>ESP-IDF</li>
     </ul>
   </div>
   <div class="tools-group">
@@ -78,20 +73,6 @@ date: 2026-09-19 06:10:09
     <ul>
       <li>MySQL</li>
       <li>DataGrid</li>
-    </ul>
-  </div>
-  <div class="tools-group">
-    <h4>设计与工程</h4>
-    <ul>
-      <li>FreeCAD</li>
-      <li>Altium Designer</li>
-    </ul>
-  </div>
-  <div class="tools-group">
-    <h4>数据与科学</h4>
-    <ul>
-      <li>LabPlot</li>
-      <li>Matlab</li>
     </ul>
   </div>
 </div>
