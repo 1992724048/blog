@@ -34,6 +34,9 @@ date: 2026-09-19 06:10:09
 - **Fortran**: 配合C/C++实现高性能计算
 - **ISPC**: 配合C/C++实现高性能计算
 - **Java**: 除了给Minecraft写Mod外根本不用~~?? , 没C#写着方便 ??~~
+
+### 已废弃
+
 - **Python**: 写写脚本, 还有小工具
 - **HTML/CSS/JavaScript**: 以前用, 现在被flutter web替代大部分工作
 - **ASM**: 写shellcode、代码混淆才用~~?? , 至于性能优化大概率没编译器生成的好, 为什么不试试LLVM JIT/Codegen或者Asmjit？ ??~~
