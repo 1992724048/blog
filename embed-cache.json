@@ -44,6 +44,27 @@
         "duration": 117
       }
     },
+    "bilibili:BV1ku376JE2h": {
+      "platform": "bilibili",
+      "fetchedAt": "2026-11-03T16:06:36.444Z",
+      "ok": true,
+      "data": {
+        "bvid": "BV1ku376JE2h",
+        "title": "一款由初中生团队研发的国产「操作系统」【B站AI创造公开赛】",
+        "upName": "人朝的小郭同学",
+        "upFace": "https://i1.hdslb.com/bfs/face/1607af17c2f7ac450fbe8061ca83a83c5068e4f7.jpg",
+        "view": 763094,
+        "like": 54421,
+        "coin": 6154,
+        "favorite": 11994,
+        "danmaku": 1122,
+        "reply": 4887,
+        "share": 4634,
+        "publishedAt": "2026-07-26",
+        "coverHttps": "https://i1.hdslb.com/bfs/archive/1fc007d8080a3199def24bd65db93b1287377ae3.jpg",
+        "duration": 265
+      }
+    },
     "bilibili:BV1mFam68ER8": {
       "platform": "bilibili",
       "fetchedAt": "2026-11-02T20:00:23.588Z",
@@ -63,6 +84,27 @@
         "publishedAt": "2026-10-02",
         "coverHttps": "https://i1.hdslb.com/bfs/archive/b8d848f9e402a9de168cad730ad7c03af13e9f9f.jpg",
         "duration": 41
+      }
+    },
+    "bilibili:BV1vQM16yE2T": {
+      "platform": "bilibili",
+      "fetchedAt": "2026-11-03T15:31:22.467Z",
+      "ok": true,
+      "data": {
+        "bvid": "BV1vQM16yE2T",
+        "title": "CoreSwap——MC全新底层优化项目",
+        "upName": "N.T.Black",
+        "upFace": "https://i2.hdslb.com/bfs/face/b7f8a494c2be30bbffb9d871dda573fc93cdf9ab.jpg",
+        "view": 25272,
+        "like": 284,
+        "coin": 104,
+        "favorite": 327,
+        "danmaku": 8,
+        "reply": 803,
+        "share": 242,
+        "publishedAt": "2026-08-05",
+        "coverHttps": "https://i2.hdslb.com/bfs/archive/693eb60c93934ab859a5bc032dc47548e3eec197.jpg",
+        "duration": 167
       }
     },
     "github:1992724048/jetbrainsshellpatch": {
@@ -133,7 +175,7 @@
     },
     "github:lbeilc/pane": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T16:38:00.492Z",
+      "fetchedAt": "2026-11-03T16:38:01.547Z",
       "ok": false,
       "reason": "REPO_UNAVAILABLE"
     },
