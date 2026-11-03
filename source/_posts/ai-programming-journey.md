@@ -1,5 +1,5 @@
 ---
-title: 我对vibe coding的看法和观点
+title: 锐评 vibe coding
 date: 2026-08-14
 top: 100
 tags: [AI, 随笔, 观点]
