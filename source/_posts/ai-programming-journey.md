@@ -9,7 +9,7 @@ description: 虽然AI带来了方便，但不等于AI可以替代人类，更不
 
 [#]>AI|
 [state]| NOAI
-[text] | 必须重拳出击
+[text] | 这已经不是一般的嘉豪了，必须重拳出击
 
 ## 前言
 
