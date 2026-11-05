@@ -109,9 +109,24 @@
     },
     "github:1992724048/jetbrainsshellpatch": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T19:36:01.435Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
+      "fetchedAt": "2026-11-05T15:00:39.181Z",
+      "ok": true,
+      "data": {
+        "name": "1992724048/JetBrainsShellPatch",
+        "webUrl": "https://github.com/1992724048/JetBrainsShellPatch",
+        "description": "ReSharper 破解补丁",
+        "stars": 1,
+        "forks": 0,
+        "watchers": 0,
+        "commits": 6,
+        "createdAt": "2026-10",
+        "language": "C#",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/203243162?v=4",
+        "topics": [],
+        "license": "",
+        "pushedAt": "2026-10-31T10:16:34Z",
+        "starsLabel": "1"
+      }
     },
     "github:1992724048/stdpp-xorstr": {
       "platform": "github",
@@ -157,39 +172,122 @@
     },
     "github:abing1111/bilidesk": {
       "platform": "github",
-      "fetchedAt": "2026-11-03T09:23:45.327Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
+      "fetchedAt": "2026-11-05T15:00:37.943Z",
+      "ok": true,
+      "data": {
+        "name": "ABING1111/BiliDesk",
+        "webUrl": "https://github.com/ABING1111/BiliDesk",
+        "description": "哔哩哔哩第三方桌面客户端 · Windows / WPF / .NET 10 ",
+        "stars": 515,
+        "forks": 9,
+        "watchers": 1,
+        "commits": 180,
+        "createdAt": "2026-10",
+        "language": "C#",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/164507264?v=4",
+        "topics": [
+          "bilibili"
+        ],
+        "license": "GPL-3.0",
+        "pushedAt": "2026-11-04T18:02:52Z",
+        "starsLabel": "515"
+      }
     },
     "github:duyuanfu/evan-ocr": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T19:44:20.480Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
-    },
-    "github:iftc-xlkj/iftc-xlkj.github.io": {
-      "platform": "github",
-      "fetchedAt": "2026-11-02T19:41:29.019Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
+      "fetchedAt": "2026-11-05T15:00:37.945Z",
+      "ok": true,
+      "data": {
+        "name": "duyuanfu/evan-ocr",
+        "webUrl": "https://github.com/duyuanfu/evan-ocr",
+        "description": "C++ 写了一款比 Snipaste/PixPin 更爽的免费截贴图 OCR 神器",
+        "stars": 132,
+        "forks": 7,
+        "watchers": 0,
+        "commits": 48,
+        "createdAt": "2026-09",
+        "language": "C++",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/56184743?v=4",
+        "topics": [],
+        "license": "MIT",
+        "pushedAt": "2026-11-04T07:47:54Z",
+        "starsLabel": "132"
+      }
     },
     "github:lbeilc/pane": {
       "platform": "github",
-      "fetchedAt": "2026-11-03T16:38:01.547Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
+      "fetchedAt": "2026-11-05T15:00:37.542Z",
+      "ok": true,
+      "data": {
+        "name": "LBEILC/Pane",
+        "webUrl": "https://github.com/LBEILC/Pane",
+        "description": "Windows 11 上的启动器、鼠标手势和剪贴板工具，磨砂玻璃风格",
+        "stars": 80,
+        "forks": 2,
+        "watchers": 0,
+        "commits": 21,
+        "createdAt": "2026-10",
+        "language": "C#",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/74463574?v=4",
+        "topics": [
+          "clipboard-manager",
+          "launcher",
+          "mouse-gestures",
+          "windows",
+          "winui3"
+        ],
+        "license": "GPL-3.0",
+        "pushedAt": "2026-11-05T08:36:35Z",
+        "starsLabel": "80"
+      }
     },
     "github:opklnm004/jetbrains-license-server": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T19:36:01.435Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
+      "fetchedAt": "2026-11-05T15:00:39.196Z",
+      "ok": true,
+      "data": {
+        "name": "opklnm004/jetbrains-license-server",
+        "webUrl": "https://github.com/opklnm004/jetbrains-license-server",
+        "description": "一个功能强大的 JetBrains 产品许可证服务器帮助工具，基于 Spring Boot 开发，提供许可证生成、验证和服务器模拟功能。 核心功能 - 🎯 许可证生成 ：支持生成 JetBrains 全系列产品的许可证 - 🖥️ 服务器模拟 ：完全兼容 JetBrains 官方许可证服务器 API 协议 - 📦 产品管理 ：内置完整的 JetBrains 产品和插件信息数据库 - 🔒 安全保障 ：使用 RSA 签名保证数据安全 - 📱 ja-netfilter 集成 ：内置代理工具下载和自动配置 - 🎨 可视化界面 ：提供友好的 Web 管理界面",
+        "stars": 71,
+        "forks": 52,
+        "watchers": 1,
+        "commits": 1,
+        "createdAt": "2026-05",
+        "language": "",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/140141852?v=4",
+        "topics": [],
+        "license": "EPL-2.0",
+        "pushedAt": "2026-04-03T16:24:12Z",
+        "starsLabel": "71"
+      }
     },
     "github:shaun-chen2/glassmc": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T19:36:01.421Z",
-      "ok": false,
-      "reason": "REPO_UNAVAILABLE"
+      "fetchedAt": "2026-11-05T15:00:37.944Z",
+      "ok": true,
+      "data": {
+        "name": "shaun-chen2/GlassMC",
+        "webUrl": "https://github.com/shaun-chen2/GlassMC",
+        "description": "液态玻璃 Minecraft 启动器 · 跨平台（macOS / Windows / Linux）· 一键装版本、加载器与模组，支持离线 / 微软正版 / 皮肤站登录，内置 Modrinth、整合包与陶瓦联机",
+        "stars": 1,
+        "forks": 0,
+        "watchers": 0,
+        "commits": 34,
+        "createdAt": "2026-11",
+        "language": "Rust",
+        "ownerAvatar": "https://avatars.githubusercontent.com/u/231208261?v=4",
+        "topics": [
+          "fabric",
+          "glassmorphism",
+          "gplv3",
+          "linux",
+          "liquid-glass"
+        ],
+        "license": "GPL-3.0",
+        "pushedAt": "2026-11-05T14:12:02Z",
+        "starsLabel": "1"
+      }
     }
   }
 }
