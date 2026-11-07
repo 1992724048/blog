@@ -47,8 +47,9 @@ date: 2026-09-19 06:10:09
   <div class="tools-group">
     <h4>IDE / 编辑器</h4>
     <ul>
-      <li>Visual Studio</li>
+      <li>Visual Studio 2026</li>
       <li>dotUltimate</li>
+      <li>ReSharper</li>
       <li>Rider</li>
       <li>Visual Studio Code</li>
       <li>IntelliJ IDEA</li>
@@ -65,16 +66,16 @@ date: 2026-09-19 06:10:09
     <h4>构建与部署</h4>
     <ul>
       <li>Intel oneAPI DPC++/C++ Compiler</li>
+      <li>Intel Fortran Compiler</li>
       <li>Intel Implicit SPMD Program Compiler</li>
       <li>CMake</li>
-      <li>Docker</li>
       <li>Git</li>
     </ul>
   </div>
   <div class="tools-group">
     <h4>数据库</h4>
     <ul>
-      <li>MySQL</li>
+      <li>SQLite</li>
       <li>DataGrid</li>
     </ul>
   </div>
