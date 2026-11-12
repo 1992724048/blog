@@ -46,7 +46,7 @@ description: 使用Patch工具与Docker对JetBrains全家桶和ReSharper进行�
 ### 使用许可证服务器 (推荐)
 
 > [!IMPORTANT]
-> 该方法需要后台常驻许可证的Docker容器，关闭容器会导致后续使用出现激活失败!!!
+> 该方法需要后台常驻许可证的服务器，关闭服务器会导致后续使用出现激活失败!!!
 
 1. 打开装有 ReSharper 的 Visual Studio
 2. 点击 `扩展` -> `ReSharper` -> `帮助` -> `许可证信息`，只保留 `使用许可证服务器` 勾选
