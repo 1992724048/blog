@@ -72,11 +72,4 @@ date: 2026-09-19 06:10:09
       <li>Git</li>
     </ul>
   </div>
-  <div class="tools-group">
-    <h4>数据库</h4>
-    <ul>
-      <li>SQLite</li>
-      <li>DataGrid</li>
-    </ul>
-  </div>
 </div>
