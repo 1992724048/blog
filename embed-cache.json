@@ -4,112 +4,37 @@
   "entries": {
     "bilibili:BV18V4w6xEhW": {
       "platform": "bilibili",
-      "fetchedAt": "2026-11-03T09:26:53.023Z",
-      "ok": true,
-      "data": {
-        "bvid": "BV18V4w6xEhW",
-        "title": "轻量重构，流畅进化",
-        "upName": "_ABing_",
-        "upFace": "https://i2.hdslb.com/bfs/face/59413190e21a0e821f93c01b4603ec739811fc48.jpg",
-        "view": 31891,
-        "like": 1478,
-        "coin": 257,
-        "favorite": 2354,
-        "danmaku": 4,
-        "reply": 170,
-        "share": 87,
-        "publishedAt": "2026-11-02",
-        "coverHttps": "https://i1.hdslb.com/bfs/archive/326e1d1d6f377cabc636be919348fa2ff533182f.jpg",
-        "duration": 26
-      }
+      "fetchedAt": "2026-11-12T17:17:25.713Z",
+      "ok": false,
+      "reason": "VIEW_UNAVAILABLE"
     },
     "bilibili:BV1PVxv6rEsL": {
       "platform": "bilibili",
-      "fetchedAt": "2026-11-02T16:37:20.732Z",
-      "ok": true,
-      "data": {
-        "bvid": "BV1PVxv6rEsL",
-        "title": "【开源】可能是性能最好也是最好看的Windows聚合搜索工具（附带鼠标手势及剪贴板工具）",
-        "upName": "路北路陈",
-        "upFace": "https://i0.hdslb.com/bfs/face/450508c973450b84182c4a014bbc7e5a6bbc9e3c.jpg",
-        "view": 4993,
-        "like": 190,
-        "coin": 88,
-        "favorite": 389,
-        "danmaku": 0,
-        "reply": 107,
-        "share": 22,
-        "publishedAt": "2026-10-30",
-        "coverHttps": "https://i0.hdslb.com/bfs/archive/a8f805411dfcd8b674a21588a2b234661d078f72.jpg",
-        "duration": 117
-      }
+      "fetchedAt": "2026-11-12T17:17:25.711Z",
+      "ok": false,
+      "reason": "VIEW_UNAVAILABLE"
     },
     "bilibili:BV1ku376JE2h": {
       "platform": "bilibili",
-      "fetchedAt": "2026-11-03T16:06:36.444Z",
-      "ok": true,
-      "data": {
-        "bvid": "BV1ku376JE2h",
-        "title": "一款由初中生团队研发的国产「操作系统」【B站AI创造公开赛】",
-        "upName": "人朝的小郭同学",
-        "upFace": "https://i1.hdslb.com/bfs/face/1607af17c2f7ac450fbe8061ca83a83c5068e4f7.jpg",
-        "view": 763094,
-        "like": 54421,
-        "coin": 6154,
-        "favorite": 11994,
-        "danmaku": 1122,
-        "reply": 4887,
-        "share": 4634,
-        "publishedAt": "2026-07-26",
-        "coverHttps": "https://i1.hdslb.com/bfs/archive/1fc007d8080a3199def24bd65db93b1287377ae3.jpg",
-        "duration": 265
-      }
+      "fetchedAt": "2026-11-12T17:17:27.050Z",
+      "ok": false,
+      "reason": "VIEW_UNAVAILABLE"
     },
     "bilibili:BV1mFam68ER8": {
       "platform": "bilibili",
-      "fetchedAt": "2026-11-02T20:00:23.588Z",
-      "ok": true,
-      "data": {
-        "bvid": "BV1mFam68ER8",
-        "title": "比 Snipaste/PixPin 更爽！单包仅 20MB、秒改截图文字、自带离线 OCR 的全能 Windows 工具开箱分享",
-        "upName": "ilovebizhan",
-        "upFace": "https://i1.hdslb.com/bfs/face/d541f62ebf1785fb18ee160b12f642e596f9a871.jpg",
-        "view": 7565,
-        "like": 195,
-        "coin": 54,
-        "favorite": 526,
-        "danmaku": 4,
-        "reply": 69,
-        "share": 24,
-        "publishedAt": "2026-10-02",
-        "coverHttps": "https://i1.hdslb.com/bfs/archive/b8d848f9e402a9de168cad730ad7c03af13e9f9f.jpg",
-        "duration": 41
-      }
+      "fetchedAt": "2026-11-12T17:17:26.197Z",
+      "ok": false,
+      "reason": "VIEW_UNAVAILABLE"
     },
     "bilibili:BV1vQM16yE2T": {
       "platform": "bilibili",
-      "fetchedAt": "2026-11-03T15:31:22.467Z",
-      "ok": true,
-      "data": {
-        "bvid": "BV1vQM16yE2T",
-        "title": "CoreSwap——MC全新底层优化项目",
-        "upName": "N.T.Black",
-        "upFace": "https://i2.hdslb.com/bfs/face/b7f8a494c2be30bbffb9d871dda573fc93cdf9ab.jpg",
-        "view": 25272,
-        "like": 284,
-        "coin": 104,
-        "favorite": 327,
-        "danmaku": 8,
-        "reply": 803,
-        "share": 242,
-        "publishedAt": "2026-08-05",
-        "coverHttps": "https://i2.hdslb.com/bfs/archive/693eb60c93934ab859a5bc032dc47548e3eec197.jpg",
-        "duration": 167
-      }
+      "fetchedAt": "2026-11-12T17:17:26.866Z",
+      "ok": false,
+      "reason": "VIEW_UNAVAILABLE"
     },
     "github:1992724048/jetbrainsshellpatch": {
       "platform": "github",
-      "fetchedAt": "2026-11-05T15:00:39.181Z",
+      "fetchedAt": "2026-11-12T17:17:27.071Z",
       "ok": true,
       "data": {
         "name": "1992724048/JetBrainsShellPatch",
@@ -118,19 +43,19 @@
         "stars": 1,
         "forks": 0,
         "watchers": 0,
-        "commits": 6,
+        "commits": 10,
         "createdAt": "2026-10",
         "language": "C#",
         "ownerAvatar": "https://avatars.githubusercontent.com/u/203243162?v=4",
         "topics": [],
         "license": "",
-        "pushedAt": "2026-10-31T10:16:34Z",
+        "pushedAt": "2026-11-11T18:40:20Z",
         "starsLabel": "1"
       }
     },
     "github:1992724048/stdpp-xorstr": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T13:22:25.039Z",
+      "fetchedAt": "2026-11-12T17:17:27.765Z",
       "ok": true,
       "data": {
         "name": "1992724048/stdpp-xorstr",
@@ -151,7 +76,7 @@
     },
     "github:1992724048/sycl-igpu-benchmark": {
       "platform": "github",
-      "fetchedAt": "2026-11-02T13:22:25.019Z",
+      "fetchedAt": "2026-11-12T17:17:25.689Z",
       "ok": true,
       "data": {
         "name": "1992724048/sycl-igpu-benchmark",
@@ -172,16 +97,16 @@
     },
     "github:abing1111/bilidesk": {
       "platform": "github",
-      "fetchedAt": "2026-11-05T15:00:37.943Z",
+      "fetchedAt": "2026-11-12T17:17:26.195Z",
       "ok": true,
       "data": {
         "name": "ABING1111/BiliDesk",
         "webUrl": "https://github.com/ABING1111/BiliDesk",
         "description": "哔哩哔哩第三方桌面客户端 · Windows / WPF / .NET 10 ",
-        "stars": 515,
-        "forks": 9,
+        "stars": 645,
+        "forks": 13,
         "watchers": 1,
-        "commits": 180,
+        "commits": 250,
         "createdAt": "2026-10",
         "language": "C#",
         "ownerAvatar": "https://avatars.githubusercontent.com/u/164507264?v=4",
@@ -189,19 +114,19 @@
           "bilibili"
         ],
         "license": "GPL-3.0",
-        "pushedAt": "2026-11-04T18:02:52Z",
-        "starsLabel": "515"
+        "pushedAt": "2026-11-09T15:49:44Z",
+        "starsLabel": "645"
       }
     },
     "github:duyuanfu/evan-ocr": {
       "platform": "github",
-      "fetchedAt": "2026-11-05T15:00:37.945Z",
+      "fetchedAt": "2026-11-12T17:17:26.661Z",
       "ok": true,
       "data": {
         "name": "duyuanfu/evan-ocr",
         "webUrl": "https://github.com/duyuanfu/evan-ocr",
         "description": "C++ 写了一款比 Snipaste/PixPin 更爽的免费截贴图 OCR 神器",
-        "stars": 132,
+        "stars": 140,
         "forks": 7,
         "watchers": 0,
         "commits": 48,
@@ -211,21 +136,21 @@
         "topics": [],
         "license": "MIT",
         "pushedAt": "2026-11-04T07:47:54Z",
-        "starsLabel": "132"
+        "starsLabel": "140"
       }
     },
     "github:lbeilc/pane": {
       "platform": "github",
-      "fetchedAt": "2026-11-05T15:00:37.542Z",
+      "fetchedAt": "2026-11-12T17:17:25.713Z",
       "ok": true,
       "data": {
         "name": "LBEILC/Pane",
         "webUrl": "https://github.com/LBEILC/Pane",
-        "description": "Windows 11 上的启动器、鼠标手势和剪贴板工具，磨砂玻璃风格",
-        "stars": 80,
-        "forks": 2,
+        "description": "Windows 11 上的磨砂玻璃效率工具：启动器、剪贴板、鼠标手势、超级面板、AI",
+        "stars": 123,
+        "forks": 4,
         "watchers": 0,
-        "commits": 21,
+        "commits": 38,
         "createdAt": "2026-10",
         "language": "C#",
         "ownerAvatar": "https://avatars.githubusercontent.com/u/74463574?v=4",
@@ -237,20 +162,20 @@
           "winui3"
         ],
         "license": "GPL-3.0",
-        "pushedAt": "2026-11-05T08:36:35Z",
-        "starsLabel": "80"
+        "pushedAt": "2026-11-12T03:18:27Z",
+        "starsLabel": "123"
       }
     },
     "github:opklnm004/jetbrains-license-server": {
       "platform": "github",
-      "fetchedAt": "2026-11-05T15:00:39.196Z",
+      "fetchedAt": "2026-11-12T17:17:27.256Z",
       "ok": true,
       "data": {
         "name": "opklnm004/jetbrains-license-server",
         "webUrl": "https://github.com/opklnm004/jetbrains-license-server",
         "description": "一个功能强大的 JetBrains 产品许可证服务器帮助工具，基于 Spring Boot 开发，提供许可证生成、验证和服务器模拟功能。 核心功能 - 🎯 许可证生成 ：支持生成 JetBrains 全系列产品的许可证 - 🖥️ 服务器模拟 ：完全兼容 JetBrains 官方许可证服务器 API 协议 - 📦 产品管理 ：内置完整的 JetBrains 产品和插件信息数据库 - 🔒 安全保障 ：使用 RSA 签名保证数据安全 - 📱 ja-netfilter 集成 ：内置代理工具下载和自动配置 - 🎨 可视化界面 ：提供友好的 Web 管理界面",
-        "stars": 71,
-        "forks": 52,
+        "stars": 73,
+        "forks": 55,
         "watchers": 1,
         "commits": 1,
         "createdAt": "2026-05",
@@ -259,12 +184,12 @@
         "topics": [],
         "license": "EPL-2.0",
         "pushedAt": "2026-04-03T16:24:12Z",
-        "starsLabel": "71"
+        "starsLabel": "73"
       }
     },
     "github:shaun-chen2/glassmc": {
       "platform": "github",
-      "fetchedAt": "2026-11-05T15:00:37.944Z",
+      "fetchedAt": "2026-11-12T17:17:26.401Z",
       "ok": true,
       "data": {
         "name": "shaun-chen2/GlassMC",
@@ -273,7 +198,7 @@
         "stars": 1,
         "forks": 0,
         "watchers": 0,
-        "commits": 34,
+        "commits": 39,
         "createdAt": "2026-11",
         "language": "Rust",
         "ownerAvatar": "https://avatars.githubusercontent.com/u/231208261?v=4",
@@ -285,7 +210,7 @@
           "liquid-glass"
         ],
         "license": "GPL-3.0",
-        "pushedAt": "2026-11-05T14:12:02Z",
+        "pushedAt": "2026-11-09T05:54:45Z",
         "starsLabel": "1"
       }
     }
