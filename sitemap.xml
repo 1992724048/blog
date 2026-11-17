@@ -56,15 +56,6 @@
   </url>
   
   <url>
-    <loc>https://issuimo.com/2026/08/14/xorstr-string-encryption/</loc>
-    
-    <lastmod>2026-11-17</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
     <loc>https://issuimo.com/2026/10/27/resharper-patch/</loc>
     
     <lastmod>2026-11-17</lastmod>
@@ -74,7 +65,7 @@
   </url>
   
   <url>
-    <loc>https://issuimo.com/data/index.html</loc>
+    <loc>https://issuimo.com/2026/08/14/xorstr-string-encryption/</loc>
     
     <lastmod>2026-11-17</lastmod>
     
@@ -84,6 +75,15 @@
   
   <url>
     <loc>https://issuimo.com/about/index.html</loc>
+    
+    <lastmod>2026-11-17</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://issuimo.com/data/index.html</loc>
     
     <lastmod>2026-11-17</lastmod>
     
