@@ -20,34 +20,16 @@
   </url>
   
   <url>
+    <loc>https://issuimo.com/2026/09/23/285k-cpu-igpu-sycl-benchmark/</loc>
+    
+    <lastmod>2026-11-17</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://issuimo.com/2026/11/02/Imdisk_fix/</loc>
-    
-    <lastmod>2026-11-17</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://issuimo.com/2026/03/04/esp32-idf-clion/</loc>
-    
-    <lastmod>2026-11-17</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://issuimo.com/2026/10/27/resharper-patch/</loc>
-    
-    <lastmod>2026-11-17</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://issuimo.com/2026/08/14/xorstr-string-encryption/</loc>
     
     <lastmod>2026-11-17</lastmod>
     
@@ -65,7 +47,25 @@
   </url>
   
   <url>
-    <loc>https://issuimo.com/data/index.html</loc>
+    <loc>https://issuimo.com/2026/03/04/esp32-idf-clion/</loc>
+    
+    <lastmod>2026-11-17</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://issuimo.com/2026/08/14/xorstr-string-encryption/</loc>
+    
+    <lastmod>2026-11-17</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://issuimo.com/2026/10/27/resharper-patch/</loc>
     
     <lastmod>2026-11-17</lastmod>
     
@@ -83,7 +83,7 @@
   </url>
   
   <url>
-    <loc>https://issuimo.com/2026/09/23/285k-cpu-igpu-sycl-benchmark/</loc>
+    <loc>https://issuimo.com/data/index.html</loc>
     
     <lastmod>2026-11-17</lastmod>
     
@@ -143,6 +143,27 @@
   </url>
   
   <url>
+    <loc>https://issuimo.com/tags/AI/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.2</priority>
+  </url>
+  
+  <url>
+    <loc>https://issuimo.com/tags/%E9%9A%8F%E7%AC%94/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.2</priority>
+  </url>
+  
+  <url>
+    <loc>https://issuimo.com/tags/%E8%A7%82%E7%82%B9/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.2</priority>
+  </url>
+  
+  <url>
     <loc>https://issuimo.com/tags/C/</loc>
     <lastmod>2026-11-17</lastmod>
     <changefreq>weekly</changefreq>
@@ -170,27 +191,6 @@
     <priority>0.2</priority>
   </url>
   
-  <url>
-    <loc>https://issuimo.com/tags/AI/</loc>
-    <lastmod>2026-11-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.2</priority>
-  </url>
-  
-  <url>
-    <loc>https://issuimo.com/tags/%E9%9A%8F%E7%AC%94/</loc>
-    <lastmod>2026-11-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.2</priority>
-  </url>
-  
-  <url>
-    <loc>https://issuimo.com/tags/%E8%A7%82%E7%82%B9/</loc>
-    <lastmod>2026-11-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.2</priority>
-  </url>
-  
 
   
   <url>
@@ -208,14 +208,14 @@
   </url>
   
   <url>
-    <loc>https://issuimo.com/categories/%E9%80%86%E5%90%91%E5%B7%A5%E7%A8%8B/</loc>
+    <loc>https://issuimo.com/categories/%E9%9A%8F%E7%AC%94/</loc>
     <lastmod>2026-11-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
-    <loc>https://issuimo.com/categories/%E9%9A%8F%E7%AC%94/</loc>
+    <loc>https://issuimo.com/categories/%E9%80%86%E5%90%91%E5%B7%A5%E7%A8%8B/</loc>
     <lastmod>2026-11-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
